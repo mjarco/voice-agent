@@ -17,6 +17,7 @@ class AppConfigService {
 
   static const _apiUrlKey = 'api_url';
   static const _apiTokenKey = 'api_token';
+  static const _groqApiKeyKey = 'groq_api_key';
   static const _autoSendKey = 'auto_send';
   static const _languageKey = 'language';
   static const _keepHistoryKey = 'keep_history';
@@ -34,10 +35,17 @@ class AppConfigService {
     } catch (_) {
       // Secure storage may fail on some devices — treat as absent
     }
+    String? groqApiKey;
+    try {
+      groqApiKey = await _secureStorage.read(key: _groqApiKeyKey);
+    } catch (_) {
+      // Secure storage may fail on some devices — treat as absent
+    }
 
     return AppConfig(
       apiUrl: prefs.getString(_apiUrlKey),
       apiToken: token,
+      groqApiKey: groqApiKey,
       autoSend: prefs.getBool(_autoSendKey) ?? true,
       language: prefs.getString(_languageKey) ?? 'auto',
       keepHistory: prefs.getBool(_keepHistoryKey) ?? true,
@@ -51,6 +59,10 @@ class AppConfigService {
 
   Future<void> saveApiToken(String token) async {
     await _secureStorage.write(key: _apiTokenKey, value: token);
+  }
+
+  Future<void> saveGroqApiKey(String key) async {
+    await _secureStorage.write(key: _groqApiKeyKey, value: key);
   }
 
   Future<void> saveAutoSend(bool value) async {

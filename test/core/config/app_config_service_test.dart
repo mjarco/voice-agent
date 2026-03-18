@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
@@ -6,6 +7,7 @@ void main() {
   group('AppConfigService', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
     });
 
     test('load returns defaults when storage is empty', () async {
@@ -17,6 +19,7 @@ void main() {
 
       expect(config.apiUrl, isNull);
       expect(config.apiToken, isNull);
+      expect(config.groqApiKey, isNull);
       expect(config.autoSend, isTrue);
       expect(config.language, 'auto');
       expect(config.keepHistory, isTrue);
@@ -64,6 +67,29 @@ void main() {
       final config = await service.load();
 
       expect(config.keepHistory, isFalse);
+    });
+
+    test('saveGroqApiKey then load round-trips', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = AppConfigService(prefs: prefs);
+
+      await service.saveGroqApiKey('gsk_test_key');
+      final config = await service.load();
+
+      expect(config.groqApiKey, 'gsk_test_key');
+    });
+
+    test('saveGroqApiKey with empty string stores empty string', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = AppConfigService(prefs: prefs);
+
+      await service.saveGroqApiKey('gsk_test_key');
+      await service.saveGroqApiKey('');
+      final config = await service.load();
+
+      expect(config.groqApiKey, '');
     });
 
     test('multiple saves preserve all values', () async {
