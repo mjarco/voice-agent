@@ -74,20 +74,39 @@ cross-feature imports everywhere.
 ```
 lib/core/config/
   app_config.dart            # AppConfig model (url, token, autoSend, language, keepHistory)
-  app_config_provider.dart   # appConfigProvider (reads from storage)
+  app_config_service.dart    # AppConfigService — the SOLE persistence adapter for config
+  app_config_provider.dart   # appConfigProvider (StateNotifier reading/writing via AppConfigService)
   api_url_configured_provider.dart  # derived provider (url != null)
 ```
 
-- `core/config/app_config_provider.dart` reads config from `SharedPreferences` +
-  `FlutterSecureStorage` directly — no dependency on any feature.
-- `features/settings/` becomes a pure UI editor: its `SettingsScreen` reads from
-  and writes to `core/config/` via the providers. No feature owns the config state.
+**Persistence boundary:** `AppConfigService` is the single adapter that knows
+about `SharedPreferences` keys and `FlutterSecureStorage`. It replaces
+`features/settings/settings_service.dart` entirely — there is no longer a
+separate `SettingsService`. All config persistence lives in one place:
+
+```
+core/config/app_config_service.dart
+  - load() → reads all keys from SharedPreferences + token from SecureStorage
+  - saveApiUrl(url) → writes to SharedPreferences
+  - saveApiToken(token) → writes to SecureStorage
+  - saveAutoSend(value) → writes to SharedPreferences
+  - saveLanguage(language) → writes to SharedPreferences
+  - saveKeepHistory(value) → writes to SharedPreferences
+```
+
+`features/settings/settings_screen.dart` becomes a pure UI that calls
+`ref.read(appConfigProvider.notifier).updateApiUrl(url)` — it has zero
+knowledge of storage keys, SharedPreferences, or FlutterSecureStorage.
+
+`features/settings/settings_service.dart` is **deleted** (not refactored).
+Its tests move to `test/core/config/app_config_service_test.dart`.
+
 - `features/api_sync/api_config.dart` derives `ApiConfig` from
   `core/config/app_config_provider.dart` — no settings import.
 - `app/router.dart` can import from `core/` freely.
 
 This eliminates **all four import violations** (B2, B3, B4, B5) by establishing
-core as the single owner of shared state.
+core as the single owner of shared state AND shared persistence.
 
 ### StreamController Lifecycle (T2)
 
@@ -96,10 +115,16 @@ across the service's entire lifecycle. The contract says `elapsed` is a broadcas
 stream — subscribers can listen before `start()` is called and remain subscribed
 across multiple recording sessions.
 
-**Fix:** Do NOT close `_elapsedController` in `_cleanup()`. Only close it in a
-dedicated `dispose()` method called when the service itself is disposed. The
-`_cleanup()` method cancels the timer and resets `_startTime`/`_currentPath`, but
-the stream stays open and simply stops emitting until the next `start()`.
+**Fix:** Do NOT close `_elapsedController` in `_cleanup()`. The controller is
+treated as an **app-lifetime singleton** — it is created once and never closed.
+The `_cleanup()` method cancels the timer and resets `_startTime`/`_currentPath`,
+but the stream stays open and simply stops emitting until the next `start()`.
+
+No `dispose()` method is added. The `RecordingService` interface is not extended.
+The `recordingServiceProvider` is a plain `Provider<RecordingService>` with no
+`ref.onDispose` — the service lives for the entire app lifetime, and the
+`StreamController` is garbage-collected with it. This is a conscious design
+choice: recording is a core app capability, not a transient resource.
 
 This preserves the subscription chain:
 ```
@@ -107,6 +132,7 @@ controller subscribes → service.elapsed (stable stream identity)
   start() → timer fires → controller adds to stream
   stop() → timer cancelled → stream goes quiet (NOT closed)
   start() → new timer → stream resumes emitting
+  (app termination) → GC cleans up controller + stream
 ```
 
 **Test:** `start→stop→start→stop` produces elapsed events in both sessions on the
@@ -199,9 +225,11 @@ Returns the same `ApiResult` sealed type for response classification.
 | `lib/features/recording/domain/transcript_result.dart` | Move to `lib/core/models/transcript_result.dart` |
 | `lib/core/providers/api_url_provider.dart` | Move to `lib/core/config/api_url_configured_provider.dart`, read from core config |
 | `lib/features/api_sync/api_config.dart` | Read from `core/config/` instead of `features/settings/` |
-| `lib/features/settings/settings_provider.dart` | Become a thin wrapper writing to `core/config/`, no longer owns state |
+| `lib/features/settings/settings_service.dart` | **Deleted** — persistence moves to `core/config/app_config_service.dart` |
+| `lib/features/settings/settings_provider.dart` | **Deleted** — replaced by `core/config/app_config_provider.dart` |
+| `lib/features/settings/settings_model.dart` | **Deleted** — replaced by `core/config/app_config.dart` |
 | `lib/features/settings/settings_screen.dart` | Remove import of `sync_provider.dart`, use `ApiClient.testConnection` |
-| `lib/features/recording/data/recording_service_impl.dart` | Keep `_elapsedController` open, add `dispose()` |
+| `lib/features/recording/data/recording_service_impl.dart` | Keep `_elapsedController` open (app-lifetime singleton, no dispose) |
 | `lib/core/storage/storage_service.dart` | Add `reactivateForResend(String transcriptId)` |
 | `lib/core/storage/sqlite_storage_service.dart` | Implement `reactivateForResend` as UPDATE, implement `getTranscriptsWithStatus` |
 | `lib/features/history/history_notifier.dart` | Call `reactivateForResend` instead of `markPendingForRetry` |
@@ -217,8 +245,8 @@ Returns the same `ApiResult` sealed type for response classification.
 
 | # | Task | Layer | Issues Fixed |
 |---|------|-------|-------------|
-| T1 | **Fix architecture: establish core/config ownership.** Move `TranscriptResult`/`TranscriptSegment` to `core/models/`. Create `core/config/` with `AppConfig` model, `appConfigProvider` (reads SharedPreferences + secure storage), `apiUrlConfiguredProvider` (derived). Refactor `features/settings/` to be a UI editor writing to core config. Refactor `features/api_sync/api_config.dart` to read from `core/config/`. Remove all cross-feature imports. Update all import paths. Verify: `grep -r "import.*features/" lib/features/X/ | grep -v "features/X"` returns empty for every X. `grep -r "import.*features/" lib/core/` returns empty. | core, features, app | B2, B3, B4, B5 |
-| T2 | **Fix StreamController lifecycle.** Keep `_elapsedController` open across recording cycles. `_cleanup()` stops the timer but does NOT close the stream. Add `dispose()` to `RecordingServiceImpl` that closes it. Update `RecordingServiceImpl` tests: verify `start→stop→start→stop` produces elapsed events in both sessions on the same subscription. | features/recording | B1 |
+| T1 | **Fix architecture: establish core/config ownership.** Move `TranscriptResult`/`TranscriptSegment` to `core/models/`. Create `core/config/` with `AppConfig` model, `AppConfigService` (sole persistence adapter — replaces `features/settings/settings_service.dart`), `appConfigProvider` (StateNotifier), `apiUrlConfiguredProvider` (derived). Delete `settings_service.dart`, `settings_provider.dart`, `settings_model.dart` from features/settings/. `SettingsScreen` becomes pure UI calling `appConfigProvider.notifier`. Refactor `features/api_sync/api_config.dart` to read from `core/config/`. Remove all cross-feature imports. Update all import paths. Verify: `grep -r "import.*features/" lib/features/X/ | grep -v "features/X"` returns empty for every X. `grep -r "import.*features/" lib/core/` returns empty. Move `settings_service_test.dart` to `test/core/config/app_config_service_test.dart`. | core, features, app | B2, B3, B4, B5 |
+| T2 | **Fix StreamController lifecycle.** Keep `_elapsedController` open across recording cycles — treat service as app-lifetime singleton. `_cleanup()` stops the timer but does NOT close the stream. No `dispose()` added — `RecordingService` interface unchanged, provider has no `ref.onDispose`. Update `RecordingServiceImpl` tests: verify `start→stop→start→stop` produces elapsed events in both sessions on the same subscription. | features/recording | B1 |
 | T3 | **Fix resend: reactivate existing failed row.** Add `StorageService.reactivateForResend(String transcriptId)` — UPDATE sync_queue SET status='pending', attempts=0, error=NULL WHERE transcript_id=? AND status='failed'. Update `HistoryNotifier.resendItem` to call it. Add tests: resend changes failed to pending, resend is no-op for pending, no duplicate rows after resend, `getTranscriptsWithStatus` returns one row per transcript after resend. | core/storage, features/history | I1 |
 | T4 | **Fix misc important issues.** (a) `ApiClient`: `/ 1000` → `~/ 1000`. (b) `AppSettings.copyWith`: use `Object` sentinel for nullable fields. (c) History detail: add `/history/:id` child route, load from StorageService, use `context.push`. (d) Test connection: add `ApiClient.testConnection(url, token)` as separate method, update `SettingsScreen` to use it instead of `post()`. | core/network, features/settings, features/history, app | I3, I4, I5, I6 |
 | T5 | **Add missing tests.** `getTranscriptsWithStatus` storage integration test (status derivation). `HistoryNotifier` unit tests (loadNextPage, refresh, delete, resend). `SettingsService` round-trip test. | test/ | Coverage gaps |
@@ -236,7 +264,7 @@ Returns the same `ApiResult` sealed type for response classification.
 - `test/features/recording/data/recording_service_impl_test.dart` — multi-session stream stability test
 - `test/core/storage/sqlite_storage_service_test.dart` — `reactivateForResend` (no duplicates, only affects failed), `getTranscriptsWithStatus` (status derivation)
 - `test/features/history/history_notifier_test.dart` — state transitions for all methods
-- `test/features/settings/settings_service_test.dart` — persistence round-trip
+- `test/core/config/app_config_service_test.dart` — persistence round-trip (replaces settings_service_test)
 
 ---
 
