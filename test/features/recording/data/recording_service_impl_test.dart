@@ -132,5 +132,32 @@ void main() {
         );
       }
     });
+
+    test('multi-session: start→stop→start→stop works on same subscription',
+        () async {
+      final durations = <Duration>[];
+      final sub = service.elapsed.listen(durations.add);
+
+      // Session 1
+      await service.start(outputPath: '/tmp/session1.wav');
+      await Future.delayed(const Duration(milliseconds: 500));
+      await service.stop();
+
+      final session1Count = durations.length;
+      expect(session1Count, greaterThan(0), reason: 'Session 1 should emit');
+
+      // Session 2 — same subscription, same stream
+      await service.start(outputPath: '/tmp/session2.wav');
+      await Future.delayed(const Duration(milliseconds: 500));
+      await service.stop();
+
+      await sub.cancel();
+
+      expect(
+        durations.length,
+        greaterThan(session1Count),
+        reason: 'Session 2 should also emit on the same subscription',
+      );
+    });
   });
 }
