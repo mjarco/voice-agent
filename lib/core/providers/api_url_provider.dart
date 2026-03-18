@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/features/settings/settings_provider.dart';
 
 /// Whether the API URL has been configured by the user.
-///
-/// This is a stub that always returns `false` (banner always shown).
-/// Proposal 006 (Settings Screen) replaces this with a real provider
-/// that reads from SharedPreferences.
+/// Reads from appSettingsProvider — true when URL is non-null and non-empty.
 final apiUrlConfiguredProvider = Provider<bool>((ref) {
-  return false;
+  final settings = ref.watch(appSettingsProvider);
+  final url = settings.apiUrl;
+  return url != null && url.isNotEmpty;
 });
