@@ -48,6 +48,9 @@ Local repo skills live in `.codex/skills/`. Use them when their trigger conditio
 #### Git & Workflow
 - using-git-worktrees: Use when starting feature work that needs isolation from current workspace. (file: .codex/skills/using-git-worktrees/SKILL.md)
 
+#### Documentation
+- manual-writer: Create and edit user manuals in Markdown, including information architecture, navigation, tone, and content standards. Use when writing or improving user-facing documentation, help guides, or onboarding docs. (file: .codex/skills/manual-writer/SKILL.md)
+
 #### Meta
 - using-superpowers: Use when starting any conversation — establishes how to find and use skills. (file: .codex/skills/using-superpowers/SKILL.md)
 - skill-creator: Guide for creating effective skills. (file: .codex/skills/skill-creator/SKILL.md)
