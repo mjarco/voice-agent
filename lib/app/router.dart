@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
 import 'package:voice_agent/features/history/history_screen.dart';
+import 'package:voice_agent/features/history/transcript_detail_screen.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
@@ -21,6 +22,15 @@ final router = GoRouter(
             GoRoute(
               path: '/history',
               builder: (context, state) => const HistoryScreen(),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  builder: (context, state) {
+                    final id = state.pathParameters['id']!;
+                    return TranscriptDetailScreen(transcriptId: id);
+                  },
+                ),
+              ],
             ),
           ],
         ),

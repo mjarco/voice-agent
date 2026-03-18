@@ -45,7 +45,7 @@ class ApiClient {
         data: {
           'text': transcript.text,
           'timestamp':
-              (transcript.createdAt / 1000).round(), // ms to epoch seconds
+              transcript.createdAt ~/ 1000, // ms to epoch seconds
           'language': transcript.language,
           'deviceId': transcript.deviceId,
         },

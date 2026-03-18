@@ -1,3 +1,7 @@
+/// Sentinel object used to distinguish "not provided" from "explicitly null"
+/// in [AppConfig.copyWith].
+const _sentinel = Object();
+
 class AppConfig {
   const AppConfig({
     this.apiUrl,
@@ -14,15 +18,15 @@ class AppConfig {
   final bool keepHistory;
 
   AppConfig copyWith({
-    String? apiUrl,
-    String? apiToken,
+    Object? apiUrl = _sentinel,
+    Object? apiToken = _sentinel,
     bool? autoSend,
     String? language,
     bool? keepHistory,
   }) {
     return AppConfig(
-      apiUrl: apiUrl ?? this.apiUrl,
-      apiToken: apiToken ?? this.apiToken,
+      apiUrl: apiUrl == _sentinel ? this.apiUrl : apiUrl as String?,
+      apiToken: apiToken == _sentinel ? this.apiToken : apiToken as String?,
       autoSend: autoSend ?? this.autoSend,
       language: language ?? this.language,
       keepHistory: keepHistory ?? this.keepHistory,
