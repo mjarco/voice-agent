@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
-import 'package:voice_agent/features/recording/presentation/record_placeholder_screen.dart';
+import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
 
 final router = GoRouter(
   initialLocation: '/record',
@@ -28,7 +28,7 @@ final router = GoRouter(
             GoRoute(
               path: '/record',
               builder: (context, state) =>
-                  const RecordPlaceholderScreen(),
+                  const RecordingScreen(),
               routes: [
                 GoRoute(
                   path: 'review',
