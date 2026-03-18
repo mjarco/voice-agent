@@ -1,4 +1,4 @@
-import 'package:voice_agent/features/recording/domain/transcript_result.dart';
+import 'package:voice_agent/core/models/transcript_result.dart';
 
 sealed class RecordingState {
   const RecordingState();

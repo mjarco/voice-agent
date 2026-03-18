@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
-import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
-import 'package:voice_agent/features/api_sync/sync_provider.dart';
-import 'package:voice_agent/features/settings/settings_provider.dart';
+
+/// Provider for ApiClient — lives here to avoid settings importing api_sync.
+final _apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -23,9 +24,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final settings = ref.read(appSettingsProvider);
-    _urlController = TextEditingController(text: settings.apiUrl ?? '');
-    _tokenController = TextEditingController(text: settings.apiToken ?? '');
+    final config = ref.read(appConfigProvider);
+    _urlController = TextEditingController(text: config.apiUrl ?? '');
+    _tokenController = TextEditingController(text: config.apiToken ?? '');
   }
 
   @override
@@ -50,13 +51,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _testStatus = _TestStatus.idle;
     });
     if (url.isNotEmpty && _isValidUrl(url)) {
-      ref.read(appSettingsProvider.notifier).updateApiUrl(url);
+      ref.read(appConfigProvider.notifier).updateApiUrl(url);
     }
   }
 
   void _onTokenFocusLost() {
     final token = _tokenController.text;
-    ref.read(appSettingsProvider.notifier).updateApiToken(token);
+    ref.read(appConfigProvider.notifier).updateApiToken(token);
   }
 
   Future<void> _testConnection() async {
@@ -65,16 +66,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     setState(() => _testStatus = _TestStatus.testing);
 
-    final apiClient = ref.read(apiClientProvider);
+    final apiClient = ref.read(_apiClientProvider);
     final token = _tokenController.text;
 
-    final result = await apiClient.post(
-      Transcript(
-        id: 'test',
-        text: 'test',
-        deviceId: 'test',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-      ),
+    final result = await apiClient.testConnection(
       url: url,
       token: token.isNotEmpty ? token : null,
     );
@@ -92,7 +87,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(appSettingsProvider);
+    final config = ref.watch(appConfigProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -171,10 +166,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ListTile(
             title: const Text('Language'),
             trailing: DropdownButton<String>(
-              value: settings.language,
+              value: config.language,
               onChanged: (v) {
                 if (v != null) {
-                  ref.read(appSettingsProvider.notifier).updateLanguage(v);
+                  ref.read(appConfigProvider.notifier).updateLanguage(v);
                 }
               },
               items: const [
@@ -188,17 +183,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SwitchListTile(
             title: const Text('Auto-send'),
             subtitle: const Text('Send transcripts automatically'),
-            value: settings.autoSend,
+            value: config.autoSend,
             onChanged: (v) {
-              ref.read(appSettingsProvider.notifier).updateAutoSend(v);
+              ref.read(appConfigProvider.notifier).updateAutoSend(v);
             },
           ),
           SwitchListTile(
             title: const Text('Keep history'),
             subtitle: const Text('Store transcripts locally'),
-            value: settings.keepHistory,
+            value: config.keepHistory,
             onChanged: (v) {
-              ref.read(appSettingsProvider.notifier).updateKeepHistory(v);
+              ref.read(appConfigProvider.notifier).updateKeepHistory(v);
             },
           ),
           _buildSectionHeader('About'),

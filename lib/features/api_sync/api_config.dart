@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voice_agent/features/settings/settings_provider.dart';
+import 'package:voice_agent/core/config/app_config_provider.dart';
 
 class ApiConfig {
   const ApiConfig({this.url, this.token});
@@ -11,12 +11,11 @@ class ApiConfig {
   final String? token;
 }
 
-/// Reads API URL and token from settings.
-/// Returns ApiConfig with values from appSettingsProvider.
+/// Reads API URL and token from core app config.
 final apiConfigProvider = Provider<ApiConfig>((ref) {
-  final settings = ref.watch(appSettingsProvider);
+  final config = ref.watch(appConfigProvider);
   return ApiConfig(
-    url: settings.apiUrl,
-    token: settings.apiToken,
+    url: config.apiUrl,
+    token: config.apiToken,
   );
 });

@@ -5,7 +5,7 @@ import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
-import 'package:voice_agent/features/recording/domain/transcript_result.dart';
+import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 
 class FakeRecordingService implements RecordingService {

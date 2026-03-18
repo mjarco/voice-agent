@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/features/recording/domain/stt_exception.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
-import 'package:voice_agent/features/recording/domain/transcript_result.dart';
+import 'package:voice_agent/core/models/transcript_result.dart';
 
 /// Fake SttService for testing code that depends on the SttService interface
 /// without requiring Whisper native binaries.

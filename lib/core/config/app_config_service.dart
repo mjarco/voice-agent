@@ -1,9 +1,12 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:voice_agent/features/settings/settings_model.dart';
+import 'package:voice_agent/core/config/app_config.dart';
 
-class SettingsService {
-  SettingsService({
+/// Sole persistence adapter for app configuration.
+/// Knows about SharedPreferences keys and FlutterSecureStorage.
+/// No other code should read/write these keys directly.
+class AppConfigService {
+  AppConfigService({
     SharedPreferences? prefs,
     FlutterSecureStorage? secureStorage,
   })  : _prefs = prefs,
@@ -23,7 +26,7 @@ class SettingsService {
     return _prefs!;
   }
 
-  Future<AppSettings> load() async {
+  Future<AppConfig> load() async {
     final prefs = await _preferences;
     String? token;
     try {
@@ -32,7 +35,7 @@ class SettingsService {
       // Secure storage may fail on some devices — treat as absent
     }
 
-    return AppSettings(
+    return AppConfig(
       apiUrl: prefs.getString(_apiUrlKey),
       apiToken: token,
       autoSend: prefs.getBool(_autoSendKey) ?? true,

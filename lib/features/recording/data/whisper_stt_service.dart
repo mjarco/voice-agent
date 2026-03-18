@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 import 'package:voice_agent/features/recording/domain/stt_exception.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
-import 'package:voice_agent/features/recording/domain/transcript_result.dart';
+import 'package:voice_agent/core/models/transcript_result.dart';
 
 class WhisperSttService implements SttService {
   Whisper? _whisper;
