@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
 import 'package:voice_agent/features/history/history_screen.dart';
-import 'package:voice_agent/features/recording/domain/transcript_result.dart';
+import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
 import 'package:voice_agent/features/transcript/transcript_review_screen.dart';

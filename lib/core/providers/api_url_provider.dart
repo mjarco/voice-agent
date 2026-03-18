@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voice_agent/features/settings/settings_provider.dart';
+import 'package:voice_agent/core/config/app_config_provider.dart';
 
 /// Whether the API URL has been configured by the user.
-/// Reads from appSettingsProvider — true when URL is non-null and non-empty.
+/// Reads from appConfigProvider — true when URL is non-null and non-empty.
 final apiUrlConfiguredProvider = Provider<bool>((ref) {
-  final settings = ref.watch(appSettingsProvider);
-  final url = settings.apiUrl;
+  final config = ref.watch(appConfigProvider);
+  final url = config.apiUrl;
   return url != null && url.isNotEmpty;
 });

@@ -1,5 +1,5 @@
-class AppSettings {
-  const AppSettings({
+class AppConfig {
+  const AppConfig({
     this.apiUrl,
     this.apiToken,
     this.autoSend = true,
@@ -13,14 +13,14 @@ class AppSettings {
   final String language;
   final bool keepHistory;
 
-  AppSettings copyWith({
+  AppConfig copyWith({
     String? apiUrl,
     String? apiToken,
     bool? autoSend,
     String? language,
     bool? keepHistory,
   }) {
-    return AppSettings(
+    return AppConfig(
       apiUrl: apiUrl ?? this.apiUrl,
       apiToken: apiToken ?? this.apiToken,
       autoSend: autoSend ?? this.autoSend,

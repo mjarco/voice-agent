@@ -68,6 +68,35 @@ class ApiClient {
     }
   }
 
+  /// Test connection to the API endpoint without sending real data.
+  /// Sends a minimal payload that does not pollute the user's backend.
+  Future<ApiResult> testConnection({
+    required String url,
+    String? token,
+  }) async {
+    try {
+      final response = await _dio.post<dynamic>(
+        url,
+        data: {'test': true},
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            if (token != null && token.isNotEmpty)
+              'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      final statusCode = response.statusCode ?? 0;
+      if (statusCode >= 200 && statusCode < 300) {
+        return const ApiSuccess();
+      }
+      return _classifyStatusCode(statusCode, response.statusMessage);
+    } on DioException catch (e) {
+      return _classifyDioException(e);
+    }
+  }
+
   ApiResult _classifyStatusCode(int statusCode, String? message) {
     if (statusCode == 408 || statusCode == 429 || statusCode >= 500) {
       return ApiTransientFailure(

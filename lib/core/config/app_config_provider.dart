@@ -1,23 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voice_agent/features/settings/settings_model.dart';
-import 'package:voice_agent/features/settings/settings_service.dart';
+import 'package:voice_agent/core/config/app_config.dart';
+import 'package:voice_agent/core/config/app_config_service.dart';
 
-final settingsServiceProvider = Provider<SettingsService>((ref) {
-  return SettingsService();
+final appConfigServiceProvider = Provider<AppConfigService>((ref) {
+  return AppConfigService();
 });
 
-final appSettingsProvider =
-    StateNotifierProvider<SettingsNotifier, AppSettings>((ref) {
-  return SettingsNotifier(ref.watch(settingsServiceProvider));
+final appConfigProvider =
+    StateNotifierProvider<AppConfigNotifier, AppConfig>((ref) {
+  return AppConfigNotifier(ref.watch(appConfigServiceProvider));
 });
 
-class SettingsNotifier extends StateNotifier<AppSettings> {
-  SettingsNotifier(this._service)
-      : super(const AppSettings()) {
+class AppConfigNotifier extends StateNotifier<AppConfig> {
+  AppConfigNotifier(this._service) : super(const AppConfig()) {
     _load();
   }
 
-  final SettingsService _service;
+  final AppConfigService _service;
 
   Future<void> _load() async {
     state = await _service.load();
