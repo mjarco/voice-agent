@@ -479,6 +479,16 @@ Two proposals define stub providers that 006 replaces:
 ## Quick Reference
 
 ```bash
+# Makefile targets (preferred)
+make setup                   # Full setup: flutter pub get + download Whisper model
+make deps                    # Flutter pub get only
+make model                   # Download Whisper base model (~140 MB)
+make verify                  # Run analyze + test
+make analyze                 # Static analysis only
+make test                    # Run tests only
+make clean                   # Remove build artifacts and downloaded models
+
+# Direct Flutter commands
 flutter analyze              # Static analysis — zero issues required
 flutter test                 # Run all tests
 flutter test --coverage      # With coverage report
