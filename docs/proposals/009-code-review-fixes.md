@@ -236,7 +236,6 @@ Returns the same `ApiResult` sealed type for response classification.
 | `lib/features/history/history_screen.dart` | Use `context.push('/history/$id')` instead of `Navigator.push` |
 | `lib/app/router.dart` | Add `/history/:id` child route |
 | `lib/core/network/api_client.dart` | Fix `~/ 1000`, add `testConnection()` method |
-| `lib/features/settings/settings_model.dart` | Fix nullable `copyWith` |
 | All test files importing `TranscriptResult` | Update import path |
 
 ---
