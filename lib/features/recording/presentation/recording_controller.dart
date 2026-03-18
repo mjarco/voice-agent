@@ -6,14 +6,17 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
+import 'package:voice_agent/features/recording/domain/stt_service.dart';
 
 class RecordingController extends StateNotifier<RecordingState>
     with WidgetsBindingObserver {
-  RecordingController(this._service) : super(const RecordingState.idle()) {
+  RecordingController(this._service, this._sttService)
+      : super(const RecordingState.idle()) {
     WidgetsBinding.instance.addObserver(this);
   }
 
   final RecordingService _service;
+  final SttService _sttService;
   StreamSubscription<Duration>? _elapsedSub;
   Duration _currentElapsed = Duration.zero;
 
@@ -58,14 +61,23 @@ class RecordingController extends StateNotifier<RecordingState>
     }
   }
 
-  Future<void> stopRecording() async {
+  /// Stop recording and immediately transcribe the audio file.
+  /// Transitions: Recording -> Transcribing -> Completed(TranscriptResult)
+  Future<void> stopAndTranscribe() async {
     try {
-      final result = await _service.stop();
+      final recordingResult = await _service.stop();
       _cleanupSubscription();
-      state = RecordingState.completed(result);
+
+      state = const RecordingState.transcribing();
+
+      final transcriptResult = await _sttService.transcribe(
+        recordingResult.filePath,
+      );
+
+      state = RecordingState.completed(transcriptResult);
     } catch (e) {
       _cleanupSubscription();
-      state = RecordingState.error('Failed to stop recording: $e');
+      state = RecordingState.error('Transcription failed: $e');
     }
   }
 

@@ -15,6 +15,14 @@ class RecordingScreen extends ConsumerWidget {
     final controller = ref.read(recordingControllerProvider.notifier);
     final isApiConfigured = ref.watch(apiUrlConfiguredProvider);
 
+    // On Completed: navigate to /record/review and reset to idle
+    ref.listen<RecordingState>(recordingControllerProvider, (prev, next) {
+      if (next is RecordingCompleted) {
+        context.push('/record/review', extra: next.result);
+        controller.resetToIdle();
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(title: const Text('Record')),
       body: Column(
@@ -50,25 +58,18 @@ class RecordingScreen extends ConsumerWidget {
       RecordingIdle() => _IdleView(onRecord: controller.startRecording),
       RecordingActive() => _RecordingView(
           elapsed: controller.currentElapsed,
-          onStop: controller.stopRecording,
+          onStop: controller.stopAndTranscribe,
           onCancel: controller.cancelRecording,
         ),
-      RecordingCompleted(:final result) => Column(
+      RecordingTranscribing() => const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.check_circle, size: 64, color: Colors.green),
-            const SizedBox(height: 16),
-            Text(
-              'Recording saved: ${result.duration.inSeconds}s',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: controller.resetToIdle,
-              child: const Text('New Recording'),
-            ),
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Transcribing...'),
           ],
         ),
+      RecordingCompleted() => const SizedBox.shrink(), // handled by listener
       RecordingError(:final message) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
