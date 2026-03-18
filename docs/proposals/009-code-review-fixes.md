@@ -8,7 +8,7 @@ All proposals 000–008 merged.
 ## Scope
 - Tasks: ~5
 - Layers: core, features (recording, transcript, api_sync, history, settings), app
-- Risk: Medium — touches every layer, fixes silent bugs
+- Risk: Medium — touches every layer, fixes silent bugs and architecture violations
 
 ---
 
@@ -31,7 +31,7 @@ boundaries that were not caught by unit tests.
 - *Ignore architecture violations:* They compound over time and make future
   proposals harder to implement correctly.
 - *Rewrite affected features:* Over-scoped. The fixes are surgical — move types
-  to the right layer, fix ID mismatches, recreate a StreamController.
+  to the right layer, fix contracts, fix bugs.
 
 **Smallest change?** Yes — each fix is targeted at a specific file and does not
 change behavior except where bugs are being corrected.
@@ -41,14 +41,14 @@ change behavior except where bugs are being corrected.
 ## Goals
 
 - Eliminate all architecture violations (no cross-feature imports, no core→features)
-- Fix the StreamController reuse bug so recording works across multiple sessions
-- Fix the resend ID mismatch so history resend actually works
+- Establish clear ownership for shared app configuration (API URL, token)
+- Fix the StreamController bug so recording works across multiple sessions
+- Fix the resend action so it actually works
 - Improve code quality in areas flagged by review
 
 ## Non-goals
 
 - No new features
-- No test coverage additions (separate follow-up)
 - No backoff retry implementation (documented as known gap)
 
 ---
@@ -57,7 +57,159 @@ change behavior except where bugs are being corrected.
 
 - Recording now works correctly across multiple sessions (was broken after first stop/cancel)
 - History resend action now actually re-queues the transcript (was silently failing)
-- Detail screen preserves bottom navigation bar
+- History detail screen preserves bottom navigation bar
+
+---
+
+## Solution Design
+
+### App Configuration Ownership (T1)
+
+The root problem is that API URL, API token, and their "configured?" check are
+used by multiple features but currently owned by `features/settings/`. This forces
+cross-feature imports everywhere.
+
+**New structure:** Shared app configuration lives in `core/config/`:
+
+```
+lib/core/config/
+  app_config.dart            # AppConfig model (url, token, autoSend, language, keepHistory)
+  app_config_provider.dart   # appConfigProvider (reads from storage)
+  api_url_configured_provider.dart  # derived provider (url != null)
+```
+
+- `core/config/app_config_provider.dart` reads config from `SharedPreferences` +
+  `FlutterSecureStorage` directly — no dependency on any feature.
+- `features/settings/` becomes a pure UI editor: its `SettingsScreen` reads from
+  and writes to `core/config/` via the providers. No feature owns the config state.
+- `features/api_sync/api_config.dart` derives `ApiConfig` from
+  `core/config/app_config_provider.dart` — no settings import.
+- `app/router.dart` can import from `core/` freely.
+
+This eliminates **all four import violations** (B2, B3, B4, B5) by establishing
+core as the single owner of shared state.
+
+### StreamController Lifecycle (T2)
+
+The `_elapsedController` in `RecordingServiceImpl` must maintain a stable identity
+across the service's entire lifecycle. The contract says `elapsed` is a broadcast
+stream — subscribers can listen before `start()` is called and remain subscribed
+across multiple recording sessions.
+
+**Fix:** Do NOT close `_elapsedController` in `_cleanup()`. Only close it in a
+dedicated `dispose()` method called when the service itself is disposed. The
+`_cleanup()` method cancels the timer and resets `_startTime`/`_currentPath`, but
+the stream stays open and simply stops emitting until the next `start()`.
+
+This preserves the subscription chain:
+```
+controller subscribes → service.elapsed (stable stream identity)
+  start() → timer fires → controller adds to stream
+  stop() → timer cancelled → stream goes quiet (NOT closed)
+  start() → new timer → stream resumes emitting
+```
+
+**Test:** `start→stop→start→stop` produces elapsed events in both sessions on the
+same stream subscription.
+
+### Sync Queue Resend Model (T3)
+
+**Invariant: at most one active sync_queue row per transcript.**
+
+A transcript can have zero or one sync_queue entries:
+- Zero: transcript was sent (or was never queued)
+- One with status `pending`/`sending`/`failed`: transcript is in the sync pipeline
+
+Resend reactivates the **existing failed row**, not creates a new one.
+
+**Fix:** Replace the broken `resendItem` flow with:
+
+```
+StorageService.reactivateForResend(String transcriptId)
+  → UPDATE sync_queue SET status = 'pending', attempts = 0,
+    last_attempt_at = NULL, error_message = NULL
+    WHERE transcript_id = ? AND status = 'failed'
+```
+
+This is an update/reset, not an insert. It:
+- Resets attempts to 0 (fresh retry cycle)
+- Clears error message
+- Only affects `failed` rows (no-op if already pending/sending)
+- Preserves the one-row-per-transcript invariant
+
+`HistoryNotifier.resendItem(transcriptId)` calls this method directly.
+
+**Acceptance criteria:**
+- After resend, `getTranscriptsWithStatus` returns exactly one row for that
+  transcript with status `pending` (not duplicated)
+- Resending an already-pending transcript is a no-op
+
+### History Detail Route (T4c)
+
+Add a child route under `/history` for the detail screen:
+
+```
+GoRoute(
+  path: '/history',
+  builder: ... HistoryScreen,
+  routes: [
+    GoRoute(
+      path: ':id',
+      builder: (context, state) {
+        final id = state.pathParameters['id']!;
+        return TranscriptDetailScreen(transcriptId: id);
+      },
+    ),
+  ],
+)
+```
+
+- Path: `/history/:id` — transcript ID as path parameter
+- `TranscriptDetailScreen` loads data from `StorageService.getTranscript(id)` +
+  sync status query
+- Bottom navigation bar stays visible (child route within History branch)
+- Navigation: `context.push('/history/${item.id}')` instead of `Navigator.push`
+- Not deep-linkable after cold start for MVP (data loaded from local DB, not URL)
+
+### Test Connection Contract (T4d)
+
+Create a separate `ApiClient.testConnection(url, token)` method that does NOT use
+the transcript POST contract. The test connection sends:
+
+```http
+POST {url}
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{ "test": true }
+```
+
+This is a dedicated method, not a modification of `ApiClient.post()`. The production
+`post()` contract remains unchanged. `SettingsScreen` calls `testConnection` instead
+of `post`.
+
+Returns the same `ApiResult` sealed type for response classification.
+
+---
+
+## Affected Mutation Points
+
+| File | Change |
+|------|--------|
+| `lib/features/recording/domain/transcript_result.dart` | Move to `lib/core/models/transcript_result.dart` |
+| `lib/core/providers/api_url_provider.dart` | Move to `lib/core/config/api_url_configured_provider.dart`, read from core config |
+| `lib/features/api_sync/api_config.dart` | Read from `core/config/` instead of `features/settings/` |
+| `lib/features/settings/settings_provider.dart` | Become a thin wrapper writing to `core/config/`, no longer owns state |
+| `lib/features/settings/settings_screen.dart` | Remove import of `sync_provider.dart`, use `ApiClient.testConnection` |
+| `lib/features/recording/data/recording_service_impl.dart` | Keep `_elapsedController` open, add `dispose()` |
+| `lib/core/storage/storage_service.dart` | Add `reactivateForResend(String transcriptId)` |
+| `lib/core/storage/sqlite_storage_service.dart` | Implement `reactivateForResend` as UPDATE, implement `getTranscriptsWithStatus` |
+| `lib/features/history/history_notifier.dart` | Call `reactivateForResend` instead of `markPendingForRetry` |
+| `lib/features/history/history_screen.dart` | Use `context.push('/history/$id')` instead of `Navigator.push` |
+| `lib/app/router.dart` | Add `/history/:id` child route |
+| `lib/core/network/api_client.dart` | Fix `~/ 1000`, add `testConnection()` method |
+| `lib/features/settings/settings_model.dart` | Fix nullable `copyWith` |
+| All test files importing `TranscriptResult` | Update import path |
 
 ---
 
@@ -65,25 +217,25 @@ change behavior except where bugs are being corrected.
 
 | # | Task | Layer | Issues Fixed |
 |---|------|-------|-------------|
-| T1 | **Fix architecture violations:** Move `TranscriptResult` and `TranscriptSegment` from `features/recording/domain/` to `core/models/`. Move `apiUrlConfiguredProvider` from `core/providers/` to `app/` or make it not import features. Restructure `apiConfigProvider` to avoid api_sync→settings import. Extract `ApiClient` usage from `SettingsScreen` to avoid settings→api_sync import. Update all imports. | core, features, app | B2, B3, B4, B5 |
-| T2 | **Fix StreamController reuse bug:** In `RecordingServiceImpl`, recreate `_elapsedController` on each `start()` call instead of closing the single instance. Add test: start→stop→start→stop works without error. | features/recording | B1 |
-| T3 | **Fix resend ID mismatch:** `HistoryNotifier.resendItem` receives transcript ID but `markPendingForRetry` expects sync_queue ID. Add `StorageService.resendByTranscriptId(String transcriptId)` that re-enqueues the transcript (creates new pending queue item). Update `HistoryNotifier` to call it. Add test. | core/storage, features/history | I1 |
-| T4 | **Fix miscellaneous important issues:** (a) Timestamp: `/ 1000` → `~/ 1000` in ApiClient. (b) `AppSettings.copyWith` nullable fields — use sentinel or `Function()` wrapper. (c) `HistoryScreen` detail: use GoRouter instead of `Navigator.push`. (d) Test Connection: add `"test": true` field to distinguish from real transcripts. | core/network, features/settings, features/history | I3, I4, I5, I6 |
-| T5 | **Add missing tests:** `getTranscriptsWithStatus` storage integration test. `HistoryNotifier` unit tests (loadNextPage, refresh, delete, resend). `SettingsService` round-trip test with mocked SharedPreferences. | test/ | Coverage gaps |
+| T1 | **Fix architecture: establish core/config ownership.** Move `TranscriptResult`/`TranscriptSegment` to `core/models/`. Create `core/config/` with `AppConfig` model, `appConfigProvider` (reads SharedPreferences + secure storage), `apiUrlConfiguredProvider` (derived). Refactor `features/settings/` to be a UI editor writing to core config. Refactor `features/api_sync/api_config.dart` to read from `core/config/`. Remove all cross-feature imports. Update all import paths. Verify: `grep -r "import.*features/" lib/features/X/ | grep -v "features/X"` returns empty for every X. `grep -r "import.*features/" lib/core/` returns empty. | core, features, app | B2, B3, B4, B5 |
+| T2 | **Fix StreamController lifecycle.** Keep `_elapsedController` open across recording cycles. `_cleanup()` stops the timer but does NOT close the stream. Add `dispose()` to `RecordingServiceImpl` that closes it. Update `RecordingServiceImpl` tests: verify `start→stop→start→stop` produces elapsed events in both sessions on the same subscription. | features/recording | B1 |
+| T3 | **Fix resend: reactivate existing failed row.** Add `StorageService.reactivateForResend(String transcriptId)` — UPDATE sync_queue SET status='pending', attempts=0, error=NULL WHERE transcript_id=? AND status='failed'. Update `HistoryNotifier.resendItem` to call it. Add tests: resend changes failed to pending, resend is no-op for pending, no duplicate rows after resend, `getTranscriptsWithStatus` returns one row per transcript after resend. | core/storage, features/history | I1 |
+| T4 | **Fix misc important issues.** (a) `ApiClient`: `/ 1000` → `~/ 1000`. (b) `AppSettings.copyWith`: use `Object` sentinel for nullable fields. (c) History detail: add `/history/:id` child route, load from StorageService, use `context.push`. (d) Test connection: add `ApiClient.testConnection(url, token)` as separate method, update `SettingsScreen` to use it instead of `post()`. | core/network, features/settings, features/history, app | I3, I4, I5, I6 |
+| T5 | **Add missing tests.** `getTranscriptsWithStatus` storage integration test (status derivation). `HistoryNotifier` unit tests (loadNextPage, refresh, delete, resend). `SettingsService` round-trip test. | test/ | Coverage gaps |
 
 ---
 
 ## Test Impact
 
 ### Existing tests affected
-- All tests importing `TranscriptResult` from `features/recording/domain/` must update import to `core/models/`
-- `RecordingServiceImpl` tests need a new multi-session test
-- `HistoryNotifier` tests are new
+- All tests importing `TranscriptResult` from `features/recording/domain/` → update import to `core/models/`
+- `RecordingServiceImpl` tests: add multi-session test
+- App/router tests: may need update for new `/history/:id` route
 
 ### New tests
-- `test/features/recording/data/recording_service_impl_test.dart` — multi-session test
-- `test/core/storage/sqlite_storage_service_test.dart` — `getTranscriptsWithStatus` tests
-- `test/features/history/history_notifier_test.dart` — state transitions
+- `test/features/recording/data/recording_service_impl_test.dart` — multi-session stream stability test
+- `test/core/storage/sqlite_storage_service_test.dart` — `reactivateForResend` (no duplicates, only affects failed), `getTranscriptsWithStatus` (status derivation)
+- `test/features/history/history_notifier_test.dart` — state transitions for all methods
 - `test/features/settings/settings_service_test.dart` — persistence round-trip
 
 ---
@@ -94,10 +246,12 @@ change behavior except where bugs are being corrected.
 2. `flutter test` passes — all tests green.
 3. Zero cross-feature imports: `grep -r "import.*features/" lib/features/X/ | grep -v "features/X"` returns empty for every feature X.
 4. `core/` does not import from `features/` or `app/`.
-5. Recording works across multiple start/stop cycles without error.
-6. History resend action changes a failed transcript's status to pending.
-7. History detail screen preserves bottom navigation bar.
-8. `getTranscriptsWithStatus` correctly derives sent/pending/failed status.
+5. Recording works across multiple start/stop cycles — elapsed stream emits in both sessions on the same subscription.
+6. History resend reactivates the existing failed row (UPDATE, not INSERT). After resend, exactly one sync_queue row exists for that transcript with status `pending`.
+7. Resending an already-pending transcript is a no-op (no duplicate).
+8. History detail screen is at `/history/:id`, loads from StorageService, preserves bottom navigation bar.
+9. `ApiClient.testConnection` exists as a separate method from `post()`. `SettingsScreen` uses `testConnection`, not `post`.
+10. `getTranscriptsWithStatus` correctly derives sent/pending/failed status.
 
 ---
 
@@ -107,6 +261,8 @@ change behavior except where bugs are being corrected.
 |------|------------|
 | Moving `TranscriptResult` to core/ breaks many imports | Mechanical find-and-replace, verified by `flutter analyze` |
 | Restructuring providers may break provider dependency graph | Run full test suite after each change |
+| `reactivateForResend` UPDATE may affect non-failed rows | WHERE clause guards with `AND status = 'failed'` |
+| `/history/:id` route requires loading transcript from DB | Acceptable latency — local SQLite query is sub-millisecond |
 
 ---
 
@@ -116,6 +272,11 @@ change behavior except where bugs are being corrected.
 `_promoteEligibleRetries()` remains a no-op. Implementing it requires adding
 `getFailedItems()` to StorageService and time-aware retry logic. Tracked as a
 separate enhancement, not a bug fix.
+
+### History detail not deep-linkable after cold start
+`/history/:id` loads from local DB. If the app is killed and reopened with a
+deep link to `/history/some-uuid`, it will work (data is in SQLite). But there is
+no server-side resolution — this is local-only. Acceptable for MVP.
 
 ### Test coverage still incomplete
 T5 adds critical path tests but does not cover all gaps (SettingsScreen widget
