@@ -23,6 +23,12 @@ abstract class StorageService {
   Future<void> markFailed(String id, String error);
   Future<void> markPendingForRetry(String id);
 
+  /// Reactivate a failed sync queue entry for the given transcript.
+  /// Resets status to pending, attempts to 0, clears error.
+  /// Only affects rows with status='failed'. No-op if already pending.
+  /// Invariant: at most one sync_queue row per transcript.
+  Future<void> reactivateForResend(String transcriptId);
+
   // -- Device --
   Future<String> getDeviceId();
 }

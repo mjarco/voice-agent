@@ -217,6 +217,21 @@ class SqliteStorageService implements StorageService {
     );
   }
 
+  @override
+  Future<void> reactivateForResend(String transcriptId) async {
+    await _db.update(
+      'sync_queue',
+      {
+        'status': SyncStatus.pending.name,
+        'attempts': 0,
+        'last_attempt_at': null,
+        'error_message': null,
+      },
+      where: 'transcript_id = ? AND status = ?',
+      whereArgs: [transcriptId, SyncStatus.failed.name],
+    );
+  }
+
   // -- Device --
 
   @override
