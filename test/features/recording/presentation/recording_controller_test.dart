@@ -4,18 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
+import 'package:voice_agent/features/recording/domain/stt_service.dart';
+import 'package:voice_agent/features/recording/domain/transcript_result.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 
 class FakeRecordingService implements RecordingService {
   bool _isRecording = false;
   String? lastPath;
-  bool shouldThrowOnStart = false;
   bool shouldThrowOnStop = false;
   final _elapsedController = StreamController<Duration>.broadcast();
 
   @override
   Future<void> start({required String outputPath}) async {
-    if (shouldThrowOnStart) throw Exception('start failed');
     _isRecording = true;
     lastPath = outputPath;
   }
@@ -43,15 +43,46 @@ class FakeRecordingService implements RecordingService {
   bool get isRecording => _isRecording;
 }
 
+class FakeSttService implements SttService {
+  bool _loaded = true;
+  TranscriptResult? nextResult;
+  bool shouldThrow = false;
+
+  @override
+  Future<bool> isModelLoaded() async => _loaded;
+
+  @override
+  Future<void> loadModel() async {
+    _loaded = true;
+  }
+
+  @override
+  Future<TranscriptResult> transcribe(
+    String audioFilePath, {
+    String? languageCode,
+  }) async {
+    if (shouldThrow) throw Exception('transcription failed');
+    return nextResult ??
+        const TranscriptResult(
+          text: 'Hello world',
+          segments: [],
+          detectedLanguage: 'en',
+          audioDurationMs: 5000,
+        );
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FakeRecordingService fakeService;
+  late FakeSttService fakeStt;
   late RecordingController controller;
 
   setUp(() {
     fakeService = FakeRecordingService();
-    controller = RecordingController(fakeService);
+    fakeStt = FakeSttService();
+    controller = RecordingController(fakeService, fakeStt);
   });
 
   tearDown(() {
@@ -63,7 +94,6 @@ void main() {
   });
 
   test('cancelRecording returns to idle', () async {
-    // Simulate being in recording state by directly testing cancel
     await controller.cancelRecording();
     expect(controller.state, isA<RecordingIdle>());
   });
@@ -73,38 +103,61 @@ void main() {
     expect(controller.state, isA<RecordingIdle>());
   });
 
-  test('stopRecording returns completed with result', () async {
-    // We can't easily test startRecording because it calls Permission.microphone
-    // which requires a running app. So we test stop in isolation with a fake service
-    // that has been "started".
+  test('stopAndTranscribe transitions through transcribing to completed',
+      () async {
     fakeService.lastPath = '/tmp/test.wav';
-    final result = await fakeService.stop();
 
-    expect(result.filePath, '/tmp/test.wav');
-    expect(result.sampleRate, 16000);
-    expect(result.duration, const Duration(seconds: 5));
+    final states = <RecordingState>[];
+    controller.addListener(states.add);
+
+    await controller.stopAndTranscribe();
+
+    // Should have gone through: transcribing, completed
+    expect(states.any((s) => s is RecordingTranscribing), isTrue);
+    expect(controller.state, isA<RecordingCompleted>());
+    expect(
+      (controller.state as RecordingCompleted).result.text,
+      'Hello world',
+    );
   });
 
-  test('stopRecording error transitions to error state', () async {
-    fakeService.shouldThrowOnStop = true;
-    await controller.stopRecording();
+  test('stopAndTranscribe transitions to error on STT failure', () async {
+    fakeService.lastPath = '/tmp/test.wav';
+    fakeStt.shouldThrow = true;
+
+    await controller.stopAndTranscribe();
+
     expect(controller.state, isA<RecordingError>());
     expect(
       (controller.state as RecordingError).message,
-      contains('Failed to stop recording'),
+      contains('Transcription failed'),
+    );
+  });
+
+  test('stopAndTranscribe transitions to error on recording stop failure',
+      () async {
+    fakeService.shouldThrowOnStop = true;
+
+    await controller.stopAndTranscribe();
+
+    expect(controller.state, isA<RecordingError>());
+    expect(
+      (controller.state as RecordingError).message,
+      contains('Transcription failed'),
     );
   });
 
   test('RecordingState sealed class exhaustiveness', () {
-    // Verify all states can be constructed
     const states = <RecordingState>[
       RecordingIdle(),
       RecordingActive(),
+      RecordingTranscribing(),
       RecordingCompleted(
-        RecordingResult(
-          filePath: '/test',
-          duration: Duration.zero,
-          sampleRate: 16000,
+        TranscriptResult(
+          text: 'test',
+          segments: [],
+          detectedLanguage: 'en',
+          audioDurationMs: 0,
         ),
       ),
       RecordingError('test error'),
@@ -116,13 +169,14 @@ void main() {
           break;
         case RecordingActive():
           break;
+        case RecordingTranscribing():
+          break;
         case RecordingCompleted():
           break;
         case RecordingError():
           break;
       }
     }
-    // If this compiles, exhaustiveness is proven
-    expect(states.length, 4);
+    expect(states.length, 5);
   });
 }
