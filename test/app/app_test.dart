@@ -5,11 +5,17 @@ import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 
 class _StubStorageService implements StorageService {
   @override
   Future<String> getDeviceId() async => 'test-device';
+  @override
+  Future<List<TranscriptWithStatus>> getTranscriptsWithStatus({
+    int limit = 20,
+    int offset = 0,
+  }) async => [];
   @override
   Future<void> saveTranscript(Transcript t) async {}
   @override

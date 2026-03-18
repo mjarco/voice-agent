@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/sync_status.dart';
 import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
@@ -113,6 +114,12 @@ class FakeStorageService implements StorageService {
 
   @override
   Future<String> getDeviceId() async => 'test-device';
+
+  @override
+  Future<List<TranscriptWithStatus>> getTranscriptsWithStatus({
+    int limit = 20,
+    int offset = 0,
+  }) async => [];
 }
 
 class FakeApiClient extends ApiClient {
