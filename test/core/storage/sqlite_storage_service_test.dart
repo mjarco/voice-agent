@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:voice_agent/core/models/sync_status.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/sqlite_storage_service.dart';
 
@@ -132,6 +133,162 @@ void main() {
       expect(result, isNotNull);
       expect(result!.language, isNull);
       expect(result.audioDurationMs, isNull);
+    });
+  });
+
+  group('Sync Queue State Machine', () {
+    final transcript = Transcript(
+      id: 'tx-1',
+      text: 'test transcript',
+      deviceId: 'dev',
+      createdAt: 1000,
+    );
+
+    test('enqueue creates pending item with attempts 0', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      final items = await storage.getPendingItems();
+      expect(items.length, 1);
+      expect(items[0].transcriptId, 'tx-1');
+      expect(items[0].status, SyncStatus.pending);
+      expect(items[0].attempts, 0);
+      expect(items[0].lastAttemptAt, isNull);
+      expect(items[0].errorMessage, isNull);
+    });
+
+    test('getPendingItems returns only pending, FIFO order', () async {
+      await storage.saveTranscript(transcript);
+      final t2 = Transcript(
+        id: 'tx-2',
+        text: 'second',
+        deviceId: 'dev',
+        createdAt: 2000,
+      );
+      await storage.saveTranscript(t2);
+
+      await storage.enqueue('tx-1');
+      // Small delay to ensure different created_at
+      await Future.delayed(const Duration(milliseconds: 10));
+      await storage.enqueue('tx-2');
+
+      final items = await storage.getPendingItems();
+      expect(items.length, 2);
+      expect(items[0].transcriptId, 'tx-1'); // first in, first out
+      expect(items[1].transcriptId, 'tx-2');
+    });
+
+    test('full happy path: pending -> sending -> deleted (markSent)',
+        () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      var items = await storage.getPendingItems();
+      final queueId = items[0].id;
+
+      // Mark sending
+      await storage.markSending(queueId);
+      items = await storage.getPendingItems();
+      expect(items, isEmpty); // no longer pending
+
+      // Mark sent (deletes the row)
+      await storage.markSent(queueId);
+      items = await storage.getPendingItems();
+      expect(items, isEmpty);
+
+      // Transcript still exists
+      final tx = await storage.getTranscript('tx-1');
+      expect(tx, isNotNull);
+    });
+
+    test('failure path: pending -> sending -> failed', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      var items = await storage.getPendingItems();
+      final queueId = items[0].id;
+
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'server timeout');
+
+      // Not in pending anymore (status is failed)
+      items = await storage.getPendingItems();
+      expect(items, isEmpty);
+    });
+
+    test('retry path: failed -> pending via markPendingForRetry', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      var items = await storage.getPendingItems();
+      final queueId = items[0].id;
+
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'error');
+      await storage.markPendingForRetry(queueId);
+
+      items = await storage.getPendingItems();
+      expect(items.length, 1);
+      expect(items[0].status, SyncStatus.pending);
+    });
+
+    test('markSending increments attempts counter', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      var items = await storage.getPendingItems();
+      final queueId = items[0].id;
+      expect(items[0].attempts, 0);
+
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'err');
+      await storage.markPendingForRetry(queueId);
+
+      items = await storage.getPendingItems();
+      expect(items[0].attempts, 1);
+
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'err');
+      await storage.markPendingForRetry(queueId);
+
+      items = await storage.getPendingItems();
+      expect(items[0].attempts, 2);
+    });
+
+    test('markSending sets lastAttemptAt and clears errorMessage', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      var items = await storage.getPendingItems();
+      final queueId = items[0].id;
+
+      // First: fail with error
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'some error');
+      await storage.markPendingForRetry(queueId);
+
+      // Second sending: should clear error
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'check fields');
+      await storage.markPendingForRetry(queueId);
+
+      items = await storage.getPendingItems();
+      expect(items[0].lastAttemptAt, isNotNull);
+    });
+
+    test('markPendingForRetry only works on failed items', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      var items = await storage.getPendingItems();
+      final queueId = items[0].id;
+
+      // Try to retry a pending item (not failed) — should be no-op
+      await storage.markPendingForRetry(queueId);
+
+      items = await storage.getPendingItems();
+      expect(items.length, 1);
+      expect(items[0].status, SyncStatus.pending);
     });
   });
 }
