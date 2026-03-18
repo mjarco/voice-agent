@@ -90,6 +90,8 @@ class RecordingServiceImpl implements RecordingService {
     _elapsedTimer = null;
     _startTime = null;
     _currentPath = null;
-    _elapsedController.close();
+    // Do NOT close _elapsedController — it's an app-lifetime singleton.
+    // Subscribers stay connected across recording sessions.
+    // The stream goes quiet until the next start().
   }
 }
