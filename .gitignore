@@ -44,6 +44,9 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Large binary assets (downloaded via `make model`)
+assets/models/
+
 # Secrets and credentials
 .env
 *.jks
