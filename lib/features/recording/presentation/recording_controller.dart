@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
+import 'package:voice_agent/features/recording/domain/stt_exception.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 
 class RecordingController extends StateNotifier<RecordingState>
@@ -76,7 +77,11 @@ class RecordingController extends StateNotifier<RecordingState>
       state = RecordingState.completed(transcriptResult);
     } catch (e) {
       _cleanupSubscription();
-      state = RecordingState.error('Transcription failed: $e');
+      if (e is SttException) {
+        state = RecordingState.error(e.message);
+      } else {
+        state = RecordingState.error('Transcription failed: $e');
+      }
     }
   }
 
