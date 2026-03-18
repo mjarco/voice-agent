@@ -1,8 +1,12 @@
-.PHONY: deps model analyze test verify clean
+.PHONY: deps model analyze test verify clean setup doctor env run-web run-ios run-macos simulator help
 
 WHISPER_MODEL_URL := https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
 WHISPER_MODEL_DIR := assets/models
 WHISPER_MODEL_PATH := $(WHISPER_MODEL_DIR)/ggml-base.bin
+
+# ──────────────────────────────────────────────
+# Project setup
+# ──────────────────────────────────────────────
 
 ## deps: Install Flutter dependencies
 deps:
@@ -17,6 +21,13 @@ $(WHISPER_MODEL_PATH):
 	curl -L -o $(WHISPER_MODEL_PATH) $(WHISPER_MODEL_URL)
 	@echo "Model downloaded to $(WHISPER_MODEL_PATH)"
 
+## setup: Full project setup (deps + model)
+setup: deps model
+
+# ──────────────────────────────────────────────
+# Quality checks
+# ──────────────────────────────────────────────
+
 ## analyze: Run Flutter static analysis
 analyze:
 	flutter analyze
@@ -28,8 +39,85 @@ test:
 ## verify: Run all checks (analyze + test)
 verify: analyze test
 
-## setup: Full project setup (deps + model)
-setup: deps model
+# ──────────────────────────────────────────────
+# Environment setup
+# ──────────────────────────────────────────────
+
+## doctor: Show Flutter environment status
+doctor:
+	flutter doctor -v
+
+## env: Install all development tools (Xcode CLI, CocoaPods, accept licenses)
+env:
+	@echo "=== Checking Xcode CLI tools ==="
+	@xcode-select -p > /dev/null 2>&1 || (echo "Installing Xcode CLI tools..." && xcode-select --install && echo ">>> After install completes, run 'make env' again")
+	@echo ""
+	@echo "=== Checking Xcode ==="
+	@if [ ! -d /Applications/Xcode.app ]; then \
+		echo "ERROR: Xcode not found. Install from App Store:"; \
+		echo "  https://apps.apple.com/app/xcode/id497799835"; \
+		echo "After install, run:"; \
+		echo "  sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer"; \
+		echo "  sudo xcodebuild -runFirstLaunch"; \
+		exit 1; \
+	else \
+		echo "Xcode found at /Applications/Xcode.app"; \
+	fi
+	@echo ""
+	@echo "=== Checking CocoaPods ==="
+	@which pod > /dev/null 2>&1 || (echo "Installing CocoaPods..." && brew install cocoapods)
+	@echo "CocoaPods: $$(pod --version)"
+	@echo ""
+	@echo "=== Accepting iOS licenses ==="
+	@sudo xcodebuild -license accept 2>/dev/null || true
+	@echo ""
+	@echo "=== Flutter doctor ==="
+	@flutter doctor
+	@echo ""
+	@echo "=== Environment ready ==="
+
+# ──────────────────────────────────────────────
+# Run targets
+# ──────────────────────────────────────────────
+
+## run-web: Run the app in Chrome (no native plugins)
+run-web:
+	flutter run -d chrome
+
+## run-ios: Run the app on iOS Simulator
+run-ios: _ensure-simulator
+	flutter run -d iPhone
+
+## run-macos: Run the app as macOS desktop
+run-macos:
+	flutter run -d macos
+
+## simulator: Open iOS Simulator
+simulator:
+	@open -a Simulator
+
+## devices: List available devices
+devices:
+	flutter devices
+
+# ──────────────────────────────────────────────
+# Internal targets
+# ──────────────────────────────────────────────
+
+_ensure-simulator:
+	@if ! xcrun simctl list devices booted 2>/dev/null | grep -q "iPhone"; then \
+		echo "No booted iPhone simulator. Starting one..."; \
+		DEVICE=$$(xcrun simctl list devices available | grep "iPhone" | head -1 | sed 's/.*(\([-A-F0-9]*\)).*/\1/'); \
+		if [ -n "$$DEVICE" ]; then \
+			xcrun simctl boot "$$DEVICE" 2>/dev/null || true; \
+			open -a Simulator; \
+			echo "Waiting for simulator to boot..."; \
+			sleep 5; \
+		else \
+			echo "ERROR: No iPhone simulator available. Open Xcode > Settings > Platforms > install iOS simulator."; \
+			exit 1; \
+		fi \
+	fi
 
 ## clean: Remove build artifacts and downloaded models
 clean:
