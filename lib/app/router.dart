@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
+import 'package:voice_agent/features/recording/domain/transcript_result.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
+import 'package:voice_agent/features/transcript/transcript_review_screen.dart';
 
 final router = GoRouter(
   initialLocation: '/record',
@@ -32,9 +34,15 @@ final router = GoRouter(
               routes: [
                 GoRoute(
                   path: 'review',
-                  builder: (context, state) => const _PlaceholderScreen(
-                    title: 'Review',
-                  ),
+                  builder: (context, state) {
+                    final result = state.extra as TranscriptResult?;
+                    if (result == null) {
+                      return const _PlaceholderScreen(title: 'Review');
+                    }
+                    return TranscriptReviewScreen(
+                      transcriptResult: result,
+                    );
+                  },
                 ),
               ],
             ),
