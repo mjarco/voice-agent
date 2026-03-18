@@ -21,6 +21,7 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     connectivityService: ref.watch(connectivityServiceProvider),
   );
 
+  worker.start();
   ref.onDispose(() => worker.stop());
 
   return worker;

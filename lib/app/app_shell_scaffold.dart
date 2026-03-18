@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:voice_agent/features/api_sync/sync_provider.dart';
 
-class AppShellScaffold extends ConsumerStatefulWidget {
+class AppShellScaffold extends StatelessWidget {
   const AppShellScaffold({
     super.key,
     required this.navigationShell,
@@ -12,26 +10,15 @@ class AppShellScaffold extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
 
   @override
-  ConsumerState<AppShellScaffold> createState() => _AppShellScaffoldState();
-}
-
-class _AppShellScaffoldState extends ConsumerState<AppShellScaffold> {
-  @override
-  void initState() {
-    super.initState();
-    ref.read(syncWorkerProvider).start();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: widget.navigationShell,
+      body: navigationShell,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: widget.navigationShell.currentIndex,
+        selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) {
-          widget.navigationShell.goBranch(
+          navigationShell.goBranch(
             index,
-            initialLocation: index == widget.navigationShell.currentIndex,
+            initialLocation: index == navigationShell.currentIndex,
           );
         },
         destinations: const [
