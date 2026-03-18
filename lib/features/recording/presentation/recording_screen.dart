@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
@@ -70,7 +71,7 @@ class RecordingScreen extends ConsumerWidget {
           ],
         ),
       RecordingCompleted() => const SizedBox.shrink(), // handled by listener
-      RecordingError(:final message) => Column(
+      RecordingError(:final message, :final requiresSettings) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error, size: 64, color: Colors.red),
@@ -84,10 +85,17 @@ class RecordingScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 24),
-            FilledButton(
-              onPressed: controller.resetToIdle,
-              child: const Text('Try Again'),
-            ),
+            if (requiresSettings)
+              FilledButton.icon(
+                onPressed: openAppSettings,
+                icon: const Icon(Icons.settings),
+                label: const Text('Open Settings'),
+              )
+            else
+              FilledButton(
+                onPressed: controller.resetToIdle,
+                child: const Text('Try Again'),
+              ),
           ],
         ),
     };

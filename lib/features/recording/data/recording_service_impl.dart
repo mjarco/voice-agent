@@ -23,6 +23,9 @@ class RecordingServiceImpl implements RecordingService {
     bitRate: 256000,
   );
 
+  @override
+  Future<bool> requestPermission() => _recorder.hasPermission();
+
   String? _currentPath;
   Timer? _elapsedTimer;
   DateTime? _startTime;

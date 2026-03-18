@@ -8,7 +8,10 @@ sealed class RecordingState {
   const factory RecordingState.transcribing() = RecordingTranscribing;
   const factory RecordingState.completed(TranscriptResult result) =
       RecordingCompleted;
-  const factory RecordingState.error(String message) = RecordingError;
+  const factory RecordingState.error(
+    String message, {
+    bool requiresSettings,
+  }) = RecordingError;
 }
 
 class RecordingIdle extends RecordingState {
@@ -29,6 +32,7 @@ class RecordingCompleted extends RecordingState {
 }
 
 class RecordingError extends RecordingState {
-  const RecordingError(this.message);
+  const RecordingError(this.message, {this.requiresSettings = false});
   final String message;
+  final bool requiresSettings;
 }
