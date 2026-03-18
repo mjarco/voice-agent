@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_exception.dart';
@@ -10,13 +11,14 @@ import 'package:voice_agent/features/recording/domain/stt_service.dart';
 
 class RecordingController extends StateNotifier<RecordingState>
     with WidgetsBindingObserver {
-  RecordingController(this._service, this._sttService)
+  RecordingController(this._service, this._sttService, this._ref)
       : super(const RecordingState.idle()) {
     WidgetsBinding.instance.addObserver(this);
   }
 
   final RecordingService _service;
   final SttService _sttService;
+  final Ref _ref;
   StreamSubscription<Duration>? _elapsedSub;
   Duration _currentElapsed = Duration.zero;
 
@@ -35,6 +37,17 @@ class RecordingController extends StateNotifier<RecordingState>
       state = const RecordingState.error(
         'Microphone permission denied. Please enable it in app settings.',
         requiresSettings: true,
+      );
+      return;
+    }
+
+    // Await the initial config load so we read the persisted key, not the default null.
+    await _ref.read(appConfigProvider.notifier).loadCompleted;
+    final config = _ref.read(appConfigProvider);
+    if (config.groqApiKey == null || config.groqApiKey!.isEmpty) {
+      state = const RecordingState.error(
+        'Groq API key not set.',
+        requiresAppSettings: true,
       );
       return;
     }

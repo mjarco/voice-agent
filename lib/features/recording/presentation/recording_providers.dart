@@ -19,5 +19,6 @@ final recordingControllerProvider =
   return RecordingController(
     ref.watch(recordingServiceProvider),
     ref.watch(sttServiceProvider),
+    ref,
   );
 });

@@ -11,6 +11,7 @@ sealed class RecordingState {
   const factory RecordingState.error(
     String message, {
     bool requiresSettings,
+    bool requiresAppSettings,
   }) = RecordingError;
 }
 
@@ -32,7 +33,16 @@ class RecordingCompleted extends RecordingState {
 }
 
 class RecordingError extends RecordingState {
-  const RecordingError(this.message, {this.requiresSettings = false});
+  const RecordingError(
+    this.message, {
+    this.requiresSettings = false,
+    this.requiresAppSettings = false,
+  }) : assert(
+          !(requiresSettings && requiresAppSettings),
+          'requiresSettings and requiresAppSettings are mutually exclusive',
+        );
+
   final String message;
   final bool requiresSettings;
+  final bool requiresAppSettings;
 }
