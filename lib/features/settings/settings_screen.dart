@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
@@ -18,8 +19,10 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late final TextEditingController _urlController;
   late final TextEditingController _tokenController;
+  late final TextEditingController _groqKeyController;
   String? _urlError;
   _TestStatus _testStatus = _TestStatus.idle;
+  ProviderSubscription<AppConfig>? _configSubscription;
 
   @override
   void initState() {
@@ -27,12 +30,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final config = ref.read(appConfigProvider);
     _urlController = TextEditingController(text: config.apiUrl ?? '');
     _tokenController = TextEditingController(text: config.apiToken ?? '');
+    _groqKeyController = TextEditingController(text: config.groqApiKey ?? '');
+    // listenManual is the correct API for initState — keeps controllers in sync
+    // when appConfigProvider emits the loaded value after async secure-storage read.
+    _configSubscription = ref.listenManual(appConfigProvider, (_, next) {
+      if (_urlController.text.isEmpty) {
+        _urlController.text = next.apiUrl ?? '';
+      }
+      if (_tokenController.text.isEmpty) {
+        _tokenController.text = next.apiToken ?? '';
+      }
+      if (_groqKeyController.text.isEmpty) {
+        _groqKeyController.text = next.groqApiKey ?? '';
+      }
+    });
   }
 
   @override
   void dispose() {
+    _configSubscription?.close();
     _urlController.dispose();
     _tokenController.dispose();
+    _groqKeyController.dispose();
     super.dispose();
   }
 
@@ -58,6 +77,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _onTokenFocusLost() {
     final token = _tokenController.text;
     ref.read(appConfigProvider.notifier).updateApiToken(token);
+  }
+
+  void _onGroqKeyFocusLost() {
+    final key = _groqKeyController.text;
+    ref.read(appConfigProvider.notifier).updateGroqApiKey(key);
   }
 
   Future<void> _testConnection() async {
@@ -163,6 +187,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           _buildSectionHeader('Transcription'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Focus(
+              onFocusChange: (hasFocus) {
+                if (!hasFocus) _onGroqKeyFocusLost();
+              },
+              child: TextField(
+                controller: _groqKeyController,
+                decoration: const InputDecoration(
+                  labelText: 'Groq API Key',
+                  hintText: 'gsk_...',
+                  border: OutlineInputBorder(),
+                ),
+                obscureText: true,
+              ),
+            ),
+          ),
           ListTile(
             title: const Text('Language'),
             trailing: DropdownButton<String>(

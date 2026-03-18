@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
@@ -17,9 +19,18 @@ class AppConfigNotifier extends StateNotifier<AppConfig> {
   }
 
   final AppConfigService _service;
+  final _loadCompleter = Completer<void>();
+
+  /// Completes when the initial async load from secure storage finishes.
+  /// Always completes — even if storage throws — so awaiting it never hangs.
+  Future<void> get loadCompleted => _loadCompleter.future;
 
   Future<void> _load() async {
-    state = await _service.load();
+    try {
+      state = await _service.load();
+    } finally {
+      if (!_loadCompleter.isCompleted) _loadCompleter.complete();
+    }
   }
 
   Future<void> updateApiUrl(String url) async {
@@ -45,5 +56,10 @@ class AppConfigNotifier extends StateNotifier<AppConfig> {
   Future<void> updateKeepHistory(bool value) async {
     await _service.saveKeepHistory(value);
     state = state.copyWith(keepHistory: value);
+  }
+
+  Future<void> updateGroqApiKey(String key) async {
+    await _service.saveGroqApiKey(key);
+    state = state.copyWith(groqApiKey: key);
   }
 }
