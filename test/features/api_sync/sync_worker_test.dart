@@ -1,0 +1,305 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/models/sync_queue_item.dart';
+import 'package:voice_agent/core/models/sync_status.dart';
+import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/network/api_client.dart';
+import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/features/api_sync/api_config.dart';
+import 'package:voice_agent/features/api_sync/sync_worker.dart';
+
+class FakeStorageService implements StorageService {
+  final List<Transcript> transcripts = [];
+  final List<SyncQueueItem> queueItems = [];
+  final List<String> calls = [];
+
+  @override
+  Future<void> saveTranscript(Transcript t) async {
+    transcripts.add(t);
+  }
+
+  @override
+  Future<Transcript?> getTranscript(String id) async {
+    return transcripts.where((t) => t.id == id).firstOrNull;
+  }
+
+  @override
+  Future<List<Transcript>> getTranscripts({int limit = 50, int offset = 0}) async {
+    return transcripts;
+  }
+
+  @override
+  Future<void> deleteTranscript(String id) async {
+    transcripts.removeWhere((t) => t.id == id);
+  }
+
+  @override
+  Future<void> enqueue(String transcriptId) async {
+    queueItems.add(SyncQueueItem(
+      id: 'q-${queueItems.length}',
+      transcriptId: transcriptId,
+      status: SyncStatus.pending,
+      attempts: 0,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    ));
+  }
+
+  @override
+  Future<List<SyncQueueItem>> getPendingItems() async {
+    return queueItems
+        .where((i) => i.status == SyncStatus.pending)
+        .toList();
+  }
+
+  @override
+  Future<void> markSending(String id) async {
+    calls.add('markSending:$id');
+    final idx = queueItems.indexWhere((i) => i.id == id);
+    if (idx >= 0) {
+      final item = queueItems[idx];
+      queueItems[idx] = SyncQueueItem(
+        id: item.id,
+        transcriptId: item.transcriptId,
+        status: SyncStatus.sending,
+        attempts: item.attempts + 1,
+        lastAttemptAt: DateTime.now().millisecondsSinceEpoch,
+        createdAt: item.createdAt,
+      );
+    }
+  }
+
+  @override
+  Future<void> markSent(String id) async {
+    calls.add('markSent:$id');
+    queueItems.removeWhere((i) => i.id == id);
+  }
+
+  @override
+  Future<void> markFailed(String id, String error) async {
+    calls.add('markFailed:$id:$error');
+    final idx = queueItems.indexWhere((i) => i.id == id);
+    if (idx >= 0) {
+      final item = queueItems[idx];
+      queueItems[idx] = SyncQueueItem(
+        id: item.id,
+        transcriptId: item.transcriptId,
+        status: SyncStatus.failed,
+        attempts: item.attempts,
+        lastAttemptAt: item.lastAttemptAt,
+        errorMessage: error,
+        createdAt: item.createdAt,
+      );
+    }
+  }
+
+  @override
+  Future<void> markPendingForRetry(String id) async {
+    calls.add('markPendingForRetry:$id');
+    final idx = queueItems.indexWhere((i) => i.id == id);
+    if (idx >= 0) {
+      final item = queueItems[idx];
+      queueItems[idx] = SyncQueueItem(
+        id: item.id,
+        transcriptId: item.transcriptId,
+        status: SyncStatus.pending,
+        attempts: item.attempts,
+        lastAttemptAt: item.lastAttemptAt,
+        createdAt: item.createdAt,
+      );
+    }
+  }
+
+  @override
+  Future<String> getDeviceId() async => 'test-device';
+}
+
+class FakeApiClient extends ApiClient {
+  ApiResult nextResult = const ApiSuccess();
+
+  @override
+  Future<ApiResult> post(
+    Transcript transcript, {
+    required String url,
+    String? token,
+  }) async {
+    return nextResult;
+  }
+}
+
+class FakeConnectivityService extends ConnectivityService {
+  final _controller = StreamController<ConnectivityStatus>.broadcast();
+
+  @override
+  Stream<ConnectivityStatus> get statusStream => _controller.stream;
+
+  @override
+  Future<ConnectivityStatus> get currentStatus async =>
+      ConnectivityStatus.online;
+
+  void emitStatus(ConnectivityStatus status) {
+    _controller.add(status);
+  }
+}
+
+void main() {
+  late FakeStorageService storage;
+  late FakeApiClient apiClient;
+  late FakeConnectivityService connectivity;
+  late SyncWorker worker;
+
+  final transcript = Transcript(
+    id: 'tx-1',
+    text: 'Hello',
+    language: 'en',
+    deviceId: 'dev',
+    createdAt: 1000,
+  );
+
+  setUp(() {
+    storage = FakeStorageService();
+    apiClient = FakeApiClient();
+    connectivity = FakeConnectivityService();
+    worker = SyncWorker(
+      storageService: storage,
+      apiClient: apiClient,
+      apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+      connectivityService: connectivity,
+    );
+  });
+
+  tearDown(() {
+    worker.stop();
+  });
+
+  group('SyncWorker', () {
+    test('initial state is idle', () {
+      expect(worker.state, SyncWorkerState.idle);
+    });
+
+    test('start transitions to running', () {
+      worker.start();
+      expect(worker.state, SyncWorkerState.running);
+    });
+
+    test('pause transitions to paused', () {
+      worker.start();
+      worker.pause();
+      expect(worker.state, SyncWorkerState.paused);
+    });
+
+    test('resume transitions from paused to running', () {
+      worker.start();
+      worker.pause();
+      worker.resume();
+      expect(worker.state, SyncWorkerState.running);
+    });
+
+    test('stop transitions to stopped', () {
+      worker.start();
+      worker.stop();
+      expect(worker.state, SyncWorkerState.stopped);
+    });
+
+    test('drains pending item and marks sent on success', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiSuccess();
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(storage.queueItems, isEmpty);
+      expect(storage.calls, contains('markSent:q-0'));
+    });
+
+    test('marks failed on permanent failure', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiPermanentFailure(
+        statusCode: 400,
+        message: 'Bad request',
+      );
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(storage.calls.any((c) => c.startsWith('markFailed:q-0')), isTrue);
+      expect(storage.queueItems.first.status, SyncStatus.failed);
+    });
+
+    test('marks failed on transient failure', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiTransientFailure(reason: 'timeout');
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(storage.calls.any((c) => c.startsWith('markFailed:q-0')), isTrue);
+    });
+
+    test('skips drain when API URL is null', () async {
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(), // url is null
+        connectivityService: connectivity,
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      // Nothing should have been processed
+      expect(storage.calls, isEmpty);
+      expect(storage.queueItems.length, 1);
+    });
+
+    test('pauses on offline connectivity', () async {
+      worker.start();
+      expect(worker.state, SyncWorkerState.running);
+
+      connectivity.emitStatus(ConnectivityStatus.offline);
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(worker.state, SyncWorkerState.paused);
+    });
+
+    test('resumes on online connectivity after pause', () async {
+      worker.start();
+      connectivity.emitStatus(ConnectivityStatus.offline);
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(worker.state, SyncWorkerState.paused);
+
+      connectivity.emitStatus(ConnectivityStatus.online);
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(worker.state, SyncWorkerState.running);
+    });
+  });
+
+  group('backoffForAttempt', () {
+    test('attempt 0 returns zero', () {
+      expect(SyncWorker.backoffForAttempt(0), Duration.zero);
+    });
+
+    test('attempt 1 returns 30 seconds', () {
+      expect(SyncWorker.backoffForAttempt(1), const Duration(seconds: 30));
+    });
+
+    test('attempt 3 returns 5 minutes', () {
+      expect(SyncWorker.backoffForAttempt(3), const Duration(minutes: 5));
+    });
+
+    test('attempt 10 returns 1 hour (capped)', () {
+      expect(SyncWorker.backoffForAttempt(10), const Duration(hours: 1));
+    });
+  });
+}
