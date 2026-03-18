@@ -36,6 +36,8 @@ class _StubStorageService implements StorageService {
   Future<void> markFailed(String id, String error) async {}
   @override
   Future<void> markPendingForRetry(String id) async {}
+  @override
+  Future<void> reactivateForResend(String transcriptId) async {}
 }
 
 List<Override> get _testOverrides => [

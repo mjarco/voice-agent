@@ -58,7 +58,7 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
   }
 
   Future<void> resendItem(String id) async {
-    await _storage.markPendingForRetry(id);
+    await _storage.reactivateForResend(id);
     // Update the item's status in the list
     state = HistoryState(
       items: state.items.map((i) {

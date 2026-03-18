@@ -120,6 +120,9 @@ class FakeStorageService implements StorageService {
     int limit = 20,
     int offset = 0,
   }) async => [];
+
+  @override
+  Future<void> reactivateForResend(String transcriptId) async {}
 }
 
 class FakeApiClient extends ApiClient {

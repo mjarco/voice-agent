@@ -291,4 +291,64 @@ void main() {
       expect(items[0].status, SyncStatus.pending);
     });
   });
+
+  group('reactivateForResend', () {
+    final transcript = Transcript(
+      id: 'tx-resend',
+      text: 'resend test',
+      deviceId: 'dev',
+      createdAt: 5000,
+    );
+
+    test('reactivates failed row: resets status, attempts, error', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-resend');
+
+      var items = await storage.getPendingItems();
+      final queueId = items.first.id;
+
+      // Simulate failure
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'server error');
+
+      // Reactivate
+      await storage.reactivateForResend('tx-resend');
+
+      items = await storage.getPendingItems();
+      expect(items.length, 1);
+      expect(items.first.status, SyncStatus.pending);
+      expect(items.first.attempts, 0);
+      expect(items.first.errorMessage, isNull);
+      expect(items.first.lastAttemptAt, isNull);
+    });
+
+    test('is no-op when transcript has pending queue item', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-resend');
+
+      // Already pending — reactivate should be no-op
+      await storage.reactivateForResend('tx-resend');
+
+      final items = await storage.getPendingItems();
+      expect(items.length, 1); // still just one
+    });
+
+    test('no duplicate rows after reactivate', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-resend');
+
+      var items = await storage.getPendingItems();
+      final queueId = items.first.id;
+
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'err');
+
+      // Reactivate twice
+      await storage.reactivateForResend('tx-resend');
+      await storage.reactivateForResend('tx-resend');
+
+      items = await storage.getPendingItems();
+      expect(items.length, 1, reason: 'Should never create duplicates');
+    });
+  });
 }
