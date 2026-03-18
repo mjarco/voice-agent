@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
+import 'package:voice_agent/features/recording/domain/stt_exception.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
@@ -51,6 +52,7 @@ class FakeSttService implements SttService {
   bool _loaded = true;
   TranscriptResult? nextResult;
   bool shouldThrow = false;
+  SttException? throwSttException;
 
   @override
   Future<bool> isModelLoaded() async => _loaded;
@@ -65,6 +67,7 @@ class FakeSttService implements SttService {
     String audioFilePath, {
     String? languageCode,
   }) async {
+    if (throwSttException != null) throw throwSttException!;
     if (shouldThrow) throw Exception('transcription failed');
     return nextResult ??
         const TranscriptResult(
@@ -148,6 +151,19 @@ void main() {
     expect(
       (controller.state as RecordingError).message,
       contains('Transcription failed'),
+    );
+  });
+
+  test('stopAndTranscribe unwraps SttException message verbatim', () async {
+    fakeService.lastPath = '/tmp/test.wav';
+    fakeStt.throwSttException = const SttException('custom message');
+
+    await controller.stopAndTranscribe();
+
+    expect(controller.state, isA<RecordingError>());
+    expect(
+      (controller.state as RecordingError).message,
+      'custom message',
     );
   });
 
