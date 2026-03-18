@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/features/api_sync/sync_provider.dart';
 
-class AppShellScaffold extends StatelessWidget {
+class AppShellScaffold extends ConsumerWidget {
   const AppShellScaffold({
     super.key,
     required this.navigationShell,
@@ -10,7 +12,8 @@ class AppShellScaffold extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(syncWorkerProvider); // keeps worker alive; restarts when apiConfig changes
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
