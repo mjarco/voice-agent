@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/features/settings/settings_provider.dart';
 
 class ApiConfig {
   const ApiConfig({this.url, this.token});
@@ -10,10 +11,12 @@ class ApiConfig {
   final String? token;
 }
 
-/// Stub provider that always returns an unconfigured ApiConfig.
-///
-/// Proposal 006 (Settings Screen) replaces this with a real provider
-/// that reads from SharedPreferences / flutter_secure_storage.
+/// Reads API URL and token from settings.
+/// Returns ApiConfig with values from appSettingsProvider.
 final apiConfigProvider = Provider<ApiConfig>((ref) {
-  return const ApiConfig();
+  final settings = ref.watch(appSettingsProvider);
+  return ApiConfig(
+    url: settings.apiUrl,
+    token: settings.apiToken,
+  );
 });
