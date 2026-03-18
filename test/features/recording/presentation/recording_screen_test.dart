@@ -5,11 +5,18 @@ import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
+import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
-import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/models/transcript_result.dart';
+import 'package:voice_agent/features/recording/domain/recording_result.dart';
+import 'package:voice_agent/features/recording/domain/recording_service.dart';
+import 'package:voice_agent/features/recording/domain/recording_state.dart';
+import 'package:voice_agent/features/recording/domain/stt_service.dart';
+import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
+import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 class _StubStorage implements StorageService {
   @override Future<String> getDeviceId() async => 'test';
@@ -89,4 +96,133 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets(
+    'RecordingError(requiresAppSettings) shows "Go to Settings", hides "Open Settings"',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides,
+            apiUrlConfiguredProvider.overrideWithValue(true),
+            recordingControllerProvider.overrideWith(
+              (ref) => _ErrorController(
+                ref,
+                const RecordingError('key not set', requiresAppSettings: true),
+              ),
+            ),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Go to Settings'), findsOneWidget);
+      expect(find.text('Open Settings'), findsNothing);
+      expect(find.text('Try Again'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'RecordingError(requiresSettings) shows "Open Settings", hides "Go to Settings"',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides,
+            apiUrlConfiguredProvider.overrideWithValue(true),
+            recordingControllerProvider.overrideWith(
+              (ref) => _ErrorController(
+                ref,
+                const RecordingError(
+                  'permission denied',
+                  requiresSettings: true,
+                ),
+              ),
+            ),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open Settings'), findsOneWidget);
+      expect(find.text('Go to Settings'), findsNothing);
+      expect(find.text('Try Again'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'RecordingError(no flags) shows "Try Again", hides both Settings buttons',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides,
+            apiUrlConfiguredProvider.overrideWithValue(true),
+            recordingControllerProvider.overrideWith(
+              (ref) => _ErrorController(
+                ref,
+                const RecordingError('something went wrong'),
+              ),
+            ),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Try Again'), findsOneWidget);
+      expect(find.text('Go to Settings'), findsNothing);
+      expect(find.text('Open Settings'), findsNothing);
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stubs needed for _ErrorController
+// ---------------------------------------------------------------------------
+
+class _NoOpRecordingService implements RecordingService {
+  @override
+  Future<bool> requestPermission() async => true;
+  @override
+  Future<void> start({required String outputPath}) async {}
+  @override
+  Future<RecordingResult> stop() async => RecordingResult(
+        filePath: '/tmp/x.wav',
+        duration: Duration.zero,
+        sampleRate: 16000,
+      );
+  @override
+  Future<void> cancel() async {}
+  @override
+  Stream<Duration> get elapsed => const Stream.empty();
+  @override
+  bool get isRecording => false;
+}
+
+class _NoOpSttService implements SttService {
+  @override
+  Future<bool> isModelLoaded() async => true;
+  @override
+  Future<void> loadModel() async {}
+  @override
+  Future<TranscriptResult> transcribe(String path, {String? languageCode}) =>
+      Future.value(
+        const TranscriptResult(
+          text: '',
+          segments: [],
+          detectedLanguage: 'en',
+          audioDurationMs: 0,
+        ),
+      );
+}
+
+/// Controller that starts in a fixed [RecordingError] state.
+class _ErrorController extends RecordingController {
+  _ErrorController(Ref ref, RecordingError error)
+      : super(_NoOpRecordingService(), _NoOpSttService(), ref) {
+    state = error;
+  }
 }

@@ -71,7 +71,12 @@ class RecordingScreen extends ConsumerWidget {
           ],
         ),
       RecordingCompleted() => const SizedBox.shrink(), // handled by listener
-      RecordingError(:final message, :final requiresSettings) => Column(
+      RecordingError(
+        :final message,
+        :final requiresSettings,
+        :final requiresAppSettings,
+      ) =>
+        Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error, size: 64, color: Colors.red),
@@ -85,7 +90,13 @@ class RecordingScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 24),
-            if (requiresSettings)
+            if (requiresAppSettings)
+              FilledButton.icon(
+                onPressed: () => context.go('/settings'),
+                icon: const Icon(Icons.settings),
+                label: const Text('Go to Settings'),
+              )
+            else if (requiresSettings)
               FilledButton.icon(
                 onPressed: openAppSettings,
                 icon: const Icon(Icons.settings),
