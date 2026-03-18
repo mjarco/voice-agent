@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/features/recording/domain/transcript_result.dart';
@@ -44,6 +45,11 @@ class MockStorageService implements StorageService {
   Future<void> markFailed(String id, String error) async {}
   @override
   Future<void> markPendingForRetry(String id) async {}
+  @override
+  Future<List<TranscriptWithStatus>> getTranscriptsWithStatus({
+    int limit = 20,
+    int offset = 0,
+  }) async => [];
 }
 
 const _testResult = TranscriptResult(

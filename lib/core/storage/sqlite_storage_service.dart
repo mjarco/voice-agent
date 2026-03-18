@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/models/sync_queue_item.dart';
+import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/models/sync_status.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
@@ -100,6 +101,42 @@ class SqliteStorageService implements StorageService {
       offset: offset,
     );
     return rows.map(Transcript.fromMap).toList();
+  }
+
+  @override
+  Future<List<TranscriptWithStatus>> getTranscriptsWithStatus({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final rows = await _db.rawQuery('''
+      SELECT t.id, t.text, t.created_at,
+             sq.status AS sync_status
+      FROM transcripts t
+      LEFT JOIN sync_queue sq ON t.id = sq.transcript_id
+      ORDER BY t.created_at DESC
+      LIMIT ? OFFSET ?
+    ''', [limit, offset]);
+
+    return rows.map((row) {
+      final syncStatus = row['sync_status'] as String?;
+      DisplaySyncStatus status;
+      if (syncStatus == null) {
+        status = DisplaySyncStatus.sent;
+      } else if (syncStatus == 'pending' || syncStatus == 'sending') {
+        status = DisplaySyncStatus.pending;
+      } else {
+        status = DisplaySyncStatus.failed;
+      }
+
+      return TranscriptWithStatus(
+        id: row['id'] as String,
+        text: row['text'] as String,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(
+          row['created_at'] as int,
+        ),
+        status: status,
+      );
+    }).toList();
   }
 
   @override
