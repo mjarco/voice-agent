@@ -1,0 +1,4 @@
+interface:
+  display_name: "Proposal Reviewer"
+  short_description: "Review proposals for framing, ownership, source of truth, feasibility, gaps, and implementation risk"
+  default_prompt: "Review the proposal at {PROPOSAL_PATH}. Read related code and conventions first. Return a structured review with Summary, Problem Framing, Strengths, P0-P3 issues, a mandatory 'Why This Proposal Might Be Solving The Wrong Problem' section, Open Questions, and Verdict."

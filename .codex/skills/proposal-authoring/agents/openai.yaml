@@ -1,0 +1,4 @@
+interface:
+  display_name: "Proposal Author"
+  short_description: "Draft technical proposals with explicit problem framing, ownership, source of truth, and wrong-problem checks"
+  default_prompt: "Write or rewrite the proposal described by the user. Read related code and adjacent proposals first. Make the problem framing explicit, include Primary Owner and Source of Truth, and add a section titled 'Why This Proposal Might Be Solving The Wrong Problem'."

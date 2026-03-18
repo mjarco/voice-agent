@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Manual Writer"
+  short_description: "Markdown user manuals with structure and style"
+  default_prompt: "Write a user manual in Markdown for the provided product. Follow the manual structure, navigation rules, and writing style in this skill."
