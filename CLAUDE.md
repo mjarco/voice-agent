@@ -225,6 +225,28 @@ test/
 
 ## Git Conventions
 
+### Avoid Heredocs in Shell Commands
+
+**Never use heredocs (`<<EOF`, `<<'EOF'`) in `gh` or `git` commands.**
+They cause quoting issues, break in some shells, and are hard to debug.
+Instead, use the `-F` flag with a temp file, or pass short strings directly
+with `--body "..."` / `-m "..."`.
+
+```bash
+# BAD — heredoc
+gh pr create --body "$(cat <<'EOF'
+...
+EOF
+)"
+
+# GOOD — temp file
+echo "PR body here" > /tmp/pr-body.md
+gh pr create --body-file /tmp/pr-body.md
+
+# GOOD — short inline string
+gh pr create --body "Summary of changes"
+```
+
 ### The Golden Rule — Never Push Directly to `main`
 
 **Every change goes through a branch and a PR. No exceptions. This includes
