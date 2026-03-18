@@ -195,7 +195,7 @@ GoRoute(
   sync status query
 - Bottom navigation bar stays visible (child route within History branch)
 - Navigation: `context.push('/history/${item.id}')` instead of `Navigator.push`
-- Not deep-linkable after cold start for MVP (data loaded from local DB, not URL)
+- Works after cold start — data loaded from local SQLite, no server needed
 
 ### Test Connection Contract (T4d)
 
@@ -227,7 +227,7 @@ Returns the same `ApiResult` sealed type for response classification.
 | `lib/features/api_sync/api_config.dart` | Read from `core/config/` instead of `features/settings/` |
 | `lib/features/settings/settings_service.dart` | **Deleted** — persistence moves to `core/config/app_config_service.dart` |
 | `lib/features/settings/settings_provider.dart` | **Deleted** — replaced by `core/config/app_config_provider.dart` |
-| `lib/features/settings/settings_model.dart` | **Deleted** — replaced by `core/config/app_config.dart` |
+| `lib/features/settings/settings_model.dart` | **Deleted** — replaced by `core/config/app_config.dart` (nullable copyWith fix applied to the new model in T4b) |
 | `lib/features/settings/settings_screen.dart` | Remove import of `sync_provider.dart`, use `ApiClient.testConnection` |
 | `lib/features/recording/data/recording_service_impl.dart` | Keep `_elapsedController` open (app-lifetime singleton, no dispose) |
 | `lib/core/storage/storage_service.dart` | Add `reactivateForResend(String transcriptId)` |
@@ -248,8 +248,8 @@ Returns the same `ApiResult` sealed type for response classification.
 | T1 | **Fix architecture: establish core/config ownership.** Move `TranscriptResult`/`TranscriptSegment` to `core/models/`. Create `core/config/` with `AppConfig` model, `AppConfigService` (sole persistence adapter — replaces `features/settings/settings_service.dart`), `appConfigProvider` (StateNotifier), `apiUrlConfiguredProvider` (derived). Delete `settings_service.dart`, `settings_provider.dart`, `settings_model.dart` from features/settings/. `SettingsScreen` becomes pure UI calling `appConfigProvider.notifier`. Refactor `features/api_sync/api_config.dart` to read from `core/config/`. Remove all cross-feature imports. Update all import paths. Verify: `grep -r "import.*features/" lib/features/X/ | grep -v "features/X"` returns empty for every X. `grep -r "import.*features/" lib/core/` returns empty. Move `settings_service_test.dart` to `test/core/config/app_config_service_test.dart`. | core, features, app | B2, B3, B4, B5 |
 | T2 | **Fix StreamController lifecycle.** Keep `_elapsedController` open across recording cycles — treat service as app-lifetime singleton. `_cleanup()` stops the timer but does NOT close the stream. No `dispose()` added — `RecordingService` interface unchanged, provider has no `ref.onDispose`. Update `RecordingServiceImpl` tests: verify `start→stop→start→stop` produces elapsed events in both sessions on the same subscription. | features/recording | B1 |
 | T3 | **Fix resend: reactivate existing failed row.** Add `StorageService.reactivateForResend(String transcriptId)` — UPDATE sync_queue SET status='pending', attempts=0, error=NULL WHERE transcript_id=? AND status='failed'. Update `HistoryNotifier.resendItem` to call it. Add tests: resend changes failed to pending, resend is no-op for pending, no duplicate rows after resend, `getTranscriptsWithStatus` returns one row per transcript after resend. | core/storage, features/history | I1 |
-| T4 | **Fix misc important issues.** (a) `ApiClient`: `/ 1000` → `~/ 1000`. (b) `AppSettings.copyWith`: use `Object` sentinel for nullable fields. (c) History detail: add `/history/:id` child route, load from StorageService, use `context.push`. (d) Test connection: add `ApiClient.testConnection(url, token)` as separate method, update `SettingsScreen` to use it instead of `post()`. | core/network, features/settings, features/history, app | I3, I4, I5, I6 |
-| T5 | **Add missing tests.** `getTranscriptsWithStatus` storage integration test (status derivation). `HistoryNotifier` unit tests (loadNextPage, refresh, delete, resend). `SettingsService` round-trip test. | test/ | Coverage gaps |
+| T4 | **Fix misc important issues.** (a) `ApiClient`: `/ 1000` → `~/ 1000`. (b) `AppConfig.copyWith` (in `core/config/app_config.dart`, the new model from T1): use `Object` sentinel for nullable fields so they can be set back to null. (c) History detail: add `/history/:id` child route, load from StorageService, use `context.push`. (d) Test connection: add `ApiClient.testConnection(url, token)` as separate method, update `SettingsScreen` to use it instead of `post()`. | core/network, core/config, features/settings, features/history, app | I3, I4, I5, I6 |
+| T5 | **Add missing tests.** `getTranscriptsWithStatus` storage integration test (status derivation). `HistoryNotifier` unit tests (loadNextPage, refresh, delete, resend). `AppConfigService` round-trip test with mocked SharedPreferences. | test/ | Coverage gaps |
 
 ---
 
@@ -301,10 +301,10 @@ Returns the same `ApiResult` sealed type for response classification.
 `getFailedItems()` to StorageService and time-aware retry logic. Tracked as a
 separate enhancement, not a bug fix.
 
-### History detail not deep-linkable after cold start
-`/history/:id` loads from local DB. If the app is killed and reopened with a
-deep link to `/history/some-uuid`, it will work (data is in SQLite). But there is
-no server-side resolution — this is local-only. Acceptable for MVP.
+### History detail is local-only
+`/history/:id` loads from local SQLite. Works after cold start (data persists
+locally). No server-side resolution — if the transcript is deleted from the device,
+the route shows an error. Acceptable for MVP.
 
 ### Test coverage still incomplete
 T5 adds critical path tests but does not cover all gaps (SettingsScreen widget
