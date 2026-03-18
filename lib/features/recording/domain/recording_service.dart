@@ -1,6 +1,10 @@
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 
 abstract class RecordingService {
+  /// Requests microphone permission if not yet granted.
+  /// Returns true if permission is granted.
+  Future<bool> requestPermission();
+
   Future<void> start({required String outputPath});
   Future<RecordingResult> stop();
   Future<void> cancel();

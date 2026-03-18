@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
@@ -30,21 +29,20 @@ class RecordingController extends StateNotifier<RecordingState>
   }
 
   Future<void> startRecording() async {
-    final status = await Permission.microphone.request();
-    if (status.isDenied) {
+    final granted = await _service.requestPermission();
+    if (!granted) {
       state = const RecordingState.error(
-        'Microphone permission denied.',
-      );
-      return;
-    }
-    if (status.isPermanentlyDenied) {
-      state = const RecordingState.error(
-        'Microphone permission permanently denied. Please enable it in app settings.',
+        'Microphone permission denied. Please enable it in app settings.',
+        requiresSettings: true,
       );
       return;
     }
 
     try {
+      if (!await _sttService.isModelLoaded()) {
+        await _sttService.loadModel();
+      }
+
       final dir = await getTemporaryDirectory();
       final path =
           '${dir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.wav';
@@ -57,6 +55,7 @@ class RecordingController extends StateNotifier<RecordingState>
       await _service.start(outputPath: path);
       state = const RecordingState.recording();
     } catch (e) {
+      _cleanupSubscription();
       state = RecordingState.error('Failed to start recording: $e');
     }
   }

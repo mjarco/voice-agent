@@ -12,7 +12,11 @@ class FakeRecordingService implements RecordingService {
   bool _isRecording = false;
   String? lastPath;
   bool shouldThrowOnStop = false;
+  bool permissionGranted = true;
   final _elapsedController = StreamController<Duration>.broadcast();
+
+  @override
+  Future<bool> requestPermission() async => permissionGranted;
 
   @override
   Future<void> start({required String outputPath}) async {
