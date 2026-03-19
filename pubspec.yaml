@@ -15,12 +15,13 @@ dependencies:
   path: ^1.9.1
   uuid: ^4.5.1
   shared_preferences: ^2.3.5
-  record: ^5.2.0
+  record: ^6.0.0
   permission_handler: ^12.0.1
   path_provider: ^2.1.5
   dio: ^5.7.0
   connectivity_plus: ^6.1.1
   flutter_secure_storage: ^9.2.4
+  vad: ^0.0.7
 
 dev_dependencies:
   flutter_test:
@@ -33,3 +34,6 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/models/silero_vad_v5.onnx

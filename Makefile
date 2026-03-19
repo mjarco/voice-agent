@@ -1,8 +1,11 @@
-.PHONY: deps model analyze test verify clean setup doctor env run-web run-ios run-macos simulator help
+.PHONY: deps model vad-model analyze test verify clean setup doctor env run-web run-ios run-macos simulator help
 
 WHISPER_MODEL_URL := https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
 WHISPER_MODEL_DIR := assets/models
 WHISPER_MODEL_PATH := $(WHISPER_MODEL_DIR)/ggml-base.bin
+
+VAD_MODEL_URL := https://cdn.jsdelivr.net/npm/@keyurmaru/vad@0.0.1/silero_vad_v5.onnx
+VAD_MODEL_PATH := $(WHISPER_MODEL_DIR)/silero_vad_v5.onnx
 
 # ──────────────────────────────────────────────
 # Project setup
@@ -21,8 +24,17 @@ $(WHISPER_MODEL_PATH):
 	curl -L -o $(WHISPER_MODEL_PATH) $(WHISPER_MODEL_URL)
 	@echo "Model downloaded to $(WHISPER_MODEL_PATH)"
 
-## setup: Full project setup (deps + model)
-setup: deps model
+## vad-model: Download Silero VAD v5 ONNX model (~2 MB) if not present
+vad-model: $(VAD_MODEL_PATH)
+
+$(VAD_MODEL_PATH):
+	@mkdir -p $(WHISPER_MODEL_DIR)
+	@echo "Downloading Silero VAD v5 model (~2 MB)..."
+	curl -L -o $(VAD_MODEL_PATH) $(VAD_MODEL_URL)
+	@echo "Model downloaded to $(VAD_MODEL_PATH)"
+
+## setup: Full project setup (deps + models)
+setup: deps model vad-model
 
 # ──────────────────────────────────────────────
 # Quality checks
