@@ -27,13 +27,6 @@ class RecordingScreen extends ConsumerWidget {
     final isHfActive = hfState is! HandsFreeIdle;
     final isRecActive = recState is RecordingActive;
 
-    ref.listen<RecordingState>(recordingControllerProvider, (prev, next) {
-      if (next is RecordingCompleted) {
-        context.push('/record/review', extra: next.result);
-        recCtrl.resetToIdle();
-      }
-    });
-
     return Scaffold(
       appBar: AppBar(title: const Text('Record')),
       body: Column(
@@ -89,7 +82,6 @@ class RecordingScreen extends ConsumerWidget {
             Text('Transcribing...'),
           ],
         ),
-      RecordingCompleted() => const SizedBox.shrink(),
       RecordingError(
         :final message,
         :final requiresSettings,

@@ -7,7 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
+import 'package:voice_agent/core/models/sync_queue_item.dart';
+import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
+import 'package:voice_agent/core/models/transcript_with_status.dart';
+import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
@@ -90,6 +95,62 @@ class FakeSttService implements SttService {
   }
 }
 
+class FakeStorageService implements StorageService {
+  final List<Transcript> savedTranscripts = [];
+  final List<String> enqueuedIds = [];
+  bool shouldThrowOnEnqueue = false;
+
+  @override
+  Future<String> getDeviceId() async => 'test-device';
+
+  @override
+  Future<void> saveTranscript(Transcript t) async {
+    savedTranscripts.add(t);
+  }
+
+  @override
+  Future<Transcript?> getTranscript(String id) async => null;
+
+  @override
+  Future<List<Transcript>> getTranscripts(
+          {int limit = 50, int offset = 0}) async =>
+      [];
+
+  @override
+  Future<void> deleteTranscript(String id) async {
+    savedTranscripts.removeWhere((t) => t.id == id);
+  }
+
+  @override
+  Future<void> enqueue(String transcriptId) async {
+    if (shouldThrowOnEnqueue) throw Exception('enqueue failed');
+    enqueuedIds.add(transcriptId);
+  }
+
+  @override
+  Future<List<SyncQueueItem>> getPendingItems() async => [];
+
+  @override
+  Future<void> markSending(String id) async {}
+
+  @override
+  Future<void> markSent(String id) async {}
+
+  @override
+  Future<void> markFailed(String id, String error) async {}
+
+  @override
+  Future<void> markPendingForRetry(String id) async {}
+
+  @override
+  Future<void> reactivateForResend(String transcriptId) async {}
+
+  @override
+  Future<List<TranscriptWithStatus>> getTranscriptsWithStatus(
+          {int limit = 20, int offset = 0}) async =>
+      [];
+}
+
 class _FixedConfigService extends AppConfigService {
   _FixedConfigService(this._config);
 
@@ -117,6 +178,7 @@ class _FixedConfigService extends AppConfigService {
 ProviderContainer _makeContainer({
   required FakeRecordingService fakeService,
   required FakeSttService fakeStt,
+  FakeStorageService? fakeStorage,
   AppConfig config = const AppConfig(groqApiKey: 'test-key'),
 }) {
   return ProviderContainer(
@@ -124,6 +186,9 @@ ProviderContainer _makeContainer({
       appConfigServiceProvider.overrideWithValue(_FixedConfigService(config)),
       recordingServiceProvider.overrideWithValue(fakeService),
       sttServiceProvider.overrideWithValue(fakeStt),
+      storageServiceProvider.overrideWithValue(
+        fakeStorage ?? FakeStorageService(),
+      ),
     ],
   );
 }
@@ -137,6 +202,7 @@ void main() {
 
   late FakeRecordingService fakeService;
   late FakeSttService fakeStt;
+  late FakeStorageService fakeStorage;
   late ProviderContainer container;
   late RecordingController controller;
 
@@ -145,7 +211,12 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
     fakeService = FakeRecordingService();
     fakeStt = FakeSttService();
-    container = _makeContainer(fakeService: fakeService, fakeStt: fakeStt);
+    fakeStorage = FakeStorageService();
+    container = _makeContainer(
+      fakeService: fakeService,
+      fakeStt: fakeStt,
+      fakeStorage: fakeStorage,
+    );
     controller = container.read(recordingControllerProvider.notifier);
   });
 
@@ -167,7 +238,8 @@ void main() {
     expect(controller.state, isA<RecordingIdle>());
   });
 
-  test('stopAndTranscribe transitions through transcribing to completed',
+  test(
+      'stopAndTranscribe transitions through transcribing to idle and saves transcript',
       () async {
     fakeService.lastPath = '/tmp/test.wav';
 
@@ -177,10 +249,13 @@ void main() {
     await controller.stopAndTranscribe();
 
     expect(states.any((s) => s is RecordingTranscribing), isTrue);
-    expect(controller.state, isA<RecordingCompleted>());
+    expect(controller.state, isA<RecordingIdle>());
+    expect(fakeStorage.savedTranscripts, hasLength(1));
+    expect(fakeStorage.savedTranscripts.first.text, 'Hello world');
+    expect(fakeStorage.enqueuedIds, hasLength(1));
     expect(
-      (controller.state as RecordingCompleted).result.text,
-      'Hello world',
+      fakeStorage.enqueuedIds.first,
+      fakeStorage.savedTranscripts.first.id,
     );
   });
 
@@ -221,6 +296,53 @@ void main() {
       (controller.state as RecordingError).message,
       'custom message',
     );
+  });
+
+  test('stopAndTranscribe rolls back transcript when enqueue fails', () async {
+    fakeService.lastPath = '/tmp/test.wav';
+    fakeStorage.shouldThrowOnEnqueue = true;
+
+    await controller.stopAndTranscribe();
+
+    expect(controller.state, isA<RecordingError>());
+    expect(
+      (controller.state as RecordingError).message,
+      contains('Failed to enqueue transcript'),
+    );
+    // Rollback: transcript was deleted
+    expect(fakeStorage.savedTranscripts, isEmpty);
+  });
+
+  test('stopAndTranscribe with silentOnEmpty returns idle for empty result',
+      () async {
+    fakeService.lastPath = '/tmp/test.wav';
+    fakeStt.nextResult = const TranscriptResult(
+      text: '',
+      segments: [],
+      detectedLanguage: 'en',
+      audioDurationMs: 1000,
+    );
+
+    await controller.stopAndTranscribe(silentOnEmpty: true);
+
+    expect(controller.state, isA<RecordingIdle>());
+    expect(fakeStorage.savedTranscripts, isEmpty);
+  });
+
+  test(
+      'stopAndTranscribe without silentOnEmpty emits error for empty result',
+      () async {
+    fakeService.lastPath = '/tmp/test.wav';
+    fakeStt.nextResult = const TranscriptResult(
+      text: '',
+      segments: [],
+      detectedLanguage: 'en',
+      audioDurationMs: 1000,
+    );
+
+    await controller.stopAndTranscribe();
+
+    expect(controller.state, isA<RecordingError>());
   });
 
   test(
@@ -266,14 +388,6 @@ void main() {
       RecordingIdle(),
       RecordingActive(),
       RecordingTranscribing(),
-      RecordingCompleted(
-        TranscriptResult(
-          text: 'test',
-          segments: [],
-          detectedLanguage: 'en',
-          audioDurationMs: 0,
-        ),
-      ),
       RecordingError('test error'),
     ];
 
@@ -285,12 +399,10 @@ void main() {
           break;
         case RecordingTranscribing():
           break;
-        case RecordingCompleted():
-          break;
         case RecordingError():
           break;
       }
     }
-    expect(states.length, 5);
+    expect(states.length, 4);
   });
 }
