@@ -6,9 +6,11 @@ import 'package:voice_agent/features/recording/data/recording_service_impl.dart'
 import 'package:voice_agent/features/recording/data/vad_service_impl.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
+import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 import 'package:voice_agent/features/recording/domain/vad_service.dart';
+import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 
 final recordingServiceProvider = Provider<RecordingService>((ref) {
@@ -28,6 +30,11 @@ final handsFreeEngineProvider = Provider<HandsFreeEngine>((ref) {
     AudioRecorder(),
     ref.watch(vadServiceProvider),
   );
+});
+
+final handsFreeControllerProvider =
+    StateNotifierProvider<HandsFreeController, HandsFreeSessionState>((ref) {
+  return HandsFreeController(ref);
 });
 
 final recordingControllerProvider =
