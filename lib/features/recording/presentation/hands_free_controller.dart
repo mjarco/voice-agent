@@ -42,7 +42,6 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   // ── Background lifecycle ─────────────────────────────────────────────────
 
   @override
-  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused && this.state is! HandsFreeIdle) {
       _terminateWithError(
@@ -198,9 +197,9 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     String message, {
     bool requiresSettings = false,
   }) {
-    _engineSub?.cancel();
+    unawaited(_engineSub?.cancel());
     _engineSub = null;
-    _engine?.stop();
+    unawaited(_engine?.stop());
     _engine = null;
 
     state = HandsFreeSessionError(

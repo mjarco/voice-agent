@@ -339,6 +339,8 @@ void main() {
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine);
       await ctrl(c).startSession();
+      engine.emit(const EngineListening()); // move out of HandsFreeIdle
+      await Future.delayed(Duration.zero);
 
       await ctrl(c).stopSession();
       await expectLater(ctrl(c).stopSession(), completes);
