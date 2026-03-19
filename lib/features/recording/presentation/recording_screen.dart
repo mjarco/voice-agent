@@ -160,7 +160,7 @@ class _HandsFreeSection extends StatelessWidget {
                   on ? hfCtrl.startSession() : hfCtrl.stopSession(),
         ),
         if (isOn) ...[
-          _HfStatusStrip(hfState: hfState, hfCtrl: hfCtrl),
+          _HfStatusStrip(hfState: hfState),
           if (jobs.isNotEmpty)
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 200),
@@ -182,10 +182,9 @@ class _HandsFreeSection extends StatelessWidget {
 }
 
 class _HfStatusStrip extends StatelessWidget {
-  const _HfStatusStrip({required this.hfState, required this.hfCtrl});
+  const _HfStatusStrip({required this.hfState});
 
   final HandsFreeSessionState hfState;
-  final HandsFreeController hfCtrl;
 
   @override
   Widget build(BuildContext context) {
@@ -278,10 +277,9 @@ class _SegmentList extends StatelessWidget {
     return ListView.builder(
       key: const Key('hf-segment-list'),
       shrinkWrap: true,
-      reverse: true, // most recent segment at top
       itemCount: jobs.length,
       itemBuilder: (context, index) {
-        // Reversed: index 0 = last job
+        // index 0 = most recent segment
         final job = jobs[jobs.length - 1 - index];
         return _SegmentTile(job: job);
       },
