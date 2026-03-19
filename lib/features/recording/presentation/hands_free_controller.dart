@@ -9,7 +9,6 @@ import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
-import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
@@ -50,6 +49,17 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   // All segment jobs are chained onto this future so they run sequentially.
   Future<void>? _sttSlot;
 
+  // ── Manual-recording suspension (T3: full implementation) ────────────────
+  // In T2 the stubs allow `ref.listen` in RecordingScreen to compile without
+  // producing side-effects. T3 fills in the real logic.
+
+  // ignore: prefer_final_fields — T3 mutates this field
+  bool _suspendedForManualRecording = false;
+
+  bool get isSuspendedForManualRecording => _suspendedForManualRecording;
+
+  Future<void> resumeAfterManualRecording() async {}
+
   // ── Background lifecycle ─────────────────────────────────────────────────
 
   @override
@@ -65,7 +75,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   // ── Public API ────────────────────────────────────────────────────────────
 
   Future<void> startSession() async {
-    if (state is! HandsFreeIdle) return;
+    if (state is! HandsFreeIdle && state is! HandsFreeSessionError) return;
 
     final engine = _ref.read(handsFreeEngineProvider);
 
@@ -87,16 +97,6 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       state = const HandsFreeSessionError(
         message: 'Groq API key not set.',
         requiresAppSettings: true,
-        jobs: [],
-      );
-      return;
-    }
-
-    // Guard 3 — active manual recording.
-    final recordingState = _ref.read(recordingControllerProvider);
-    if (recordingState is RecordingActive) {
-      state = const HandsFreeSessionError(
-        message: 'Stop the current recording before starting hands-free mode.',
         jobs: [],
       );
       return;

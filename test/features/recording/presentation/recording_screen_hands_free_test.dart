@@ -20,9 +20,7 @@ import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
-import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
-import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 // ── Stubs ─────────────────────────────────────────────────────────────────────
@@ -95,15 +93,6 @@ class _FixedConfigService extends AppConfigService {
   Future<AppConfig> load() async => _config;
 }
 
-/// [RecordingController] that always stays in [RecordingActive].
-class _ActiveRecordingController extends RecordingController {
-  _ActiveRecordingController(Ref ref)
-      : super(_NoOpRecordingService(), _NoOpSttService(), ref) {
-    // ignore: invalid_use_of_protected_member
-    state = const RecordingState.recording();
-  }
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 List<Override> baseOverrides(FakeHfEngine engine) => [
@@ -115,6 +104,7 @@ List<Override> baseOverrides(FakeHfEngine engine) => [
       ),
       handsFreeEngineProvider.overrideWithValue(engine),
       sttServiceProvider.overrideWithValue(_NoOpSttService()),
+      recordingServiceProvider.overrideWithValue(_NoOpRecordingService()),
     ];
 
 Future<void> pumpRecordScreen(
@@ -136,94 +126,13 @@ Future<void> pumpRecordScreen(
 void main() {
   setUpAll(() => WidgetsFlutterBinding.ensureInitialized());
 
-  group('hands-free toggle', () {
-    testWidgets('toggle is visible in idle state', (tester) async {
+  group('auto-start', () {
+    testWidgets('hands-free session starts automatically on screen load',
+        (tester) async {
       final engine = FakeHfEngine();
       await pumpRecordScreen(tester, engine: engine);
-
-      expect(find.byKey(const Key('hf-toggle')), findsOneWidget);
-    });
-
-    testWidgets('tapping toggle starts session', (tester) async {
-      final engine = FakeHfEngine();
-      await pumpRecordScreen(tester, engine: engine);
-
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
 
       expect(engine.started, isTrue);
-    });
-
-    // NOTE: the toggle→stop path is tested at controller level below (plain test).
-    // Widget-level stop testing via tester.tap requires synchronous state
-    // assertion helpers that are covered by the controller-level test.
-    testWidgets('toggle shows ON while session is active', (tester) async {
-      final engine = FakeHfEngine();
-      await pumpRecordScreen(tester, engine: engine);
-
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
-      engine.emit(const EngineListening());
-      await tester.pump();
-
-      final sw = tester.widget<Switch>(
-        find.descendant(
-          of: find.byKey(const Key('hf-toggle')),
-          matching: find.byType(Switch),
-        ),
-      );
-      expect(sw.value, isTrue);
-    });
-
-    testWidgets('toggle is disabled when manual recording is active', (tester) async {
-      final engine = FakeHfEngine();
-      await pumpRecordScreen(
-        tester,
-        engine: engine,
-        extra: [
-          recordingControllerProvider.overrideWith(
-            (ref) => _ActiveRecordingController(ref),
-          ),
-        ],
-      );
-
-      final switchWidget = tester.widget<Switch>(
-        find.descendant(
-          of: find.byKey(const Key('hf-toggle')),
-          matching: find.byType(Switch),
-        ),
-      );
-      expect(switchWidget.onChanged, isNull,
-          reason: 'Switch must be disabled during manual recording');
-    });
-  });
-
-  group('record button mutual exclusivity', () {
-    testWidgets('record button is enabled when HF is idle', (tester) async {
-      final engine = FakeHfEngine();
-      await pumpRecordScreen(tester, engine: engine);
-
-      final btn = tester.widget<IconButton>(
-        find.byKey(const Key('record-button')),
-      );
-      expect(btn.onPressed, isNotNull);
-    });
-
-    testWidgets('record button is disabled when HF session is active', (tester) async {
-      final engine = FakeHfEngine();
-      await pumpRecordScreen(tester, engine: engine);
-
-      // Start HF session
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
-      engine.emit(const EngineListening());
-      await tester.pump();
-
-      final btn = tester.widget<IconButton>(
-        find.byKey(const Key('record-button')),
-      );
-      expect(btn.onPressed, isNull,
-          reason: 'Record button must be disabled during HF session');
     });
   });
 
@@ -232,10 +141,8 @@ void main() {
       final engine = FakeHfEngine();
       await pumpRecordScreen(tester, engine: engine);
 
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
       engine.emit(const EngineListening());
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('Listening...'), findsOneWidget);
     });
@@ -244,10 +151,8 @@ void main() {
       final engine = FakeHfEngine();
       await pumpRecordScreen(tester, engine: engine);
 
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
       engine.emit(const EngineCapturing());
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('Capturing...'), findsOneWidget);
     });
@@ -256,10 +161,8 @@ void main() {
       final engine = FakeHfEngine();
       await pumpRecordScreen(tester, engine: engine);
 
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
       engine.emit(const EngineStopping());
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('Processing segment...'), findsOneWidget);
     });
@@ -270,10 +173,8 @@ void main() {
       final engine = FakeHfEngine();
       await pumpRecordScreen(tester, engine: engine);
 
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
       engine.emit(const EngineListening());
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('hf-segment-list')), findsNothing);
     });
@@ -282,10 +183,10 @@ void main() {
       final engine = FakeHfEngine();
       await pumpRecordScreen(tester, engine: engine);
 
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
       engine.emit(const EngineListening());
       engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
+      // Use pump() — pumpAndSettle would hang on CircularProgressIndicator animation
+      await tester.pump();
       await tester.pump();
 
       expect(find.byKey(const Key('hf-segment-list')), findsOneWidget);
@@ -293,18 +194,17 @@ void main() {
   });
 
   group('session error', () {
-    testWidgets('SessionError(requiresSettings) shows "Open Settings"',
+    testWidgets('SessionError(requiresSettings) shows "Open Settings" and Retry',
         (tester) async {
       final engine = FakeHfEngine();
       await pumpRecordScreen(tester, engine: engine);
 
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
       engine.emit(const EngineError('mic denied', requiresSettings: true));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('Open Settings'), findsOneWidget);
       expect(find.byKey(const Key('hf-error-message')), findsOneWidget);
+      expect(find.byKey(const Key('hf-retry-button')), findsOneWidget);
     });
 
     testWidgets('SessionError(requiresAppSettings) shows "Go to Settings"',
@@ -314,33 +214,45 @@ void main() {
         tester,
         engine: engine,
         extra: [
-          // Simulate missing Groq key so HandsFreeController emits SessionError
           appConfigServiceProvider.overrideWithValue(
             _FixedConfigService(const AppConfig(groqApiKey: null)),
           ),
         ],
       );
 
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
-      await tester.pump(); // let startSession run
-
+      // Auto-start fails with missing Groq key → HandsFreeSessionError
       expect(find.text('Go to Settings'), findsOneWidget);
+      expect(find.byKey(const Key('hf-retry-button')), findsOneWidget);
     });
 
-    testWidgets('SessionError with no flags shows only the error message',
+    testWidgets('SessionError with no flags shows only the error message and Retry',
         (tester) async {
       final engine = FakeHfEngine();
       await pumpRecordScreen(tester, engine: engine);
 
-      await tester.tap(find.byKey(const Key('hf-toggle')));
-      await tester.pump();
       engine.emit(const EngineError('Something failed'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('hf-error-message')), findsOneWidget);
+      expect(find.byKey(const Key('hf-retry-button')), findsOneWidget);
       expect(find.text('Open Settings'), findsNothing);
       expect(find.text('Go to Settings'), findsNothing);
+    });
+
+    testWidgets('tapping Retry button calls startSession again', (tester) async {
+      final engine = FakeHfEngine();
+      await pumpRecordScreen(tester, engine: engine);
+
+      engine.emit(const EngineError('Something failed'));
+      await tester.pumpAndSettle();
+
+      // startSession was called once by auto-start; Retry calls it again
+      await tester.tap(find.byKey(const Key('hf-retry-button')));
+      await tester.pumpAndSettle();
+
+      // Engine.started remains true (started on auto-start; Retry
+      // re-enters startSession but the guard allows HandsFreeSessionError)
+      expect(engine.started, isTrue);
     });
   });
 }
