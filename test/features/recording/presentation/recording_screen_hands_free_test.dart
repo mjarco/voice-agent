@@ -83,6 +83,8 @@ class FakeHfEngine implements HandsFreeEngine {
   @override
   Future<void> stop() async => stopped = true;
   @override
+  Future<void> interruptCapture() async {}
+  @override
   void dispose() => _ctrl.close();
 }
 

@@ -83,20 +83,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     RecordingController controller,
   ) {
     return switch (state) {
-      RecordingIdle() => const _MicButton(),
-      RecordingActive() => _RecordingView(
-          elapsed: controller.currentElapsed,
-          onStop: controller.stopAndTranscribe,
-          onCancel: controller.cancelRecording,
-        ),
-      RecordingTranscribing() => const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Transcribing...'),
-          ],
-        ),
+      RecordingIdle() || RecordingActive() || RecordingTranscribing() =>
+        const _MicButton(),
       RecordingError(
         :final message,
         :final requiresSettings,
@@ -285,32 +273,87 @@ class _ErrorStrip extends StatelessWidget {
 
 // ── Mic button ────────────────────────────────────────────────────────────────
 
-/// Basic tap target for manual recording (T2 stub — tap gesture added in T3).
-class _MicButton extends StatelessWidget {
+class _MicButton extends ConsumerStatefulWidget {
   const _MicButton();
 
   @override
+  ConsumerState<_MicButton> createState() => _MicButtonState();
+}
+
+class _MicButtonState extends ConsumerState<_MicButton> {
+  /// True between [onLongPressStart] and [onLongPressEnd].
+  /// Prevents the trailing [onTap] that Flutter fires after a long press.
+  // ignore: prefer_final_fields — T4 sets this to true in onLongPressStart
+  bool _longPressActive = false;
+
+  Future<void> _onTap() async {
+    if (_longPressActive) return; // trailing tap from a long press — ignore
+
+    final recState = ref.read(recordingControllerProvider);
+    final hfState = ref.read(handsFreeControllerProvider);
+    final recCtrl = ref.read(recordingControllerProvider.notifier);
+    final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
+
+    if (recState is RecordingIdle) {
+      if (hfState is HandsFreeStopping) return; // no-op — wait for stop
+      await hfCtrl.suspendForManualRecording();
+      await recCtrl.startRecording();
+    } else if (recState is RecordingActive) {
+      await recCtrl.stopAndTranscribe();
+    }
+    // RecordingTranscribing → no-op
+    // RecordingError → handled by error view in _buildRecordingArea
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedContainer(
-          key: const Key('record-button'),
-          duration: const Duration(milliseconds: 150),
-          width: 96,
-          height: 96,
-          decoration: const BoxDecoration(
-            color: Colors.green,
-            shape: BoxShape.circle,
+    final recState = ref.watch(recordingControllerProvider);
+    final isRecording = recState is RecordingActive;
+    final isTranscribing = recState is RecordingTranscribing;
+
+    final color = isRecording
+        ? Colors.red
+        : isTranscribing
+            ? Colors.grey
+            : Colors.green;
+
+    final label = isRecording
+        ? 'Tap to stop'
+        : isTranscribing
+            ? 'Transcribing...'
+            : 'Tap to record';
+
+    return GestureDetector(
+      onTap: _onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            key: const Key('record-button'),
+            duration: const Duration(milliseconds: 150),
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+            child: isTranscribing
+                ? const Padding(
+                    padding: EdgeInsets.all(28),
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 3,
+                    ),
+                  )
+                : const Icon(Icons.mic, color: Colors.white, size: 48),
           ),
-          child: const Icon(Icons.mic, color: Colors.white, size: 48),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Tap to record',
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-      ],
+          const SizedBox(height: 16),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -442,57 +485,3 @@ class _VadParamsStrip extends ConsumerWidget {
   }
 }
 
-class _RecordingView extends StatelessWidget {
-  const _RecordingView({
-    required this.elapsed,
-    required this.onStop,
-    required this.onCancel,
-  });
-
-  final Duration elapsed;
-  final VoidCallback onStop;
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        StreamBuilder<Duration>(
-          stream: Stream.periodic(
-            const Duration(milliseconds: 200),
-            (_) => elapsed,
-          ),
-          initialData: elapsed,
-          builder: (context, snapshot) {
-            final d = snapshot.data ?? Duration.zero;
-            final minutes = d.inMinutes.toString().padLeft(2, '0');
-            final seconds =
-                (d.inSeconds % 60).toString().padLeft(2, '0');
-            return Text(
-              '$minutes:$seconds',
-              style: Theme.of(context).textTheme.displayMedium,
-            );
-          },
-        ),
-        const SizedBox(height: 32),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            OutlinedButton.icon(
-              onPressed: onCancel,
-              icon: const Icon(Icons.close),
-              label: const Text('Cancel'),
-            ),
-            const SizedBox(width: 24),
-            FilledButton.icon(
-              onPressed: onStop,
-              icon: const Icon(Icons.stop),
-              label: const Text('Stop'),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
