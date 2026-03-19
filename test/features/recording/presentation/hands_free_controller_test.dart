@@ -50,6 +50,9 @@ class FakeHandsFreeEngine implements HandsFreeEngine {
   Future<void> stop() async => stopped = true;
 
   @override
+  Future<void> interruptCapture() async {}
+
+  @override
   void dispose() {
     disposed = true;
     _controller.close();
@@ -231,10 +234,39 @@ class _NullSttService implements SttService {
       throw SttException('unused');
 }
 
+/// [HandsFreeEngine] stub that invokes callbacks on specific calls —
+/// used to verify which path [HandsFreeController.suspendForManualRecording]
+/// takes based on the current session state.
+class _TrackingHfEngine implements HandsFreeEngine {
+  _TrackingHfEngine({
+    this.onInterruptCapture,
+    this.onStop,
+  });
+
+  final VoidCallback? onInterruptCapture;
+  final VoidCallback? onStop;
+
+  final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
+
+  void emit(HandsFreeEngineEvent e) => _ctrl.add(e);
+
+  @override
+  Future<bool> hasPermission() async => true;
+  @override
+  Stream<HandsFreeEngineEvent> start({required VadConfig config}) =>
+      _ctrl.stream;
+  @override
+  Future<void> stop() async => onStop?.call();
+  @override
+  Future<void> interruptCapture() async => onInterruptCapture?.call();
+  @override
+  void dispose() => _ctrl.close();
+}
+
 // ── Container factory ────────────────────────────────────────────────────────
 
 ProviderContainer makeContainer({
-  required FakeHandsFreeEngine engine,
+  required HandsFreeEngine engine,
   String? groqApiKey = 'gsk_test_valid',
   bool recordingActive = false,
   SttService? sttService,
@@ -651,6 +683,102 @@ void main() {
       expect(jobs.every((j) => j.state is Completed), isTrue,
           reason: 'Both jobs must complete when run serially');
       expect(storage.savedTranscripts, hasLength(2));
+    });
+  });
+
+  // ── suspendForManualRecording / resumeAfterManualRecording ────────────────
+
+  group('suspendForManualRecording', () {
+    test('sets isSuspendedForManualRecording and clears engine', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession();
+      engine.emit(const EngineListening());
+      await Future.delayed(Duration.zero);
+
+      await ctrl(c).suspendForManualRecording();
+
+      expect(ctrl(c).isSuspendedForManualRecording, isTrue);
+    });
+
+    test('backlog is preserved after suspend (jobs not cleared)', () async {
+      final stt = FakeHandsFreeEngine(); // just for engine ref
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine); // hanging STT keeps jobs alive
+      await ctrl(c).startSession();
+
+      // Add two segments to the backlog.
+      engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
+      engine.emit(const EngineSegmentReady('/tmp/seg2.wav'));
+      await Future.delayed(Duration.zero);
+
+      final jobsBefore = jobsOf(stateOf(c)).length;
+      await ctrl(c).suspendForManualRecording();
+
+      final jobsAfter = jobsOf(stateOf(c)).length;
+      expect(jobsAfter, equals(jobsBefore),
+          reason: 'suspendForManualRecording must not clear the job list');
+    });
+
+    test('suspending from HandsFreeCapturing calls interruptCapture', () async {
+      bool interrupted = false;
+      final engine = _TrackingHfEngine(
+        onInterruptCapture: () => interrupted = true,
+      );
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession();
+      engine.emit(const EngineCapturing());
+      await Future.delayed(Duration.zero);
+
+      await ctrl(c).suspendForManualRecording();
+
+      expect(interrupted, isTrue);
+    });
+
+    test('suspending from HandsFreeIdle is a no-op', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      // Stay in HandsFreeIdle — do not start a session.
+
+      await ctrl(c).suspendForManualRecording();
+
+      expect(ctrl(c).isSuspendedForManualRecording, isFalse,
+          reason: 'no suspension when already idle');
+    });
+  });
+
+  group('resumeAfterManualRecording', () {
+    test('clears isSuspendedForManualRecording and restarts engine', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession();
+      engine.emit(const EngineListening());
+      await Future.delayed(Duration.zero);
+
+      await ctrl(c).suspendForManualRecording();
+      expect(ctrl(c).isSuspendedForManualRecording, isTrue);
+
+      engine.started = false; // reset to detect restart
+      await ctrl(c).resumeAfterManualRecording();
+
+      expect(ctrl(c).isSuspendedForManualRecording, isFalse);
+      expect(engine.started, isTrue, reason: 'engine.start() must be called on resume');
+    });
+
+    test('_jobs preserved across suspend + resume cycle', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine); // hanging STT keeps jobs in Transcribing
+      await ctrl(c).startSession();
+
+      engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
+      await Future.delayed(Duration.zero);
+      final jobsBefore = jobsOf(stateOf(c)).length;
+
+      await ctrl(c).suspendForManualRecording();
+      await ctrl(c).resumeAfterManualRecording();
+
+      expect(jobsOf(stateOf(c)).length, equals(jobsBefore),
+          reason: 'resumeAfterManualRecording must not reset _jobs');
     });
   });
 }

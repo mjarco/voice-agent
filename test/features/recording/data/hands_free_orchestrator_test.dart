@@ -396,4 +396,57 @@ void main() {
       expect(events.whereType<EngineListening>().length, greaterThanOrEqualTo(2));
     });
   });
+
+  // ── interruptCapture ─────────────────────────────────────────────────────
+
+  group('interruptCapture', () {
+    test('stream closes after interruptCapture()', () async {
+      orch = make([]);
+      bool done = false;
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch
+          .start(config: const VadConfig.defaults())
+          .listen(events.add, onDone: () => done = true);
+      await waitFor<EngineListening>(events);
+
+      await orch.interruptCapture();
+      await Future.delayed(const Duration(milliseconds: 20));
+      await sub.cancel();
+
+      expect(done, isTrue, reason: 'stream must close after interruptCapture');
+    });
+
+    test('interruptCapture() is idempotent (already idle)', () async {
+      orch = make([]);
+      // Do not call start() — engine is idle.
+      await expectLater(orch.interruptCapture(), completes);
+    });
+
+    test('no events emitted after interruptCapture() while capturing', () async {
+      // Create labels: enough speech frames to start capturing, then nothing.
+      final labels = [
+        ...List.filled(1, VadLabel.speech), // triggers capturing
+        ...List.filled(5, VadLabel.nonSpeech),
+      ];
+      orch = make(labels);
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      // Push one speech frame to transition to Capturing, then interrupt.
+      recorder.push(pcm(1, value: 1));
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      final countBeforeInterrupt = events.length;
+      await orch.interruptCapture();
+      await Future.delayed(const Duration(milliseconds: 50));
+      await sub.cancel();
+
+      // No EngineSegmentReady should have been emitted after interrupt.
+      expect(events.whereType<EngineSegmentReady>(), isEmpty,
+          reason: 'partial segment must be discarded, not emitted');
+      expect(events.length, equals(countBeforeInterrupt),
+          reason: 'no new events after interruptCapture');
+    });
+  });
 }

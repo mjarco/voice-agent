@@ -54,6 +54,7 @@ class _IdleHfEngine implements HandsFreeEngine {
   @override Future<bool> hasPermission() async => true;
   @override Stream<HandsFreeEngineEvent> start({required VadConfig config}) => _ctrl.stream;
   @override Future<void> stop() async {}
+  @override Future<void> interruptCapture() async {}
   @override void dispose() => _ctrl.close();
 }
 

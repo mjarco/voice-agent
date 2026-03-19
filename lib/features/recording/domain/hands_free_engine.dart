@@ -68,6 +68,17 @@ abstract interface class HandsFreeEngine {
   /// is a no-op.
   Future<void> stop();
 
+  /// Immediately stop the engine without waiting for any in-flight WAV write
+  /// to complete. Discards the current audio segment. Closes the event stream.
+  ///
+  /// Use when the microphone must be released quickly (e.g. before starting
+  /// a manual recording). The partial WAV file (if any) is deleted by the
+  /// orchestrator once the background write finishes.
+  ///
+  /// After [interruptCapture] the engine is in stopped state; [start] may be
+  /// called again on the same instance.
+  Future<void> interruptCapture();
+
   /// Release all resources. Must be called when the owning controller is
   /// disposed. Safe to call after [stop].
   void dispose();

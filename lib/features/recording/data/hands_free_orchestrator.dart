@@ -81,6 +81,30 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   }
 
   @override
+  Future<void> interruptCapture() async {
+    if (_phase == _Phase.idle) return;
+    _phase = _Phase.idle; // _afterWavWrite checks this — no events emitted
+    _cooldownTimer?.cancel();
+    _cooldownTimer = null;
+    _inCooldown = false;
+
+    await _audioSub?.cancel();
+    _audioSub = null;
+    try {
+      await _audioRecorder.stop();
+    } catch (_) {}
+
+    // Do NOT await _wavWriteCompleter — fire-and-forget write will delete
+    // the partial WAV file once it completes (see _afterWavWrite idle guard).
+
+    _vadService.dispose();
+    _resetBuffers();
+
+    await _controller?.close();
+    _controller = null;
+  }
+
+  @override
   Future<void> stop() async {
     if (_phase == _Phase.idle) return;
     _phase = _Phase.idle;
@@ -322,7 +346,16 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     required String? wavPath,
     String? writeError,
   }) async {
-    if (_phase == _Phase.idle) return;
+    if (_phase == _Phase.idle) {
+      // Engine was interrupted (interruptCapture) while WAV write was in flight.
+      // Delete the partial file so it does not accumulate on disk.
+      if (wavPath != null) {
+        try {
+          await File(wavPath).delete();
+        } catch (_) {}
+      }
+      return;
+    }
 
     if (wavPath != null) {
       _emit(EngineSegmentReady(wavPath));

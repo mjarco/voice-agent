@@ -58,7 +58,48 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   bool get isSuspendedForManualRecording => _suspendedForManualRecording;
 
-  Future<void> resumeAfterManualRecording() async {}
+  /// Interrupts the active VAD segment and releases the microphone so that
+  /// manual recording can start. The job backlog is preserved.
+  ///
+  /// Returns when the microphone has been released and [RecordingController]
+  /// may call [startRecording].
+  Future<void> suspendForManualRecording() async {
+    if (state is HandsFreeCapturing) {
+      await _engine?.interruptCapture(); // discards current segment
+    } else if (state is HandsFreeListening ||
+        state is HandsFreeWithBacklog ||
+        state is HandsFreeStopping) {
+      // HandsFreeStopping: stop() blocks on _wavWriteCompleter (~100–500ms).
+      // The segment is worth keeping — accept the latency.
+      await _engineSub?.cancel();
+      await _engine?.stop();
+    } else {
+      // HandsFreeIdle or HandsFreeSessionError — nothing to release.
+      return;
+    }
+    _engineSub = null;
+    _engine = null;
+    _suspendedForManualRecording = true;
+    state = _listeningOrBacklog();
+  }
+
+  /// Restarts the VAD engine after manual recording completes.
+  ///
+  /// Does NOT clear [_jobs] or [_jobCounter] — the backlog is preserved.
+  Future<void> resumeAfterManualRecording() async {
+    _suspendedForManualRecording = false;
+    final config = _ref.read(appConfigProvider).vadConfig;
+    final engine = _ref.read(handsFreeEngineProvider);
+    _engine = engine;
+    final stream = engine.start(config: config);
+    _engineSub = stream.listen(
+      _onEngineEvent,
+      onError: (Object e) => _terminateWithError('Engine error: $e'),
+      onDone: _onEngineDone,
+      cancelOnError: false,
+    );
+    state = _listeningOrBacklog();
+  }
 
   // ── Background lifecycle ─────────────────────────────────────────────────
 
