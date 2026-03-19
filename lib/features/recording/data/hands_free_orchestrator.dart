@@ -93,9 +93,9 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     try {
       await _audioRecorder.stop();
     } catch (_) {}
-    try {
-      await _audioRecorder.dispose();
-    } catch (_) {}
+    // Do NOT dispose _audioRecorder here — the orchestrator is a long-lived
+    // singleton and the same AudioRecorder must be reusable across sessions.
+    // _audioRecorder.dispose() is called only in dispose() (provider teardown).
 
     // Await any in-flight WAV write before closing the stream.
     if (_wavWriteCompleter != null) {
@@ -111,7 +111,15 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
   @override
   void dispose() {
-    unawaited(stop());
+    // Full teardown: stop the session, then release the AudioRecorder.
+    unawaited(_stopAndRelease());
+  }
+
+  Future<void> _stopAndRelease() async {
+    await stop();
+    try {
+      await _audioRecorder.dispose();
+    } catch (_) {}
   }
 
   // ── Internal startup ────────────────────────────────────────────────────────
