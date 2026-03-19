@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
@@ -162,6 +163,7 @@ class _HandsFreeSection extends StatelessWidget {
               : (on) =>
                   on ? hfCtrl.startSession() : hfCtrl.stopSession(),
         ),
+        const _VadParamsStrip(),
         if (isOn) ...[
           _HfStatusStrip(hfState: hfState),
           if (jobs.isNotEmpty)
@@ -446,6 +448,50 @@ class _IdleView extends StatelessWidget {
           style: Theme.of(context).textTheme.bodyLarge,
         ),
       ],
+    );
+  }
+}
+
+// ── VAD params strip ─────────────────────────────────────────────────────────
+
+/// Compact read-only summary of current VAD config shown below the Hands-free
+/// toggle. Always visible (not gated on isOn) so the user can see the active
+/// settings even when hands-free is off. Tapping navigates to Advanced Settings.
+class _VadParamsStrip extends ConsumerWidget {
+  const _VadParamsStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final vad = ref.watch(appConfigProvider.select((c) => c.vadConfig));
+    final label =
+        'thr ${vad.positiveSpeechThreshold.toStringAsFixed(2)} · '
+        'hang ${vad.hangoverMs}ms · '
+        'min ${vad.minSpeechMs}ms · '
+        'pre ${vad.preRollMs}ms';
+    return InkWell(
+      key: const Key('vad-params-strip'),
+      onTap: () => context.push('/settings/advanced'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                key: const Key('vad-params-text'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+            Icon(
+              Icons.tune,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

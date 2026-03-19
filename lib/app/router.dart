@@ -5,6 +5,7 @@ import 'package:voice_agent/features/history/history_screen.dart';
 import 'package:voice_agent/features/history/transcript_detail_screen.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
+import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
 import 'package:voice_agent/features/transcript/transcript_review_screen.dart';
 
@@ -64,6 +65,13 @@ final router = GoRouter(
             GoRoute(
               path: '/settings',
               builder: (context, state) => const SettingsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'advanced',
+                  builder: (context, state) =>
+                      const AdvancedSettingsScreen(),
+                ),
+              ],
             ),
           ],
         ),
