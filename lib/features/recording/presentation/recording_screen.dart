@@ -300,10 +300,9 @@ class _MicButtonState extends ConsumerState<_MicButton> {
       await recCtrl.startRecording();
     } else if (recState is RecordingActive) {
       await recCtrl.stopAndTranscribe();
-    } else if (recState is RecordingError) {
-      recCtrl.resetToIdle();
     }
     // RecordingTranscribing → no-op
+    // RecordingError → handled by error view in _buildRecordingArea
   }
 
   @override

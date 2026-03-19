@@ -238,13 +238,9 @@ class _NullSttService implements SttService {
 /// used to verify which path [HandsFreeController.suspendForManualRecording]
 /// takes based on the current session state.
 class _TrackingHfEngine implements HandsFreeEngine {
-  _TrackingHfEngine({
-    this.onInterruptCapture,
-    this.onStop,
-  });
+  _TrackingHfEngine({this.onInterruptCapture});
 
   final VoidCallback? onInterruptCapture;
-  final VoidCallback? onStop;
 
   final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
 
@@ -256,7 +252,7 @@ class _TrackingHfEngine implements HandsFreeEngine {
   Stream<HandsFreeEngineEvent> start({required VadConfig config}) =>
       _ctrl.stream;
   @override
-  Future<void> stop() async => onStop?.call();
+  Future<void> stop() async {}
   @override
   Future<void> interruptCapture() async => onInterruptCapture?.call();
   @override
@@ -702,7 +698,6 @@ void main() {
     });
 
     test('backlog is preserved after suspend (jobs not cleared)', () async {
-      final stt = FakeHandsFreeEngine(); // just for engine ref
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine); // hanging STT keeps jobs alive
       await ctrl(c).startSession();

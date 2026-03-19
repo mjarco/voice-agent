@@ -87,6 +87,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   ///
   /// Does NOT clear [_jobs] or [_jobCounter] — the backlog is preserved.
   Future<void> resumeAfterManualRecording() async {
+    if (!_suspendedForManualRecording) return;
     _suspendedForManualRecording = false;
     final config = _ref.read(appConfigProvider).vadConfig;
     final engine = _ref.read(handsFreeEngineProvider);
