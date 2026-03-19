@@ -1,24 +1,31 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
-/// T3a: session lifecycle for hands-free mode.
+/// T3a + T3b: session lifecycle and job processing for hands-free mode.
 ///
-/// Responsibilities in this task:
+/// T3a responsibilities (merged):
 ///   • session-start guard (permission → Groq key → active-recording check)
 ///   • [HandsFreeEngineEvent] → [HandsFreeSessionState] mapping
 ///   • background lifecycle via [WidgetsBindingObserver]
 ///   • stopSession() with in-flight job drain
 ///
-/// T3b adds: STT serial slot, job processing, persist + rollback.
+/// T3b additions:
+///   • STT serial slot — jobs processed one at a time
+///   • Bounded job queue (max [_maxJobs] non-terminal jobs)
+///   • [StorageService.saveTranscript] + [enqueue] with rollback on enqueue failure
+///   • WAV cleanup for rejections and session stop
 class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     with WidgetsBindingObserver {
   HandsFreeController(this._ref) : super(const HandsFreeIdle()) {
@@ -35,8 +42,12 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   final List<SegmentJob> _jobs = [];
   int _jobCounter = 0;
 
-  // ── STT serial slot (T3b wires this up fully; stub here so T3a compiles) ─
-  // ignore: unused_field
+  /// Maximum number of non-terminal jobs held at once. Incoming segments
+  /// are rejected (WAV deleted) when this limit is reached.
+  static const int _maxJobs = 4;
+
+  // ── STT serial slot ───────────────────────────────────────────────────────
+  // All segment jobs are chained onto this future so they run sequentially.
   Future<void>? _sttSlot;
 
   // ── Background lifecycle ─────────────────────────────────────────────────
@@ -113,6 +124,15 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     await _engine?.stop();
     _engine = null;
 
+    // Reject all queued (not-yet-started) jobs and clean up their WAV files.
+    for (int i = 0; i < _jobs.length; i++) {
+      if (_jobs[i].state is QueuedForTranscription) {
+        final wavPath = _jobs[i].wavPath;
+        _jobs[i] = _jobs[i].copyWith(state: const Rejected('Session stopped'));
+        unawaited(_cleanupWav(wavPath));
+      }
+    }
+
     // Drain: wait until no job is in Transcribing or Persisting state.
     await _drainInFlightJobs();
 
@@ -124,7 +144,11 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _engineSub?.cancel();
+    // Clean up WAV files for any remaining unprocessed jobs.
+    for (final job in _jobs) {
+      unawaited(_cleanupWav(job.wavPath));
+    }
+    unawaited(_engineSub?.cancel());
     _engine?.dispose();
     super.dispose();
   }
@@ -158,9 +182,23 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // stopSession() already transitions to HandsFreeIdle.
   }
 
-  // ── Segment acceptance (T3a stub — T3b fills in STT + persist) ───────────
+  // ── Segment acceptance ────────────────────────────────────────────────────
 
   void _onSegmentReady(String wavPath) {
+    // Count non-terminal jobs (Queued, Transcribing, Persisting).
+    final activeCount = _jobs
+        .where((j) =>
+            j.state is QueuedForTranscription ||
+            j.state is Transcribing ||
+            j.state is Persisting)
+        .length;
+
+    if (activeCount >= _maxJobs) {
+      // Queue is full — drop the incoming segment without creating a job.
+      unawaited(_cleanupWav(wavPath));
+      return;
+    }
+
     _jobCounter++;
     final now = DateTime.now();
     final label =
@@ -168,17 +206,108 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         '${now.minute.toString().padLeft(2, '0')}:'
         '${now.second.toString().padLeft(2, '0')}';
 
+    final jobId = const Uuid().v4();
     final job = SegmentJob(
-      id: const Uuid().v4(),
+      id: jobId,
       label: label,
       state: const QueuedForTranscription(),
       wavPath: wavPath,
     );
     _jobs.add(job);
-
-    // T3b: submit to STT serial slot here.
-    // For T3a, job remains in QueuedForTranscription so tests can observe it.
     state = _listeningOrBacklog();
+
+    // Chain onto the STT serial slot so jobs run sequentially.
+    _sttSlot = (_sttSlot ?? Future.value())
+        .then((_) => _processJob(jobId))
+        .catchError((_) {}); // errors handled inside _processJob
+  }
+
+  // ── Job processing ────────────────────────────────────────────────────────
+
+  Future<void> _processJob(String jobId) async {
+    if (!mounted) return;
+
+    final idx = _jobs.indexWhere((j) => j.id == jobId);
+    if (idx == -1) return;
+
+    final job = _jobs[idx];
+    if (job.state is! QueuedForTranscription) return; // already rejected
+
+    final wavPath = job.wavPath!;
+
+    // ── Transcribing ──
+    _jobs[idx] = job.copyWith(state: const Transcribing());
+    if (mounted) state = _listeningOrBacklog();
+
+    String sttText;
+    String detectedLanguage;
+    int audioDurationMs;
+
+    try {
+      final result =
+          await _ref.read(sttServiceProvider).transcribe(wavPath);
+      sttText = result.text;
+      detectedLanguage = result.detectedLanguage;
+      audioDurationMs = result.audioDurationMs;
+    } catch (e) {
+      unawaited(_cleanupWav(wavPath));
+      if (!mounted) return;
+      _jobs[idx] = _jobs[idx].copyWith(state: JobFailed('STT error: $e'));
+      state = _listeningOrBacklog();
+      return;
+    }
+
+    // Delete WAV now that transcription is done.
+    unawaited(_cleanupWav(wavPath));
+    if (!mounted) return;
+
+    if (sttText.trim().isEmpty) {
+      _jobs[idx] =
+          _jobs[idx].copyWith(state: const Rejected('Empty transcription'));
+      state = _listeningOrBacklog();
+      return;
+    }
+
+    // ── Persisting ──
+    _jobs[idx] = _jobs[idx].copyWith(state: const Persisting());
+    state = _listeningOrBacklog();
+
+    final storage = _ref.read(storageServiceProvider);
+
+    try {
+      final deviceId = await storage.getDeviceId();
+      if (!mounted) return;
+
+      final transcript = Transcript(
+        id: const Uuid().v4(),
+        text: sttText.trim(),
+        language: detectedLanguage,
+        audioDurationMs: audioDurationMs,
+        deviceId: deviceId,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      await storage.saveTranscript(transcript);
+      if (!mounted) return;
+
+      try {
+        await storage.enqueue(transcript.id);
+        if (!mounted) return;
+        _jobs[idx] = _jobs[idx].copyWith(state: Completed(transcript.id));
+      } catch (e) {
+        // Rollback: remove the transcript so it doesn't orphan.
+        unawaited(storage.deleteTranscript(transcript.id));
+        if (!mounted) return;
+        _jobs[idx] =
+            _jobs[idx].copyWith(state: JobFailed('Enqueue failed: $e'));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _jobs[idx] =
+          _jobs[idx].copyWith(state: JobFailed('Persist error: $e'));
+    }
+
+    if (mounted) state = _listeningOrBacklog();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -225,5 +354,13 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       if (DateTime.now().isAfter(deadline)) break;
       await Future.delayed(pollInterval);
     }
+  }
+
+  /// Deletes the WAV temp file at [wavPath]. No-op if null or already deleted.
+  Future<void> _cleanupWav(String? wavPath) async {
+    if (wavPath == null) return;
+    try {
+      await File(wavPath).delete();
+    } catch (_) {}
   }
 }
