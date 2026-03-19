@@ -67,15 +67,4 @@ void main() {
     });
   });
 
-  group('Review navigation flow', () {
-    testWidgets('/record/review shows review screen with bottom nav',
-        (tester) async {
-      await tester.pumpWidget(
-        ProviderScope(overrides: overrides, child: const App()),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byType(NavigationBar), findsOneWidget);
-    });
-  });
 }

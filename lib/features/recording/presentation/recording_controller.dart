@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_exception.dart';
@@ -74,9 +77,10 @@ class RecordingController extends StateNotifier<RecordingState>
     }
   }
 
-  /// Stop recording and immediately transcribe the audio file.
-  /// Transitions: Recording -> Transcribing -> Completed(TranscriptResult)
-  Future<void> stopAndTranscribe() async {
+  /// Stop recording, transcribe, save to storage, enqueue for sync, emit idle.
+  /// If [silentOnEmpty] is true and the transcription result is empty,
+  /// emits [RecordingIdle] without an error (used for press-and-hold).
+  Future<void> stopAndTranscribe({bool silentOnEmpty = false}) async {
     try {
       final recordingResult = await _service.stop();
       _cleanupSubscription();
@@ -87,7 +91,41 @@ class RecordingController extends StateNotifier<RecordingState>
         recordingResult.filePath,
       );
 
-      state = RecordingState.completed(transcriptResult);
+      if (!mounted) return;
+
+      if (transcriptResult.text.trim().isEmpty) {
+        state = silentOnEmpty
+            ? const RecordingState.idle()
+            : const RecordingState.error('Transcription returned empty text.');
+        return;
+      }
+
+      final storage = _ref.read(storageServiceProvider);
+      final deviceId = await storage.getDeviceId();
+      if (!mounted) return;
+
+      final transcript = Transcript(
+        id: const Uuid().v4(),
+        text: transcriptResult.text.trim(),
+        language: transcriptResult.detectedLanguage,
+        audioDurationMs: transcriptResult.audioDurationMs,
+        deviceId: deviceId,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      await storage.saveTranscript(transcript);
+      if (!mounted) return;
+
+      try {
+        await storage.enqueue(transcript.id);
+        if (!mounted) return;
+        state = const RecordingState.idle();
+      } catch (e) {
+        // Rollback: remove the transcript so it doesn't orphan.
+        unawaited(storage.deleteTranscript(transcript.id));
+        if (!mounted) return;
+        state = RecordingState.error('Failed to enqueue transcript: $e');
+      }
     } catch (e) {
       _cleanupSubscription();
       if (e is SttException) {

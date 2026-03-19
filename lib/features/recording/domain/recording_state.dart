@@ -1,13 +1,9 @@
-import 'package:voice_agent/core/models/transcript_result.dart';
-
 sealed class RecordingState {
   const RecordingState();
 
   const factory RecordingState.idle() = RecordingIdle;
   const factory RecordingState.recording() = RecordingActive;
   const factory RecordingState.transcribing() = RecordingTranscribing;
-  const factory RecordingState.completed(TranscriptResult result) =
-      RecordingCompleted;
   const factory RecordingState.error(
     String message, {
     bool requiresSettings,
@@ -25,11 +21,6 @@ class RecordingActive extends RecordingState {
 
 class RecordingTranscribing extends RecordingState {
   const RecordingTranscribing();
-}
-
-class RecordingCompleted extends RecordingState {
-  const RecordingCompleted(this.result);
-  final TranscriptResult result;
 }
 
 class RecordingError extends RecordingState {

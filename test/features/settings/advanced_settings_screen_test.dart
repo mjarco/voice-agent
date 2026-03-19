@@ -22,7 +22,6 @@ import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
-import 'package:voice_agent/features/recording/domain/vad_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
@@ -114,7 +113,7 @@ Future<void> _pumpAdvanced(
     routes: [
       GoRoute(
         path: '/',
-        builder: (_, __) => const AdvancedSettingsScreen(),
+        builder: (context, state) => const AdvancedSettingsScreen(),
       ),
     ],
   );

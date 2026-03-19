@@ -1,13 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
 import 'package:voice_agent/features/history/history_screen.dart';
 import 'package:voice_agent/features/history/transcript_detail_screen.dart';
-import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
-import 'package:voice_agent/features/transcript/transcript_review_screen.dart';
 
 final router = GoRouter(
   initialLocation: '/record',
@@ -40,22 +37,7 @@ final router = GoRouter(
           routes: [
             GoRoute(
               path: '/record',
-              builder: (context, state) =>
-                  const RecordingScreen(),
-              routes: [
-                GoRoute(
-                  path: 'review',
-                  builder: (context, state) {
-                    final result = state.extra as TranscriptResult?;
-                    if (result == null) {
-                      return const _PlaceholderScreen(title: 'Review');
-                    }
-                    return TranscriptReviewScreen(
-                      transcriptResult: result,
-                    );
-                  },
-                ),
-              ],
+              builder: (context, state) => const RecordingScreen(),
             ),
           ],
         ),
@@ -79,19 +61,3 @@ final router = GoRouter(
     ),
   ],
 );
-
-class _PlaceholderScreen extends StatelessWidget {
-  const _PlaceholderScreen({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Text(title),
-      ),
-    );
-  }
-}
