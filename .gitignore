@@ -52,3 +52,6 @@ assets/models/
 *.jks
 *.keystore
 .claude/settings.local.json
+
+# Codex CLI session state (local only, not for sharing)
+.codex/review-session-id
