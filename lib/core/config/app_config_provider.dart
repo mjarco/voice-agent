@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
+import 'package:voice_agent/core/config/vad_config.dart';
 
 final appConfigServiceProvider = Provider<AppConfigService>((ref) {
   return AppConfigService();
@@ -61,5 +62,10 @@ class AppConfigNotifier extends StateNotifier<AppConfig> {
   Future<void> updateGroqApiKey(String key) async {
     await _service.saveGroqApiKey(key);
     state = state.copyWith(groqApiKey: key);
+  }
+
+  Future<void> updateVadConfig(VadConfig config) async {
+    await _service.saveVadConfig(config);
+    state = state.copyWith(vadConfig: config);
   }
 }
