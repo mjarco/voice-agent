@@ -96,6 +96,32 @@ class _HangingSttService implements SttService {
   Future<void> loadModel() async {}
 }
 
+/// [SttService] that resolves after a short delay, allowing [stopSession] to
+/// drain in-flight jobs within the test timeout.
+class _SlowSttService implements SttService {
+  _SlowSttService({this.text = 'Hello', this.delay = const Duration(milliseconds: 50)});
+
+  final String text;
+  final Duration delay;
+
+  @override
+  Future<TranscriptResult> transcribe(String wavPath,
+      {String? languageCode}) async {
+    await Future.delayed(delay);
+    return TranscriptResult(
+      text: text,
+      segments: [],
+      detectedLanguage: 'en',
+      audioDurationMs: 1000,
+    );
+  }
+
+  @override
+  Future<bool> isModelLoaded() async => true;
+  @override
+  Future<void> loadModel() async {}
+}
+
 // ── FakeStorageService ────────────────────────────────────────────────────────
 
 /// Controllable [StorageService] for T3b persist/rollback tests.
@@ -475,27 +501,26 @@ void main() {
     });
 
     test('queued jobs rejected and WAVs cleaned up on stop', () async {
-      // Use a hanging STT so the first job stays in Transcribing and the
-      // second stays in QueuedForTranscription.
+      // Use a slow STT (50ms) so seg1 stays in Transcribing when stopSession
+      // is called, seg2 stays in QueuedForTranscription.
+      // stopSession() rejects seg2 synchronously, then drains seg1 (~50ms).
+      // Only seg1's transcript should be saved; seg2 never reaches STT.
+      final stt = _SlowSttService(text: 'Hello');
+      final storage = FakeStorageService();
       final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine);
+      final c = makeContainer(engine: engine, sttService: stt, storageService: storage);
       await ctrl(c).startSession();
 
       engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
       engine.emit(const EngineSegmentReady('/tmp/seg2.wav'));
       await Future.delayed(Duration.zero); // seg1 → Transcribing, seg2 → Queued
 
-      // Stop: seg2 (Queued) should be rejected.
-      // seg1 (Transcribing) is hung — stopSession times out after 10s.
-      // To keep the test fast, just verify seg2 becomes Rejected after stop.
-      //
-      // We can't await stopSession() here because it would timeout on the
-      // hanging Transcribing job. Instead we verify via the dispose path.
-      // The container tearDown handles cleanup.
+      // stopSession() rejects seg2 before STT runs, then drains seg1.
+      await ctrl(c).stopSession();
 
-      final jobsBefore = (stateOf(c) as HandsFreeWithBacklog).jobs;
-      expect(jobsBefore, hasLength(2));
-      expect(jobsBefore[1].state, isA<QueuedForTranscription>());
+      expect(stateOf(c), isA<HandsFreeIdle>());
+      // seg2 was rejected — only seg1's transcript was persisted.
+      expect(storage.savedTranscripts, hasLength(1));
     });
   });
 
@@ -628,10 +653,6 @@ void main() {
 
     test('jobs run serially (second job starts after first completes)',
         () async {
-      final completionOrder = <int>[];
-      // Use a completer-based STT that we control manually.
-      // We'll verify the first job completes before the second starts.
-      // Here, a fast STT is enough: both complete, and we check order.
       final stt = FakeSttService(text: 'Text');
       final storage = FakeStorageService();
       final engine = FakeHandsFreeEngine();
@@ -647,8 +668,6 @@ void main() {
       expect(jobs.every((j) => j.state is Completed), isTrue,
           reason: 'Both jobs must complete when run serially');
       expect(storage.savedTranscripts, hasLength(2));
-      completionOrder.add(1); // just to suppress unused var warning
-      expect(completionOrder, isNotEmpty);
     });
   });
 }
