@@ -44,7 +44,7 @@ class VadServiceImpl implements VadService {
         isDebug: false,
         sampleRate: 16000,
         frameSamples: _frameSamples,
-        positiveSpeechThreshold: 0.5,
+        positiveSpeechThreshold: 0.4,
         negativeSpeechThreshold: 0.35,
         // Let VadIterator manage its own buffers with short thresholds so
         // internal speech buffers don't grow unbounded. The orchestrator owns
