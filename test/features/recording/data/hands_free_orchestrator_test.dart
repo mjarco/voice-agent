@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:record/record.dart';
+import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/data/hands_free_orchestrator.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/vad_service.dart';
@@ -112,7 +113,7 @@ void main() {
     test('start() emits EngineListening', () async {
       orch = make([]);
       final events = <HandsFreeEngineEvent>[];
-      final sub = orch.start().listen(events.add);
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
 
       await waitFor<EngineListening>(events);
       await orch.stop();
@@ -124,7 +125,7 @@ void main() {
     test('stop() is idempotent', () async {
       orch = make([]);
       final events = <HandsFreeEngineEvent>[];
-      final sub = orch.start().listen(events.add);
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
       // Wait for the engine to be fully started before stopping.
       await waitFor<EngineListening>(events);
       await orch.stop();
@@ -138,7 +139,7 @@ void main() {
       bool done = false;
       final events = <HandsFreeEngineEvent>[];
       final sub =
-          orch.start().listen(events.add, onDone: () => done = true);
+          orch.start(config: const VadConfig.defaults()).listen(events.add, onDone: () => done = true);
       await waitFor<EngineListening>(events);
       await orch.stop();
       // Give the done callback time to fire.
@@ -170,7 +171,7 @@ void main() {
       orch = make(List.filled(speechFrames, VadLabel.speech));
 
       final events = <HandsFreeEngineEvent>[];
-      final sub = orch.start().listen(events.add);
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
       await waitFor<EngineListening>(events);
 
       final half = Uint8List(_frameSize ~/ 2);
@@ -196,7 +197,7 @@ void main() {
       orch = make(labels);
 
       final events = <HandsFreeEngineEvent>[];
-      final sub = orch.start().listen(events.add);
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
       await waitFor<EngineListening>(events);
 
       recorder.push(pcm(total));
@@ -212,7 +213,7 @@ void main() {
       // Push 1.5 frames — the 0.5 frame remainder stays in buffer.
       orch = make([VadLabel.nonSpeech]);
       final events = <HandsFreeEngineEvent>[];
-      final sub = orch.start().listen(events.add);
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
       await waitFor<EngineListening>(events);
 
       recorder.push(Uint8List((_frameSize * 1.5).toInt()));
@@ -238,7 +239,7 @@ void main() {
       orch = make(labels);
 
       final events = <HandsFreeEngineEvent>[];
-      final sub = orch.start().listen(events.add);
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
       await waitFor<EngineListening>(events);
 
       recorder.push(pcm(labels.length));
@@ -263,7 +264,7 @@ void main() {
       orch = make(labels);
 
       final events = <HandsFreeEngineEvent>[];
-      final sub = orch.start().listen(events.add);
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
       await waitFor<EngineListening>(events);
 
       recorder.push(pcm(labels.length));
@@ -295,7 +296,7 @@ void main() {
         orch = make(labels);
 
         final events = <HandsFreeEngineEvent>[];
-        final sub = orch.start().listen(events.add);
+        final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
         await waitFor<EngineListening>(events);
 
         // Push all frames in one chunk for speed.
@@ -329,7 +330,7 @@ void main() {
         orch = make(labels);
 
         final events = <HandsFreeEngineEvent>[];
-        final sub = orch.start().listen(events.add);
+        final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
         await waitFor<EngineListening>(events);
 
         recorder.push(pcm(labels.length));
@@ -357,7 +358,7 @@ void main() {
       orch = make(List.filled(5, VadLabel.nonSpeech));
 
       final events = <HandsFreeEngineEvent>[];
-      final sub = orch.start().listen(events.add);
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
       await waitFor<EngineListening>(events);
 
       recorder.push(pcm(5));
@@ -378,7 +379,7 @@ void main() {
       orch = make(labels);
 
       final events = <HandsFreeEngineEvent>[];
-      final sub = orch.start().listen(events.add);
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
       await waitFor<EngineListening>(events);
 
       recorder.push(pcm(labels.length));

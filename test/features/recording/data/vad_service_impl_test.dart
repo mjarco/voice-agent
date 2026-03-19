@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/data/vad_service_impl.dart';
 import 'package:voice_agent/features/recording/domain/vad_service.dart';
 
@@ -26,7 +27,7 @@ void main() {
         VadLabel.nonSpeech,
         VadLabel.speech,
       ]);
-      await svc.init();
+      await svc.init(const VadConfig.defaults());
       final frame = Uint8List(1024);
 
       expect(await svc.classify(frame), VadLabel.speech);
@@ -36,7 +37,7 @@ void main() {
 
     test('returns nonSpeech when sequence exhausted', () async {
       final svc = FakeVadService([VadLabel.speech]);
-      await svc.init();
+      await svc.init(const VadConfig.defaults());
       final frame = Uint8List(1024);
 
       await svc.classify(frame); // consumes the one speech label
@@ -47,7 +48,7 @@ void main() {
     test('init sets initCalled flag', () async {
       final svc = FakeVadService([]);
       expect(svc.initCalled, isFalse);
-      await svc.init();
+      await svc.init(const VadConfig.defaults());
       expect(svc.initCalled, isTrue);
     });
 
@@ -64,7 +65,7 @@ void main() {
 
     test('empty label list always returns nonSpeech', () async {
       final svc = FakeVadService([]);
-      await svc.init();
+      await svc.init(const VadConfig.defaults());
       final frame = Uint8List(1024);
       for (var i = 0; i < 5; i++) {
         expect(await svc.classify(frame), VadLabel.nonSpeech);

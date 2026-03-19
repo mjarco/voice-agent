@@ -16,6 +16,7 @@ import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
@@ -77,7 +78,7 @@ class FakeHfEngine implements HandsFreeEngine {
   @override
   Future<bool> hasPermission() async => true;
   @override
-  Stream<HandsFreeEngineEvent> start() {
+  Stream<HandsFreeEngineEvent> start({required VadConfig config}) {
     started = true;
     return _ctrl.stream;
   }

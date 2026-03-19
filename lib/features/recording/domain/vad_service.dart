@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:voice_agent/core/config/vad_config.dart';
+
 /// Classifies a fixed-size PCM-16 LE frame as speech or non-speech.
 ///
 /// Implementations wrap a native VAD library (Silero VAD via ONNX Runtime FFI).
@@ -11,7 +13,7 @@ abstract interface class VadService {
   ///
   /// Must be called before [classify]. May be called again after [dispose]
   /// to reinitialise. Throws [VadException] if initialisation fails.
-  Future<void> init();
+  Future<void> init(VadConfig config);
 
   /// Classify a single PCM frame.
   ///

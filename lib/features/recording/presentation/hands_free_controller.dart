@@ -107,7 +107,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _jobCounter = 0;
     _engine = engine;
 
-    final stream = engine.start();
+    final stream = engine.start(config: _ref.read(appConfigProvider).vadConfig);
     _engineSub = stream.listen(
       _onEngineEvent,
       onError: (Object e) => _terminateWithError('Engine error: $e'),
