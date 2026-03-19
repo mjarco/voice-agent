@@ -281,10 +281,13 @@ class _MicButton extends ConsumerStatefulWidget {
 }
 
 class _MicButtonState extends ConsumerState<_MicButton> {
-  /// True between [onLongPressStart] and [onLongPressEnd].
+  /// True between [_onLongPressStart] and [_onLongPressEnd].
   /// Prevents the trailing [onTap] that Flutter fires after a long press.
-  // ignore: prefer_final_fields — T4 sets this to true in onLongPressStart
   bool _longPressActive = false;
+
+  /// True when the current recording was started by a long press.
+  /// Drives the orange button colour. Cleared when state returns to idle or error.
+  bool _isPressAndHold = false;
 
   Future<void> _onTap() async {
     if (_longPressActive) return; // trailing tap from a long press — ignore
@@ -305,26 +308,65 @@ class _MicButtonState extends ConsumerState<_MicButton> {
     // RecordingError → handled by error view in _buildRecordingArea
   }
 
+  Future<void> _onLongPressStart(LongPressStartDetails _) async {
+    final recState = ref.read(recordingControllerProvider);
+    final hfState = ref.read(handsFreeControllerProvider);
+
+    // Only start if idle and engine not stopping.
+    if (recState is! RecordingIdle) return;
+    if (hfState is HandsFreeStopping) return;
+
+    _longPressActive = true;
+    setState(() => _isPressAndHold = true);
+
+    final recCtrl = ref.read(recordingControllerProvider.notifier);
+    final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
+    await hfCtrl.suspendForManualRecording();
+    await recCtrl.startRecording();
+  }
+
+  Future<void> _onLongPressEnd(LongPressEndDetails _) async {
+    _longPressActive = false;
+
+    final recState = ref.read(recordingControllerProvider);
+    if (recState is! RecordingActive) return;
+
+    await ref
+        .read(recordingControllerProvider.notifier)
+        .stopAndTranscribe(silentOnEmpty: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final recState = ref.watch(recordingControllerProvider);
     final isRecording = recState is RecordingActive;
     final isTranscribing = recState is RecordingTranscribing;
 
-    final color = isRecording
-        ? Colors.red
-        : isTranscribing
-            ? Colors.grey
-            : Colors.green;
+    // Clear press-and-hold flag when recording returns to idle or errors out.
+    ref.listen<RecordingState>(recordingControllerProvider, (_, next) {
+      if ((next is RecordingIdle || next is RecordingError) && _isPressAndHold) {
+        setState(() => _isPressAndHold = false);
+      }
+    });
+
+    final color = isTranscribing
+        ? Colors.grey
+        : isRecording && _isPressAndHold
+            ? Colors.orange
+            : isRecording
+                ? Colors.red
+                : Colors.green;
 
     final label = isRecording
-        ? 'Tap to stop'
+        ? (_isPressAndHold ? 'Release to stop' : 'Tap to stop')
         : isTranscribing
             ? 'Transcribing...'
             : 'Tap to record';
 
     return GestureDetector(
       onTap: _onTap,
+      onLongPressStart: _onLongPressStart,
+      onLongPressEnd: _onLongPressEnd,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
