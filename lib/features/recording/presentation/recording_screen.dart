@@ -291,28 +291,26 @@ class _MicButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedContainer(
-            key: const Key('record-button'),
-            duration: const Duration(milliseconds: 150),
-            width: 96,
-            height: 96,
-            decoration: const BoxDecoration(
-              color: Colors.green,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.mic, color: Colors.white, size: 48),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          key: const Key('record-button'),
+          duration: const Duration(milliseconds: 150),
+          width: 96,
+          height: 96,
+          decoration: const BoxDecoration(
+            color: Colors.green,
+            shape: BoxShape.circle,
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Tap to record',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-        ],
-      ),
+          child: const Icon(Icons.mic, color: Colors.white, size: 48),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Tap to record',
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
+      ],
     );
   }
 }
