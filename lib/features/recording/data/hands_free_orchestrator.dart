@@ -22,8 +22,8 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   static const _sampleRate = 16000;
   static const _bytesPerSample = 2;
   static const _preRollMs = 300;
-  static const _hangoverMs = 400;
-  static const _minSpeechMs = 500;
+  static const _hangoverMs = 500;
+  static const _minSpeechMs = 400;
   static const _maxSegmentMs = 30000;
   static const _cooldownMs = 1000;
 

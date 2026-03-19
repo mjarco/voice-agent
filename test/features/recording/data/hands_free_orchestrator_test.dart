@@ -67,8 +67,8 @@ class FakeAudioRecorder implements AudioRecorder {
 
 const int _frameSize = 1024; // FakeVadService.frameSize
 // msPerFrame = 1024 * 1000 ~/ (16000 * 2) = 32 ms
-const int _hangoverFrameThreshold = 13; // ceil(400 / 32)
-const int _minSpeechFrameThreshold = 16; // ceil(500 / 32)
+const int _hangoverFrameThreshold = 16; // ceil(500 / 32)
+const int _minSpeechFrameThreshold = 13; // ceil(400 / 32)
 const int _maxSpeechFrameThreshold = 938; // ceil(30000 / 32)
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -229,8 +229,8 @@ void main() {
   group('minSpeechMs gate', () {
     test('segment < minSpeechMs is silently dropped — no EngineSegmentReady',
         () async {
-      // 3 speech frames (96 ms) < minSpeechMs (500 ms → 16 frames).
-      // After 13 hangover frames the segment ends with validSpeech = false.
+      // 3 speech frames (96 ms) < minSpeechMs (400 ms → 13 frames).
+      // After 16 hangover frames the segment ends with validSpeech = false.
       final labels = [
         ...List.filled(3, VadLabel.speech),
         ...List.filled(_hangoverFrameThreshold, VadLabel.nonSpeech),
@@ -253,7 +253,7 @@ void main() {
     });
 
     test('segment >= minSpeechMs triggers EngineStopping', () async {
-      // 16 speech frames + 13 hangover frames → segment is long enough.
+      // 13 speech frames + 16 hangover frames → segment is long enough.
       // WAV write may fail in test environment (no path_provider platform),
       // but EngineStopping must be emitted before the write.
       final labels = [
@@ -318,7 +318,7 @@ void main() {
     test(
       'cooldown suppresses pending speech after hangover-triggered stop',
       () async {
-        // 16 speech + 13 hangover → validSpeech segment, cooldown starts.
+        // 13 speech + 16 hangover → validSpeech segment, cooldown starts.
         // Immediately 1 speech frame during stopping → suppressed by cooldown.
         // After wav write: returns to EngineListening, NOT EngineCapturing.
         final labels = [
