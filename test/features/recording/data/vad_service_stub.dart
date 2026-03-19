@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/domain/vad_service.dart';
 
 /// Deterministic [VadService] stub for unit tests.
@@ -18,7 +19,7 @@ class FakeVadService implements VadService {
   final int frameSize = 1024;
 
   @override
-  Future<void> init() async {
+  Future<void> init(VadConfig config) async {
     initCalled = true;
   }
 

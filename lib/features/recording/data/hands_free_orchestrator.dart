@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/vad_service.dart';
 
@@ -21,13 +22,11 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   // ── Tuning constants ────────────────────────────────────────────────────────
   static const _sampleRate = 16000;
   static const _bytesPerSample = 2;
-  static const _preRollMs = 300;
-  static const _hangoverMs = 500;
-  static const _minSpeechMs = 400;
   static const _maxSegmentMs = 30000;
   static const _cooldownMs = 1000;
 
   // ── Runtime state ───────────────────────────────────────────────────────────
+  VadConfig? _config;
   StreamController<HandsFreeEngineEvent>? _controller;
   StreamSubscription<Uint8List>? _audioSub;
 
@@ -73,7 +72,8 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   Future<bool> hasPermission() => _audioRecorder.hasPermission();
 
   @override
-  Stream<HandsFreeEngineEvent> start() {
+  Stream<HandsFreeEngineEvent> start({required VadConfig config}) {
+    _config = config;
     _controller = StreamController<HandsFreeEngineEvent>();
     _phase = _Phase.listening;
     _doStart(); // fire-and-forget
@@ -126,17 +126,18 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
   Future<void> _doStart() async {
     try {
-      await _vadService.init();
+      final config = _config!;
+      await _vadService.init(config);
       _frameSize = _vadService.frameSize;
       _msPerFrame = _frameSize * 1000 ~/ (_sampleRate * _bytesPerSample);
       _hangoverFrameThreshold =
-          (_hangoverMs + _msPerFrame - 1) ~/ _msPerFrame;
+          (config.hangoverMs + _msPerFrame - 1) ~/ _msPerFrame;
       _minSpeechFrameThreshold =
-          (_minSpeechMs + _msPerFrame - 1) ~/ _msPerFrame;
+          (config.minSpeechMs + _msPerFrame - 1) ~/ _msPerFrame;
       _maxSpeechFrameThreshold =
           (_maxSegmentMs + _msPerFrame - 1) ~/ _msPerFrame;
       _preRollCapacity =
-          (_preRollMs + _msPerFrame - 1) ~/ _msPerFrame;
+          (config.preRollMs + _msPerFrame - 1) ~/ _msPerFrame;
 
       final audioStream = await _audioRecorder.startStream(
         const RecordConfig(

@@ -1,3 +1,5 @@
+import 'package:voice_agent/core/config/vad_config.dart';
+
 /// Phase events emitted by [HandsFreeEngine] in real time.
 ///
 /// The controller subscribes to [HandsFreeEngine.start] and maps these events
@@ -56,7 +58,7 @@ abstract interface class HandsFreeEngine {
   /// Returns a stream of [HandsFreeEngineEvent]s that the controller maps to
   /// [HandsFreeSessionState] updates. The stream is closed when [stop]
   /// completes.
-  Stream<HandsFreeEngineEvent> start();
+  Stream<HandsFreeEngineEvent> start({required VadConfig config});
 
   /// Stop the audio stream, release VAD resources, and flush the pre-roll
   /// buffer. Ongoing WAV writes are awaited before the stream closes.

@@ -12,6 +12,7 @@ import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
@@ -40,7 +41,7 @@ class FakeHandsFreeEngine implements HandsFreeEngine {
   Future<bool> hasPermission() async => permissionGranted;
 
   @override
-  Stream<HandsFreeEngineEvent> start() {
+  Stream<HandsFreeEngineEvent> start({required VadConfig config}) {
     started = true;
     return _controller.stream;
   }

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:vad/vad.dart';
+import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/domain/vad_service.dart';
 
 /// Production [VadService] backed by Silero VAD v5 via ONNX Runtime FFI.
@@ -20,6 +21,7 @@ class VadServiceImpl implements VadService {
   static const _frameSamples = 512; // 32 ms at 16 kHz
 
   VadIterator? _iterator;
+  VadConfig _config = const VadConfig.defaults();
 
   /// Result captured from the most recent [VadEventType.frameProcessed] event.
   VadLabel? _lastLabel;
@@ -28,7 +30,8 @@ class VadServiceImpl implements VadService {
   int get frameSize => _frameSamples * 2; // 1024 bytes
 
   @override
-  Future<void> init() async {
+  Future<void> init(VadConfig config) async {
+    _config = config;
     final tempDir = await getTemporaryDirectory();
     final modelDir = '${tempDir.path}/silero_vad/';
     await Directory(modelDir).create(recursive: true);
@@ -44,8 +47,8 @@ class VadServiceImpl implements VadService {
         isDebug: false,
         sampleRate: 16000,
         frameSamples: _frameSamples,
-        positiveSpeechThreshold: 0.4,
-        negativeSpeechThreshold: 0.35,
+        positiveSpeechThreshold: _config.positiveSpeechThreshold,
+        negativeSpeechThreshold: _config.negativeSpeechThreshold,
         // Let VadIterator manage its own buffers with short thresholds so
         // internal speech buffers don't grow unbounded. The orchestrator owns
         // all segmentation state; we use only the frameProcessed events.
@@ -64,7 +67,9 @@ class VadServiceImpl implements VadService {
   void _onEvent(VadEvent event) {
     if (event.type == VadEventType.frameProcessed) {
       final prob = event.probabilities?.isSpeech ?? 0.0;
-      _lastLabel = prob >= 0.5 ? VadLabel.speech : VadLabel.nonSpeech;
+      _lastLabel = prob >= _config.positiveSpeechThreshold
+          ? VadLabel.speech
+          : VadLabel.nonSpeech;
     }
   }
 
