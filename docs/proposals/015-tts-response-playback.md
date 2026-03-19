@@ -74,43 +74,94 @@ New domain abstraction in `core/`:
 TtsService {
   Future<void> speak(String text, {String? languageCode})
   Future<void> stop()
-  Future<bool> get isSpeaking
   void dispose()
 }
 ```
 
-The `FlutterTtsService` implementation uses the `flutter_tts` package.
-The language is set before each `speak()` — fallback: `config.language`;
-if `config.language == 'auto'` → fallback to the device system language.
+`languageCode` is an **ISO 639-1 two-letter code** (e.g. `"pl"`, `"en"`, `"de"`).
+The same format is used everywhere: in the server response `"language"` field,
+in `AppConfig.language`, and as the argument to `flutter_tts`'s `setLanguage()`.
+
+`isSpeaking` is intentionally excluded from the V1 interface — no caller in this
+proposal needs it, and adding it forces every stub to implement an async getter.
+
+The `FlutterTtsService` implementation uses the `flutter_tts` package
+(must be added to `pubspec.yaml` in T1).
+The language is set before each `speak()` call via `flutter_tts.setLanguage()`.
+Fallback priority: server `language` field → `config.language` (if not `'auto'`) →
+`Platform.localeName.split('_').first` (the device locale code, e.g. `"pl"` from `"pl_PL"`).
+The `'auto'` string must never be passed to `flutter_tts.setLanguage()` — it is not
+a valid BCP-47 tag and will silently fail. `FlutterTtsService.speak()` owns the
+`'auto'` → device locale resolution.
+
+The provider is placed at `core/tts/tts_provider.dart` (the same layer as
+`TtsService`) so that `features/api_sync/`, `features/recording/`, and
+`features/settings/` can all import it from `core/` without cross-feature
+imports. The provider must call `ref.onDispose(() => tts.dispose())` to
+release the `flutter_tts` platform channel on hot-restart and app teardown.
 
 ### ApiSuccess with body
 
 `ApiSuccess` gets an optional field `body: String?` (raw response body).
-`ApiClient.post()` passes `response.data.toString()` when status is 2xx.
+Dio automatically decodes JSON responses into `Map<String, dynamic>` — calling
+`.toString()` on a Map produces `{key: value}` (Dart's Map.toString()), which is
+not valid JSON. The correct extraction:
+- if `response.data is Map` → `jsonEncode(response.data)`
+- if `response.data is String` → use directly
+- otherwise → `null`
+
+`const ApiSuccess()` still compiles because `body` is nullable.
 
 ### Parsing in SyncWorker
 
 In `SyncWorker._drain()`, after `ApiSuccess`, if `ttsEnabled` and `body != null`:
 1. Attempt to parse body as JSON: `jsonDecode(body)`
 2. Extract `message` (String) and optionally `language` (String?)
-3. `ttsService.stop()` (interrupt any ongoing playback)
-4. `ttsService.speak(message, languageCode: language ?? config.language)`
+3. `await ttsService.stop()` (interrupt any ongoing playback — must be awaited so
+   that the audio session is released before the next `speak()` call)
+4. `unawaited(ttsService.speak(message, languageCode: language ?? config.language))`
+   — fire-and-forget: `speak()` blocks until the utterance finishes, which can be
+   seconds. Awaiting it inside `_drain()` would block the 5-second poll loop.
+
+The `language` field in the JSON response is an **ISO 639-1 two-letter code**
+(e.g. `"pl"`, `"en"`, `"de"`). No validation or normalisation is performed at
+this layer — the value is passed directly to `TtsService.speak()`, which owns
+the `'auto'` → device locale resolution (see TtsService port section).
 
 Parsing is defensive: if the body is not JSON or lacks a `message` field,
 `TtsService` is not called — sync completes normally.
+
+**`ttsEnabled` reactivity:** `SyncWorker` is instantiated once and held by
+`syncWorkerProvider`. A raw `bool` constructor argument would go stale when
+the user toggles the setting. `SyncWorker` receives a `bool Function() getTtsEnabled`
+closure as a constructor argument. `syncWorkerProvider` passes
+`() => ref.read(appConfigProvider).ttsEnabled`. Inside `_drain()`, call
+`getTtsEnabled()` at the point of the check — not once at construction.
 
 ### Interrupting TTS
 
 Three interruption points:
 
 1. **VAD speech start** (`HandsFreeController._onEngineEvent` → `EngineCapturing`):
-   `ttsService.stop()`
-2. **Tap-to-record** (`RecordingScreen` onTap, P014 T3):
-   `ttsService.stop()` before `startRecording()`
-3. **Press-and-hold** (`RecordingScreen` onLongPressStart, P014 T4):
-   `ttsService.stop()` before `startRecording()`
+   `unawaited(ttsService.stop())` — fire-and-forget is acceptable here because
+   the VAD is capturing audio immediately; the brief overlap is tolerable and
+   stopping TTS does not block the event handler.
+2. **Tap-to-record** (`RecordingScreen._onTap`, P014 T3):
+   `await ref.read(ttsServiceProvider).stop()` — must be awaited before
+   `startRecording()` to avoid an iOS AVAudioSession conflict between the
+   TTS playback session and the recording session.
+3. **Press-and-hold** (`RecordingScreen._onLongPressStart`, P014 T4):
+   `await ref.read(ttsServiceProvider).stop()` — same reason as above.
 
-`TtsService` is available via provider — injected wherever needed.
+**iOS AVAudioSession note:** `flutter_tts` activates `AVAudioSession` with
+category `playback` when `speak()` is called. The `record` package uses category
+`record` (or `playAndRecord`). On iOS, two conflicting sessions cannot both be
+active. Awaiting `stop()` at interruption points 2 and 3 ensures the TTS session
+is deactivated before recording begins. Interruption point 1 tolerates the brief
+overlap because the VAD engine (already recording) takes priority.
+
+`TtsService` is accessed via `ref.read(ttsServiceProvider)` — same pattern as
+all other providers in this codebase. The provider lives in `core/tts/tts_provider.dart`.
 
 ---
 
@@ -118,11 +169,16 @@ Three interruption points:
 
 **Needs change:**
 - `ApiSuccess` — add `body: String?`
-- `ApiClient.post()` — extract `response.data.toString()` and pass it to `ApiSuccess`
-- `SyncWorker` — inject `TtsService`, `AppConfig` (or `ttsEnabled` flag);
-  in `_drain()` on `ApiSuccess`: parse message, call `speak()`
-- `HandsFreeController._onEngineEvent` (EngineCapturing case) — `ttsService.stop()`
-- `RecordingScreen` (P014 T3/T4) — `ttsService.stop()` on tap and long press start
+- `ApiClient.post()` — extract body via `jsonEncode` (if Map) or direct (if String)
+  and pass to `ApiSuccess`; see Solution Design § ApiSuccess with body
+- `SyncWorker` — add `TtsService ttsService` constructor param; read `ttsEnabled`
+  reactively at call-time in `_drain()` (not as a stale `bool` field)
+- `features/api_sync/sync_provider.dart` — wire `ttsServiceProvider` into
+  `syncWorkerProvider`
+- `HandsFreeController._onEngineEvent` (EngineCapturing case) — `unawaited(ttsService.stop())`
+  via `_ref.read(ttsServiceProvider)` (same pattern as existing services in the controller)
+- `RecordingScreen._onTap` and `_onLongPressStart` — `await ref.read(ttsServiceProvider).stop()`
+  before `startRecording()`
 - `AppConfig` — add `ttsEnabled: bool` (default `true`)
 - `AppConfigService.load()` — read `tts_enabled` from SharedPreferences
 - `AppConfigService.saveTtsEnabled()` — new method
@@ -146,47 +202,78 @@ Three interruption points:
 
 ### T1 details
 
-- `core/tts/tts_service.dart` — abstraction
-- `core/tts/flutter_tts_service.dart` — implementation
-- `core/tts/tts_provider.dart` — `Provider<TtsService>`
+- Add `flutter_tts: ^4.2.0` (or latest stable) to `pubspec.yaml`
+- iOS native setup: `flutter_tts` uses `AVSpeechSynthesizer` — no Info.plist key required;
+  verify `AVAudioSession` works alongside the `record` package (see Risks)
+- Android: `flutter_tts` requires a TTS engine installed on device (normally present)
+- `core/tts/tts_service.dart` — abstraction (no `isSpeaking`; see Solution Design)
+- `core/tts/flutter_tts_service.dart` — implementation; `speak()` resolves `'auto'`
+  via `Platform.localeName.split('_').first` before calling `flutter_tts.setLanguage()`
+- `core/tts/tts_provider.dart` — `Provider<TtsService>` with
+  `ref.onDispose(() => tts.dispose())` to release the platform channel
 - `AppConfig.ttsEnabled` default `true`; SharedPreferences key: `'tts_enabled'`
-- Tests: unit test `FlutterTtsService` with mocked `flutter_tts`; widget test toggle in Settings
+- Tests: unit test `FlutterTtsService.speak()` calls `setLanguage('pl')` not `'auto'`;
+  widget test toggle in Settings
 
 ### T2 details
 
-- `ApiSuccess({this.body})` — `const ApiSuccess()` still works (body is nullable)
-- `ApiClient.post()`: if response.data is Map → `jsonEncode(response.data)`;
-  if String → use directly; otherwise `null`
-- `SyncWorker` constructor: add `TtsService ttsService` and access to `ttsEnabled`
-  (via `AppConfig` or a separate flag)
-- Parsing: `try { final json = jsonDecode(body); final msg = json['message']; ... } catch (_) {}`
-- Tests: `SyncWorker` with mocked `TtsService`; verify `speak()` called with correct text
-  and language; verify `speak()` not called when `ttsEnabled == false`
+- `ApiSuccess({this.body})` — `const ApiSuccess()` still compiles (body is nullable)
+- `ApiClient.post()`: extract body as described in § ApiSuccess with body
+- `SyncWorker` constructor: add `TtsService ttsService`
+- `ttsEnabled` reactivity: `syncWorkerProvider` passes `() => ref.read(appConfigProvider).ttsEnabled`
+  as the `getTtsEnabled` closure; never a stale `bool` constructor argument
+- `features/api_sync/sync_provider.dart` — wire in `ttsServiceProvider`
+- Parsing in `_drain()`: `try { final json = jsonDecode(body!); ... } catch (_) {}`
+  — `speak()` call is fire-and-forget (`unawaited`); `stop()` call is awaited first
+- Update `FakeApiClient` in test stubs to expose a settable `body` field on the
+  returned `ApiSuccess` so T2 tests can inject a response body
+- Tests:
+  - `SyncWorker` parses `{ "message": "ok", "language": "pl" }` → `speak("ok", languageCode: "pl")`
+  - `SyncWorker` calls `stop()` before `speak()` (verify ordering via call log)
+  - `SyncWorker` ignores body that is not JSON
+  - `SyncWorker` ignores body that is valid JSON but has no `message` field
+  - `SyncWorker` does not call `speak()` when `ttsEnabled == false`
 
 ### T3 details
 
-- `HandsFreeController` inject `TtsService`; in `_onEngineEvent(EngineCapturing())`:
-  `unawaited(ttsService.stop())`
-- `RecordingScreen` (P014): before `startRecording()` in tap handler and long press handler:
-  `ref.read(ttsServiceProvider).stop()`
-- Tests: verify `TtsService.stop()` called on EngineCapturing event
+- `HandsFreeController` reads `TtsService` via `_ref.read(ttsServiceProvider)` —
+  no constructor change; matches the existing lazy-read pattern in the class
+- In `_onEngineEvent(EngineCapturing())`: `unawaited(_ref.read(ttsServiceProvider).stop())`
+- `RecordingScreen._onTap` and `_onLongPressStart`: add
+  `await ref.read(ttsServiceProvider).stop()` before `startRecording()` calls
+- All widget test files that pump `RecordingScreen` (including
+  `recording_screen_mic_button_test.dart`) must add `ttsServiceProvider.overrideWithValue(...)`
+  with a stub `TtsService` to their `_baseOverrides`; otherwise the real
+  `FlutterTtsService` will be instantiated and crash in the test environment
+- `hands_free_controller_test.dart` must add a stub `TtsService` override so
+  `EngineCapturing` event tests still pass
+- Tests: verify `TtsService.stop()` called on `EngineCapturing` event
+  (`hands_free_controller_test.dart`); verify `stop()` called in `_onTap` and
+  `_onLongPressStart` (`recording_screen_mic_button_test.dart`)
 
 ---
 
 ## Test Impact
 
 ### Existing tests affected
-- `test/features/api_sync/` — `ApiSuccess()` tests may need updating
-  if `const ApiSuccess()` changes signature (body is nullable, so
-  `const ApiSuccess()` still compiles)
+- `test/features/api_sync/` — `const ApiSuccess()` still compiles; `FakeApiClient`
+  stub needs a configurable `body` field so T2 tests can inject response bodies
 - `test/features/recording/presentation/hands_free_controller_test.dart` —
-  add mocked `TtsService` to overrides
+  add stub `TtsService` override; add assertion for `stop()` on `EngineCapturing`
+- `test/features/recording/presentation/recording_screen_mic_button_test.dart` —
+  add stub `TtsService` override in `_baseOverrides`
+- `test/features/settings/advanced_settings_screen_test.dart` —
+  add stub `TtsService` override in `_baseOverrides`
+- Any other test that pumps `RecordingScreen` must add the stub override
 
 ### New tests
-- Unit: `FlutterTtsService.speak()` calls flutter_tts with the correct language
-- Unit: `SyncWorker` parses `{ "message": "ok", "language": "pl" }` → `speak("ok", languageCode: "pl")`
+- Unit: `FlutterTtsService.speak("text", languageCode: "pl")` calls `setLanguage("pl")`
+- Unit: `FlutterTtsService.speak("text")` with `config.language == "auto"` calls
+  `setLanguage("<device-locale-code>")` not `setLanguage("auto")`
+- Unit: `SyncWorker` parses `{ "message": "ok", "language": "pl" }` → `stop()` then `speak("ok", languageCode: "pl")`
 - Unit: `SyncWorker` ignores body that is not JSON
-- Unit: `SyncWorker` does not call speak when `ttsEnabled == false`
+- Unit: `SyncWorker` ignores body with no `message` field (e.g. `{"status": "ok"}`)
+- Unit: `SyncWorker` does not call `speak()` when `ttsEnabled == false`
 - Widget: toggle in Settings saves `ttsEnabled`
 
 ---
@@ -195,11 +282,14 @@ Three interruption points:
 
 1. When the API responds with `{ "message": "Understood" }`, the app plays the text via TTS.
 2. When the response contains `{ "message": "...", "language": "en" }`, TTS uses English.
-3. When the response has no `message` field or is not JSON, the app is silent.
-4. VAD detecting speech during TTS playback interrupts it immediately.
-5. Tapping or holding the mic icon during TTS interrupts playback and starts recording.
-6. The "Read API response aloud" toggle in Settings disables TTS.
-7. `flutter test` and `flutter analyze` pass.
+   The `language` value is an ISO 639-1 two-letter code (`"pl"`, `"en"`, `"de"`, etc.).
+3. When the response omits `language` and `config.language` is `'auto'`, TTS uses the
+   device locale language code (e.g. `"pl"` for a device set to Polish).
+4. When the response has no `message` field or is not JSON, the app is silent.
+5. VAD detecting speech during TTS playback interrupts it immediately.
+6. Tapping or holding the mic icon during TTS interrupts playback and starts recording.
+7. The "Read API response aloud" toggle in Settings disables TTS.
+8. `flutter test` and `flutter analyze` pass.
 
 ---
 
@@ -207,9 +297,10 @@ Three interruption points:
 
 | Risk | Mitigation |
 |------|------------|
-| `flutter_tts` on iOS requires audio session permission | Check `AVAudioSession` config; TTS should work with category `playback` |
-| Concurrent TTS and microphone (echo) | TTS plays after the segment ends; VAD stops TTS when speech is detected |
-| Response body may be very large | We only parse the `message` field; TTS has a natural limit via `flutter_tts` |
+| iOS `AVAudioSession` conflict between TTS (`playback`) and microphone (`record`) | `stop()` is awaited at tap/long-press interruption points before `startRecording()`. VAD engine is already recording when TTS fires, so `stop()` there is fire-and-forget. Verify in manual testing on device. |
+| `flutter_tts` on iOS requires `NSSpeechRecognitionUsageDescription` in `Info.plist` | Added to T1 setup steps |
+| Concurrent TTS and microphone echo (VAD active while TTS plays) | TTS fires only after `SyncWorker` sends a segment; VAD stops TTS on `EngineCapturing` event |
+| Response body may be very large | Only `message` field is extracted; TTS has a natural per-utterance limit via `flutter_tts` |
 
 ---
 
