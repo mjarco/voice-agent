@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
@@ -236,6 +237,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (v) {
               ref.read(appConfigProvider.notifier).updateKeepHistory(v);
             },
+          ),
+          _buildSectionHeader('Voice Activity Detection'),
+          ListTile(
+            key: const Key('advanced-vad-tile'),
+            title: const Text('Advanced (VAD)'),
+            subtitle: const Text('Speech detection tuning'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/advanced'),
           ),
           _buildSectionHeader('About'),
           ListTile(
