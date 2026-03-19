@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
+import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
+import 'package:voice_agent/features/recording/domain/segment_job.dart';
+import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
@@ -12,15 +15,19 @@ class RecordingScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(recordingControllerProvider);
-    final controller = ref.read(recordingControllerProvider.notifier);
+    final recState = ref.watch(recordingControllerProvider);
+    final hfState = ref.watch(handsFreeControllerProvider);
+    final recCtrl = ref.read(recordingControllerProvider.notifier);
+    final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
     final isApiConfigured = ref.watch(apiUrlConfiguredProvider);
 
-    // On Completed: navigate to /record/review and reset to idle
+    final isHfActive = hfState is! HandsFreeIdle;
+    final isRecActive = recState is RecordingActive;
+
     ref.listen<RecordingState>(recordingControllerProvider, (prev, next) {
       if (next is RecordingCompleted) {
         context.push('/record/review', extra: next.result);
-        controller.resetToIdle();
+        recCtrl.resetToIdle();
       }
     });
 
@@ -42,21 +49,29 @@ class RecordingScreen extends ConsumerWidget {
             ),
           Expanded(
             child: Center(
-              child: _buildBody(context, state, controller),
+              child: _buildRecordingArea(context, recState, recCtrl, isHfActive),
             ),
+          ),
+          _HandsFreeSection(
+            hfState: hfState,
+            hfCtrl: hfCtrl,
+            isRecActive: isRecActive,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBody(
+  Widget _buildRecordingArea(
     BuildContext context,
     RecordingState state,
     RecordingController controller,
+    bool isHfActive,
   ) {
     return switch (state) {
-      RecordingIdle() => _IdleView(onRecord: controller.startRecording),
+      RecordingIdle() => _IdleView(
+          onRecord: isHfActive ? null : controller.startRecording,
+        ),
       RecordingActive() => _RecordingView(
           elapsed: controller.currentElapsed,
           onStop: controller.stopAndTranscribe,
@@ -70,7 +85,7 @@ class RecordingScreen extends ConsumerWidget {
             Text('Transcribing...'),
           ],
         ),
-      RecordingCompleted() => const SizedBox.shrink(), // handled by listener
+      RecordingCompleted() => const SizedBox.shrink(),
       RecordingError(
         :final message,
         :final requiresSettings,
@@ -113,10 +128,233 @@ class RecordingScreen extends ConsumerWidget {
   }
 }
 
+// ── Hands-free section ────────────────────────────────────────────────────────
+
+class _HandsFreeSection extends StatelessWidget {
+  const _HandsFreeSection({
+    required this.hfState,
+    required this.hfCtrl,
+    required this.isRecActive,
+  });
+
+  final HandsFreeSessionState hfState;
+  final HandsFreeController hfCtrl;
+  final bool isRecActive;
+
+  @override
+  Widget build(BuildContext context) {
+    final isOn = hfState is! HandsFreeIdle;
+    final jobs = _jobsOf(hfState);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Divider(height: 1),
+        SwitchListTile(
+          key: const Key('hf-toggle'),
+          title: const Text('Hands-free'),
+          value: isOn,
+          onChanged: isRecActive
+              ? null
+              : (on) =>
+                  on ? hfCtrl.startSession() : hfCtrl.stopSession(),
+        ),
+        if (isOn) ...[
+          _HfStatusStrip(hfState: hfState),
+          if (jobs.isNotEmpty)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: _SegmentList(jobs: jobs),
+            ),
+        ],
+      ],
+    );
+  }
+
+  static List<SegmentJob> _jobsOf(HandsFreeSessionState s) => switch (s) {
+        HandsFreeListening(:final jobs) => jobs,
+        HandsFreeWithBacklog(:final jobs) => jobs,
+        HandsFreeCapturing(:final jobs) => jobs,
+        HandsFreeStopping(:final jobs) => jobs,
+        HandsFreeSessionError(:final jobs) => jobs,
+        HandsFreeIdle() => const [],
+      };
+}
+
+class _HfStatusStrip extends StatelessWidget {
+  const _HfStatusStrip({required this.hfState});
+
+  final HandsFreeSessionState hfState;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (hfState) {
+      HandsFreeSessionError(:final message, :final requiresSettings, :final requiresAppSettings) =>
+        _ErrorStrip(
+          message: message,
+          requiresSettings: requiresSettings,
+          requiresAppSettings: requiresAppSettings,
+        ),
+      HandsFreeListening() => const _StatusText('Listening...'),
+      HandsFreeCapturing() => const _StatusText('Capturing...'),
+      HandsFreeStopping() => const _StatusText('Processing segment...'),
+      HandsFreeWithBacklog() => const _StatusText('Listening (jobs pending)...'),
+      HandsFreeIdle() => const SizedBox.shrink(),
+    };
+  }
+}
+
+class _StatusText extends StatelessWidget {
+  const _StatusText(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Text(
+        text,
+        key: const Key('hf-status-text'),
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+    );
+  }
+}
+
+class _ErrorStrip extends StatelessWidget {
+  const _ErrorStrip({
+    required this.message,
+    required this.requiresSettings,
+    required this.requiresAppSettings,
+  });
+
+  final String message;
+  final bool requiresSettings;
+  final bool requiresAppSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            message,
+            key: const Key('hf-error-message'),
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: Theme.of(context).colorScheme.error),
+          ),
+          if (requiresAppSettings)
+            TextButton(
+              onPressed: () => context.go('/settings'),
+              child: const Text('Go to Settings'),
+            )
+          else if (requiresSettings)
+            TextButton(
+              onPressed: openAppSettings,
+              child: const Text('Open Settings'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Segment list ──────────────────────────────────────────────────────────────
+
+class _SegmentList extends StatelessWidget {
+  const _SegmentList({required this.jobs});
+
+  final List<SegmentJob> jobs;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      key: const Key('hf-segment-list'),
+      shrinkWrap: true,
+      itemCount: jobs.length,
+      itemBuilder: (context, index) {
+        // index 0 = most recent segment
+        final job = jobs[jobs.length - 1 - index];
+        return _SegmentTile(job: job);
+      },
+    );
+  }
+}
+
+class _SegmentTile extends StatelessWidget {
+  const _SegmentTile({required this.job});
+
+  final SegmentJob job;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, subtitle, color) = _renderJob(job.state);
+    return ListTile(
+      dense: true,
+      leading: icon,
+      title: Text(job.label),
+      subtitle: subtitle != null ? Text(subtitle) : null,
+      iconColor: color,
+      textColor: color,
+    );
+  }
+
+  (Widget, String?, Color?) _renderJob(SegmentJobState s) {
+    return switch (s) {
+      QueuedForTranscription() => (
+          const Icon(Icons.hourglass_empty),
+          'Queued',
+          Colors.grey,
+        ),
+      Transcribing() => (
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          'Transcribing...',
+          null,
+        ),
+      Persisting() => (
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          'Saving...',
+          null,
+        ),
+      Completed() => (
+          const Icon(Icons.check_circle),
+          'Saved',
+          Colors.green,
+        ),
+      Rejected(:final reason) => (
+          const Icon(Icons.not_interested),
+          'Skipped: $reason',
+          Colors.grey,
+        ),
+      JobFailed(:final message) => (
+          const Icon(Icons.error_outline),
+          'Failed: $message',
+          Colors.red,
+        ),
+    };
+  }
+}
+
+// ── Recording area sub-widgets ────────────────────────────────────────────────
+
 class _IdleView extends StatelessWidget {
   const _IdleView({required this.onRecord});
 
-  final VoidCallback onRecord;
+  final VoidCallback? onRecord;
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +362,7 @@ class _IdleView extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton.filled(
+          key: const Key('record-button'),
           onPressed: onRecord,
           icon: const Icon(Icons.mic),
           iconSize: 64,
