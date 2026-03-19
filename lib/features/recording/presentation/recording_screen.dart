@@ -9,23 +9,43 @@ import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
-import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
-class RecordingScreen extends ConsumerWidget {
+class RecordingScreen extends ConsumerStatefulWidget {
   const RecordingScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RecordingScreen> createState() => _RecordingScreenState();
+}
+
+class _RecordingScreenState extends ConsumerState<RecordingScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(handsFreeControllerProvider.notifier).startSession();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<RecordingState>(recordingControllerProvider, (prev, next) {
+      if (next is RecordingIdle) {
+        final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
+        if (hfCtrl.isSuspendedForManualRecording) {
+          unawaited(hfCtrl.resumeAfterManualRecording());
+        }
+      }
+    });
+
     final recState = ref.watch(recordingControllerProvider);
     final hfState = ref.watch(handsFreeControllerProvider);
     final recCtrl = ref.read(recordingControllerProvider.notifier);
     final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
     final isApiConfigured = ref.watch(apiUrlConfiguredProvider);
-
-    final isHfActive = hfState is! HandsFreeIdle;
-    final isRecActive = recState is RecordingActive;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Record')),
@@ -45,13 +65,12 @@ class RecordingScreen extends ConsumerWidget {
             ),
           Expanded(
             child: Center(
-              child: _buildRecordingArea(context, recState, recCtrl, isHfActive, hfState),
+              child: _buildRecordingArea(context, recState, recCtrl),
             ),
           ),
           _HandsFreeSection(
             hfState: hfState,
-            hfCtrl: hfCtrl,
-            isRecActive: isRecActive,
+            onRetry: () => hfCtrl.startSession(),
           ),
         ],
       ),
@@ -62,13 +81,9 @@ class RecordingScreen extends ConsumerWidget {
     BuildContext context,
     RecordingState state,
     RecordingController controller,
-    bool isHfActive,
-    HandsFreeSessionState hfState,
   ) {
     return switch (state) {
-      RecordingIdle() => isHfActive
-          ? _HfMicIndicator(hfState: hfState)
-          : _IdleView(onRecord: controller.startRecording),
+      RecordingIdle() => const _MicButton(),
       RecordingActive() => _RecordingView(
           elapsed: controller.currentElapsed,
           onStop: controller.stopAndTranscribe,
@@ -129,13 +144,11 @@ class RecordingScreen extends ConsumerWidget {
 class _HandsFreeSection extends StatelessWidget {
   const _HandsFreeSection({
     required this.hfState,
-    required this.hfCtrl,
-    required this.isRecActive,
+    required this.onRetry,
   });
 
   final HandsFreeSessionState hfState;
-  final HandsFreeController hfCtrl;
-  final bool isRecActive;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -146,24 +159,15 @@ class _HandsFreeSection extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Divider(height: 1),
-        SwitchListTile(
-          key: const Key('hf-toggle'),
-          title: const Text('Hands-free'),
-          value: isOn,
-          onChanged: isRecActive
-              ? null
-              : (on) =>
-                  on ? hfCtrl.startSession() : hfCtrl.stopSession(),
-        ),
-        const _VadParamsStrip(),
         if (isOn) ...[
-          _HfStatusStrip(hfState: hfState),
+          _HfStatusStrip(hfState: hfState, onRetry: onRetry),
           if (jobs.isNotEmpty)
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 200),
               child: _SegmentList(jobs: jobs),
             ),
         ],
+        const _VadParamsStrip(),
       ],
     );
   }
@@ -179,18 +183,24 @@ class _HandsFreeSection extends StatelessWidget {
 }
 
 class _HfStatusStrip extends StatelessWidget {
-  const _HfStatusStrip({required this.hfState});
+  const _HfStatusStrip({required this.hfState, required this.onRetry});
 
   final HandsFreeSessionState hfState;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     return switch (hfState) {
-      HandsFreeSessionError(:final message, :final requiresSettings, :final requiresAppSettings) =>
+      HandsFreeSessionError(
+        :final message,
+        :final requiresSettings,
+        :final requiresAppSettings,
+      ) =>
         _ErrorStrip(
           message: message,
           requiresSettings: requiresSettings,
           requiresAppSettings: requiresAppSettings,
+          onRetry: onRetry,
         ),
       HandsFreeListening() => const _StatusText('Listening...'),
       HandsFreeCapturing() => const _StatusText('Capturing...'),
@@ -224,11 +234,13 @@ class _ErrorStrip extends StatelessWidget {
     required this.message,
     required this.requiresSettings,
     required this.requiresAppSettings,
+    required this.onRetry,
   });
 
   final String message;
   final bool requiresSettings;
   final bool requiresAppSettings;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -246,16 +258,59 @@ class _ErrorStrip extends StatelessWidget {
                 .bodyMedium
                 ?.copyWith(color: Theme.of(context).colorScheme.error),
           ),
-          if (requiresAppSettings)
-            TextButton(
-              onPressed: () => context.go('/settings'),
-              child: const Text('Go to Settings'),
-            )
-          else if (requiresSettings)
-            TextButton(
-              onPressed: openAppSettings,
-              child: const Text('Open Settings'),
+          Row(
+            children: [
+              OutlinedButton(
+                key: const Key('hf-retry-button'),
+                onPressed: onRetry,
+                child: const Text('Retry'),
+              ),
+              if (requiresAppSettings)
+                TextButton(
+                  onPressed: () => context.go('/settings'),
+                  child: const Text('Go to Settings'),
+                )
+              else if (requiresSettings)
+                TextButton(
+                  onPressed: openAppSettings,
+                  child: const Text('Open Settings'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Mic button ────────────────────────────────────────────────────────────────
+
+/// Basic tap target for manual recording (T2 stub — tap gesture added in T3).
+class _MicButton extends StatelessWidget {
+  const _MicButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            key: const Key('record-button'),
+            duration: const Duration(milliseconds: 150),
+            width: 96,
+            height: 96,
+            decoration: const BoxDecoration(
+              color: Colors.green,
+              shape: BoxShape.circle,
             ),
+            child: const Icon(Icons.mic, color: Colors.white, size: 48),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Tap to record',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
         ],
       ),
     );
@@ -346,109 +401,10 @@ class _SegmentTile extends StatelessWidget {
   }
 }
 
-// ── Recording area sub-widgets ────────────────────────────────────────────────
-
-/// Mic button shown in place of the normal record button during a HF session.
-/// Green = listening for speech; red = speech detected (with 300ms release debounce).
-class _HfMicIndicator extends StatefulWidget {
-  const _HfMicIndicator({required this.hfState});
-
-  final HandsFreeSessionState hfState;
-
-  @override
-  State<_HfMicIndicator> createState() => _HfMicIndicatorState();
-}
-
-class _HfMicIndicatorState extends State<_HfMicIndicator> {
-  static const _releaseDebounce = Duration(milliseconds: 300);
-
-  bool _capturing = false;
-  Timer? _releaseTimer;
-
-  @override
-  void didUpdateWidget(_HfMicIndicator old) {
-    super.didUpdateWidget(old);
-    final nowCapturing = widget.hfState is HandsFreeCapturing;
-    if (nowCapturing == _capturing) return;
-
-    if (nowCapturing) {
-      _releaseTimer?.cancel();
-      setState(() => _capturing = true);
-    } else {
-      _releaseTimer?.cancel();
-      _releaseTimer = Timer(_releaseDebounce, () {
-        if (mounted) setState(() => _capturing = false);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _releaseTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _capturing ? Colors.red : Colors.green;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton.filled(
-          key: const Key('record-button'),
-          onPressed: null,
-          icon: const Icon(Icons.mic),
-          iconSize: 64,
-          style: IconButton.styleFrom(
-            padding: const EdgeInsets.all(24),
-            backgroundColor: color,
-            disabledBackgroundColor: color,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Hands-free active',
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-      ],
-    );
-  }
-}
-
-class _IdleView extends StatelessWidget {
-  const _IdleView({required this.onRecord});
-
-  final VoidCallback? onRecord;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton.filled(
-          key: const Key('record-button'),
-          onPressed: onRecord,
-          icon: const Icon(Icons.mic),
-          iconSize: 64,
-          style: IconButton.styleFrom(
-            padding: const EdgeInsets.all(24),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Tap to record',
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-      ],
-    );
-  }
-}
-
 // ── VAD params strip ─────────────────────────────────────────────────────────
 
-/// Compact read-only summary of current VAD config shown below the Hands-free
-/// toggle. Always visible (not gated on isOn) so the user can see the active
-/// settings even when hands-free is off. Tapping navigates to Advanced Settings.
+/// Compact read-only summary of current VAD config shown at the bottom of the
+/// screen. Always visible. Tapping navigates to Advanced Settings.
 class _VadParamsStrip extends ConsumerWidget {
   const _VadParamsStrip();
 

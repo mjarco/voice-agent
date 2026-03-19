@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/app/app.dart';
+import 'package:voice_agent/core/config/app_config.dart';
+import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
@@ -10,7 +15,9 @@ import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
+import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
+import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
@@ -39,9 +46,28 @@ class _NoOpConnectivity extends ConnectivityService {
   Stream<ConnectivityStatus> get statusStream => const Stream.empty();
 }
 
+class _IdleHfEngine implements HandsFreeEngine {
+  final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
+  @override Future<bool> hasPermission() async => true;
+  @override Stream<HandsFreeEngineEvent> start({required VadConfig config}) => _ctrl.stream;
+  @override Future<void> stop() async {}
+  @override void dispose() => _ctrl.close();
+}
+
+class _FixedConfigService extends AppConfigService {
+  _FixedConfigService(this._config);
+  final AppConfig _config;
+  @override
+  Future<AppConfig> load() async => _config;
+}
+
 List<Override> get _baseOverrides => [
   storageServiceProvider.overrideWithValue(_StubStorage()),
   connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
+  handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
+  appConfigServiceProvider.overrideWithValue(
+    _FixedConfigService(const AppConfig(groqApiKey: 'test-key')),
+  ),
 ];
 
 void main() {

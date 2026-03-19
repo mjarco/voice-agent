@@ -338,23 +338,6 @@ void main() {
     });
   });
 
-  // ── Active-recording guard ────────────────────────────────────────────────
-
-  group('active-recording guard', () {
-    test('manual recording active → SessionError (no OS/app-settings flags)',
-        () async {
-      final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine, recordingActive: true);
-
-      await ctrl(c).startSession();
-
-      final s = stateOf(c) as HandsFreeSessionError;
-      expect(s.requiresSettings, isFalse);
-      expect(s.requiresAppSettings, isFalse);
-      expect(engine.started, isFalse);
-    });
-  });
-
   // ── Engine event mapping ──────────────────────────────────────────────────
 
   group('engine event mapping', () {
