@@ -30,7 +30,7 @@ class MockAudioRecorder implements AudioRecorder {
   Future<bool> isPaused() async => false;
 
   @override
-  Future<bool> hasPermission() async => true;
+  Future<bool> hasPermission({bool request = true}) async => true;
 
   @override
   Future<void> pause() async {}
