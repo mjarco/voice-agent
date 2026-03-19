@@ -49,7 +49,8 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
   // Current speech accumulation.
   BytesBuilder _speechBuffer = BytesBuilder(copy: false);
-  int _speechFrameCount = 0; // only speech frames (not pre-roll)
+  int _speechFrameCount = 0; // speech frames only (not pre-roll, not hangover) — for minSpeechMs gate
+  int _captureFrameCount = 0; // all frames since capturing started — for maxSegmentMs gate
   int _hangoverCount = 0;
 
   // Frames received while in _Phase.stopping (VAD continues during WAV write).
@@ -91,6 +92,9 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     _audioSub = null;
     try {
       await _audioRecorder.stop();
+    } catch (_) {}
+    try {
+      await _audioRecorder.dispose();
     } catch (_) {}
 
     // Await any in-flight WAV write before closing the stream.
@@ -196,10 +200,11 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
       case _Phase.capturing:
         _speechBuffer.add(frame);
-        _speechFrameCount++;
+        _captureFrameCount++;
         if (label == VadLabel.speech) {
+          _speechFrameCount++;
           _hangoverCount = 0;
-          if (_speechFrameCount >= _maxSpeechFrameThreshold) {
+          if (_captureFrameCount >= _maxSpeechFrameThreshold) {
             _handleMaxSegment();
           }
         } else {
@@ -224,6 +229,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   void _startCapturing(Uint8List firstSpeechFrame) {
     _speechBuffer = BytesBuilder(copy: false);
     _speechFrameCount = 0;
+    _captureFrameCount = 0;
     _hangoverCount = 0;
 
     for (final f in _preRoll) {
@@ -232,6 +238,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     _preRoll.clear();
     _speechBuffer.add(firstSpeechFrame);
     _speechFrameCount = 1;
+    _captureFrameCount = 1;
 
     _phase = _Phase.capturing;
     _emit(const EngineCapturing());
@@ -330,9 +337,11 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
       // Resume capturing with pending frames as new speech buffer.
       _speechBuffer = BytesBuilder(copy: false);
       _speechFrameCount = 0;
+      _captureFrameCount = 0;
       _hangoverCount = 0;
       for (var i = 0; i < pendingBuf.length; i++) {
         _speechBuffer.add(pendingBuf[i]);
+        _captureFrameCount++;
         if (pendingLbls[i] == VadLabel.speech) {
           _speechFrameCount++;
           _hangoverCount = 0;
@@ -366,6 +375,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     _preRoll.clear();
     _speechBuffer = BytesBuilder(copy: false);
     _speechFrameCount = 0;
+    _captureFrameCount = 0;
     _hangoverCount = 0;
     _pendingFrames.clear();
     _pendingLabels.clear();
