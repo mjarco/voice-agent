@@ -96,18 +96,17 @@ class _HangingSttService implements SttService {
   Future<void> loadModel() async {}
 }
 
-/// [SttService] that resolves after a short delay, allowing [stopSession] to
+/// [SttService] that resolves after a 50ms delay, allowing [stopSession] to
 /// drain in-flight jobs within the test timeout.
 class _SlowSttService implements SttService {
-  _SlowSttService({this.text = 'Hello', this.delay = const Duration(milliseconds: 50)});
+  _SlowSttService({this.text = 'Hello'});
 
   final String text;
-  final Duration delay;
 
   @override
   Future<TranscriptResult> transcribe(String wavPath,
       {String? languageCode}) async {
-    await Future.delayed(delay);
+    await Future.delayed(const Duration(milliseconds: 50));
     return TranscriptResult(
       text: text,
       segments: [],
