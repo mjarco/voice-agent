@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -92,7 +93,9 @@ class VadServiceImpl implements VadService {
 
   @override
   void dispose() {
-    _iterator?.release();
-    _iterator = null;
+    if (_iterator != null) {
+      unawaited(_iterator!.release());
+      _iterator = null;
+    }
   }
 }
