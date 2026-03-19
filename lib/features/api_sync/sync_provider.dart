@@ -13,6 +13,10 @@ final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
   return ConnectivityService();
 });
 
+final connectivityStatusProvider = StreamProvider<ConnectivityStatus>((ref) {
+  return ref.watch(connectivityServiceProvider).statusStream;
+});
+
 final syncWorkerProvider = Provider<SyncWorker>((ref) {
   final worker = SyncWorker(
     storageService: ref.watch(storageServiceProvider),

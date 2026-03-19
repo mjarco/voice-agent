@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,7 +51,7 @@ class RecordingScreen extends ConsumerWidget {
             ),
           Expanded(
             child: Center(
-              child: _buildRecordingArea(context, recState, recCtrl, isHfActive),
+              child: _buildRecordingArea(context, recState, recCtrl, isHfActive, hfState),
             ),
           ),
           _HandsFreeSection(
@@ -67,11 +69,12 @@ class RecordingScreen extends ConsumerWidget {
     RecordingState state,
     RecordingController controller,
     bool isHfActive,
+    HandsFreeSessionState hfState,
   ) {
     return switch (state) {
-      RecordingIdle() => _IdleView(
-          onRecord: isHfActive ? null : controller.startRecording,
-        ),
+      RecordingIdle() => isHfActive
+          ? _HfMicIndicator(hfState: hfState)
+          : _IdleView(onRecord: controller.startRecording),
       RecordingActive() => _RecordingView(
           elapsed: controller.currentElapsed,
           onStop: controller.stopAndTranscribe,
@@ -350,6 +353,73 @@ class _SegmentTile extends StatelessWidget {
 }
 
 // ── Recording area sub-widgets ────────────────────────────────────────────────
+
+/// Mic button shown in place of the normal record button during a HF session.
+/// Green = listening for speech; red = speech detected (with 300ms release debounce).
+class _HfMicIndicator extends StatefulWidget {
+  const _HfMicIndicator({required this.hfState});
+
+  final HandsFreeSessionState hfState;
+
+  @override
+  State<_HfMicIndicator> createState() => _HfMicIndicatorState();
+}
+
+class _HfMicIndicatorState extends State<_HfMicIndicator> {
+  static const _releaseDebounce = Duration(milliseconds: 300);
+
+  bool _capturing = false;
+  Timer? _releaseTimer;
+
+  @override
+  void didUpdateWidget(_HfMicIndicator old) {
+    super.didUpdateWidget(old);
+    final nowCapturing = widget.hfState is HandsFreeCapturing;
+    if (nowCapturing == _capturing) return;
+
+    if (nowCapturing) {
+      _releaseTimer?.cancel();
+      setState(() => _capturing = true);
+    } else {
+      _releaseTimer?.cancel();
+      _releaseTimer = Timer(_releaseDebounce, () {
+        if (mounted) setState(() => _capturing = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _releaseTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _capturing ? Colors.red : Colors.green;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton.filled(
+          key: const Key('record-button'),
+          onPressed: null,
+          icon: const Icon(Icons.mic),
+          iconSize: 64,
+          style: IconButton.styleFrom(
+            padding: const EdgeInsets.all(24),
+            backgroundColor: color,
+            disabledBackgroundColor: color,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Hands-free active',
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
+      ],
+    );
+  }
+}
 
 class _IdleView extends StatelessWidget {
   const _IdleView({required this.onRecord});
