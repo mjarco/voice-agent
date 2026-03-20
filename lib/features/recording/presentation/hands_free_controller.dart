@@ -331,6 +331,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     if (!mounted) return;
 
     if (sttText.trim().isEmpty) {
+      unawaited(_ref.read(audioFeedbackServiceProvider).stopLoop());
       _jobs[idx] =
           _jobs[idx].copyWith(state: const Rejected('Empty transcription'));
       state = _listeningOrBacklog();
@@ -362,7 +363,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       try {
         await storage.enqueue(transcript.id);
         if (!mounted) return;
-        unawaited(_ref.read(audioFeedbackServiceProvider).playSuccess());
+        // Loop continues — sync_worker will play success/error on API response.
         _jobs[idx] = _jobs[idx].copyWith(state: Completed(transcript.id));
       } catch (e) {
         // Rollback: remove the transcript so it doesn't orphan.

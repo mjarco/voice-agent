@@ -97,6 +97,7 @@ class RecordingController extends StateNotifier<RecordingState>
 
       if (transcriptResult.text.trim().isEmpty) {
         if (silentOnEmpty) {
+          unawaited(_ref.read(audioFeedbackServiceProvider).stopLoop());
           state = const RecordingState.idle();
         } else {
           unawaited(_ref.read(audioFeedbackServiceProvider).playError());
@@ -124,7 +125,7 @@ class RecordingController extends StateNotifier<RecordingState>
       try {
         await storage.enqueue(transcript.id);
         if (!mounted) return;
-        unawaited(_ref.read(audioFeedbackServiceProvider).playSuccess());
+        // Loop continues — sync_worker will play success/error on API response.
         state = const RecordingState.idle();
       } catch (e) {
         // Rollback: remove the transcript so it doesn't orphan.
