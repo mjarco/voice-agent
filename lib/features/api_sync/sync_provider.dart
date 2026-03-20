@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
@@ -27,6 +28,7 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     connectivityService: ref.watch(connectivityServiceProvider),
     ttsService: ref.watch(ttsServiceProvider),
     getTtsEnabled: () => ref.read(appConfigProvider).ttsEnabled,
+    audioFeedbackService: ref.watch(audioFeedbackServiceProvider),
   );
 
   worker.start();

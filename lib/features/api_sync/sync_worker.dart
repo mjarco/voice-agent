@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
@@ -17,6 +18,7 @@ class SyncWorker {
     required this.connectivityService,
     required this.ttsService,
     required this.getTtsEnabled,
+    required this.audioFeedbackService,
   });
 
   final StorageService storageService;
@@ -25,6 +27,7 @@ class SyncWorker {
   final ConnectivityService connectivityService;
   final TtsService ttsService;
   final bool Function() getTtsEnabled;
+  final AudioFeedbackService audioFeedbackService;
 
   SyncWorkerState _state = SyncWorkerState.idle;
   SyncWorkerState get state => _state;
@@ -106,11 +109,13 @@ class SyncWorker {
     final item = items.first;
 
     await storageService.markSending(item.id);
+    unawaited(audioFeedbackService.startProcessingFeedback());
 
     final transcript = await storageService.getTranscript(item.transcriptId);
     if (transcript == null) {
       // Orphaned queue item — remove it
       await storageService.markSent(item.id);
+      unawaited(audioFeedbackService.playError());
       return;
     }
 
@@ -123,9 +128,11 @@ class SyncWorker {
     switch (result) {
       case ApiSuccess(:final body):
         await storageService.markSent(item.id);
+        unawaited(audioFeedbackService.playSuccess());
         _maybeSpeak(body);
       case ApiPermanentFailure(:final message):
         await storageService.markFailed(item.id, message);
+        unawaited(audioFeedbackService.playError());
       case ApiTransientFailure(:final reason):
         final attempts = item.attempts + 1; // markSending already incremented
         if (attempts >= _maxRetries) {
@@ -136,6 +143,7 @@ class SyncWorker {
         } else {
           await storageService.markFailed(item.id, reason);
         }
+        unawaited(audioFeedbackService.playError());
     }
   }
 
