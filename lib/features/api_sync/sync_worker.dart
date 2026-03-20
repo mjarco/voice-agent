@@ -109,7 +109,6 @@ class SyncWorker {
     final item = items.first;
 
     await storageService.markSending(item.id);
-    unawaited(audioFeedbackService.startProcessingFeedback());
 
     final transcript = await storageService.getTranscript(item.transcriptId);
     if (transcript == null) {
