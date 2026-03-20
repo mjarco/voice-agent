@@ -43,9 +43,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     });
 
     ref.listen(appConfigProvider.select((c) => c.vadConfig), (prev, next) {
-      if (prev != next) {
-        unawaited(ref.read(handsFreeControllerProvider.notifier).reloadVadConfig());
-      }
+      unawaited(ref.read(handsFreeControllerProvider.notifier).reloadVadConfig());
     });
 
     final recState = ref.watch(recordingControllerProvider);
