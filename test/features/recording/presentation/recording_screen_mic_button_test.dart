@@ -110,6 +110,13 @@ class _StubTtsService implements TtsService {
   @override void dispose() {}
 }
 
+class _SpyTtsService implements TtsService {
+  int stopCount = 0;
+  @override Future<void> speak(String text, {String? languageCode}) async {}
+  @override Future<void> stop() async { stopCount++; }
+  @override void dispose() {}
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 List<Override> get _baseOverrides => [
@@ -138,6 +145,34 @@ Future<void> pumpApp(WidgetTester tester) async {
     ),
   );
   await tester.pumpAndSettle();
+}
+
+Future<_SpyTtsService> _pumpAppWithSpyTts(WidgetTester tester) async {
+  final spy = _SpyTtsService();
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        storageServiceProvider.overrideWithValue(_StubStorage()),
+        connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
+        apiUrlConfiguredProvider.overrideWithValue(true),
+        appConfigServiceProvider.overrideWithValue(
+          _FixedConfigService(const AppConfig(groqApiKey: 'gsk_test_key')),
+        ),
+        handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
+        recordingServiceProvider.overrideWithValue(_NoOpRecordingService()),
+        sttServiceProvider.overrideWithValue(_NoOpSttService()),
+        recordingControllerProvider.overrideWith((ref) => _FakeRecordingController(
+          ref.read(recordingServiceProvider),
+          ref.read(sttServiceProvider),
+          ref,
+        )),
+        ttsServiceProvider.overrideWithValue(spy),
+      ],
+      child: const App(),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return spy;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -231,6 +266,33 @@ void main() {
       // silentOnEmpty → RecordingIdle, no error
       expect(find.byIcon(Icons.error), findsNothing);
       expect(find.text('Tap to record'), findsOneWidget);
+    });
+  });
+
+  group('TTS interruption', () {
+    testWidgets('tap → TtsService.stop() called before startRecording', (tester) async {
+      final spy = await _pumpAppWithSpyTts(tester);
+
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pumpAndSettle();
+
+      expect(spy.stopCount, greaterThanOrEqualTo(1));
+    });
+
+    testWidgets('long press start → TtsService.stop() called before startRecording', (tester) async {
+      final spy = await _pumpAppWithSpyTts(tester);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const Key('record-button'))),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+
+      expect(spy.stopCount, greaterThanOrEqualTo(1));
+
+      await gesture.up();
+      await tester.pumpAndSettle();
     });
   });
 }

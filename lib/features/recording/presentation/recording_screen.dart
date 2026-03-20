@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
+import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
@@ -299,6 +300,7 @@ class _MicButtonState extends ConsumerState<_MicButton> {
 
     if (recState is RecordingIdle) {
       if (hfState is HandsFreeStopping) return; // no-op — wait for stop
+      await ref.read(ttsServiceProvider).stop();
       await hfCtrl.suspendForManualRecording();
       await recCtrl.startRecording();
     } else if (recState is RecordingActive) {
@@ -321,6 +323,7 @@ class _MicButtonState extends ConsumerState<_MicButton> {
 
     final recCtrl = ref.read(recordingControllerProvider.notifier);
     final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
+    await ref.read(ttsServiceProvider).stop();
     await hfCtrl.suspendForManualRecording();
     await recCtrl.startRecording();
   }

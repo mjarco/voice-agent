@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
@@ -203,6 +204,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         state = _listeningOrBacklog();
 
       case EngineCapturing():
+        unawaited(_ref.read(ttsServiceProvider).stop());
         state = HandsFreeCapturing(List<SegmentJob>.unmodifiable(_jobs));
 
       case EngineStopping():
