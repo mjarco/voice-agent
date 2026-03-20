@@ -68,4 +68,9 @@ class AppConfigNotifier extends StateNotifier<AppConfig> {
     await _service.saveVadConfig(config);
     state = state.copyWith(vadConfig: config);
   }
+
+  Future<void> updateTtsEnabled(bool value) async {
+    await _service.saveTtsEnabled(value);
+    state = state.copyWith(ttsEnabled: value);
+  }
 }

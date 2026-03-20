@@ -11,6 +11,8 @@ import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/core/tts/tts_provider.dart';
+import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 
 class _StubStorage implements StorageService {
@@ -54,9 +56,16 @@ class _SeededConfigService extends AppConfigService {
   Future<void> saveApiToken(String token) async {}
 }
 
+class _StubTtsService implements TtsService {
+  @override Future<void> speak(String text, {String? languageCode}) async {}
+  @override Future<void> stop() async {}
+  @override void dispose() {}
+}
+
 List<Override> _baseOverrides() => [
   storageServiceProvider.overrideWithValue(_StubStorage()),
   connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
+  ttsServiceProvider.overrideWithValue(_StubTtsService()),
 ];
 
 Future<void> _navigateToSettings(WidgetTester tester) async {
@@ -136,6 +145,53 @@ void main() {
       expect(tokenField.controller?.text, 'token_123');
     });
 
+    testWidgets('ttsEnabled toggle is visible and defaults to true', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _baseOverrides(),
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      // Scroll down to reveal the General section toggle.
+      await tester.drag(find.byType(ListView).first, const Offset(0, -400));
+      await tester.pumpAndSettle();
+
+      final tile = find.byKey(const Key('tts-enabled-tile'));
+      expect(tile, findsOneWidget);
+      final switchTile = tester.widget<SwitchListTile>(tile);
+      expect(switchTile.value, isTrue);
+    });
+
+    testWidgets('ttsEnabled toggle saves false when toggled off', (tester) async {
+      bool? savedValue;
+      final trackingService = _TrackingTtsConfigService(
+        onSaveTtsEnabled: (v) => savedValue = v,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides(),
+            appConfigServiceProvider.overrideWithValue(trackingService),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -400));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('tts-enabled-tile')));
+      await tester.pumpAndSettle();
+
+      expect(savedValue, isFalse);
+    });
+
     testWidgets('Groq API Key field saves on focus lost', (tester) async {
       String? savedKey;
       final trackingService = _TrackingConfigService(
@@ -186,4 +242,16 @@ class _TrackingConfigService extends AppConfigService {
 
   @override
   Future<void> saveApiToken(String token) async {}
+}
+
+class _TrackingTtsConfigService extends AppConfigService {
+  _TrackingTtsConfigService({required this.onSaveTtsEnabled});
+
+  final void Function(bool) onSaveTtsEnabled;
+
+  @override
+  Future<AppConfig> load() async => const AppConfig();
+
+  @override
+  Future<void> saveTtsEnabled(bool value) async => onSaveTtsEnabled(value);
 }

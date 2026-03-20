@@ -22,6 +22,8 @@ import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
+import 'package:voice_agent/core/tts/tts_provider.dart';
+import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
@@ -100,6 +102,14 @@ class _FakeRecordingController extends RecordingController {
   }
 }
 
+// ── Stubs ────────────────────────────────────────────────────────────────────
+
+class _StubTtsService implements TtsService {
+  @override Future<void> speak(String text, {String? languageCode}) async {}
+  @override Future<void> stop() async {}
+  @override void dispose() {}
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 List<Override> get _baseOverrides => [
@@ -117,6 +127,7 @@ List<Override> get _baseOverrides => [
     ref.read(sttServiceProvider),
     ref,
   )),
+  ttsServiceProvider.overrideWithValue(_StubTtsService()),
 ];
 
 Future<void> pumpApp(WidgetTester tester) async {
