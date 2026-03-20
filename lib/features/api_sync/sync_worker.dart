@@ -115,6 +115,7 @@ class SyncWorker {
     if (transcript == null) {
       // Orphaned queue item — remove it
       await storageService.markSent(item.id);
+      unawaited(audioFeedbackService.playError());
       return;
     }
 
