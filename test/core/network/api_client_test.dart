@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/models/transcript.dart';
@@ -174,11 +176,47 @@ void main() {
 
       expect(_MockAdapter.lastHeaders?['Authorization'], isNull);
     });
+
+    test('body in ApiSuccess is valid JSON when server returns JSON object',
+        () async {
+      _MockAdapter.nextStatusCode = 200;
+      _MockAdapter.nextResponseBody = '{"message": "Done", "status": "ok"}';
+
+      final result = await client.post(
+        transcript,
+        url: 'https://example.com/api',
+      );
+
+      expect(result, isA<ApiSuccess>());
+      final body = (result as ApiSuccess).body;
+      expect(body, isNotNull);
+      // Must be parseable JSON — this would throw if body is Dart's Map.toString()
+      final parsed = jsonDecode(body!) as Map<String, dynamic>;
+      expect(parsed['message'], 'Done');
+      expect(parsed['status'], 'ok');
+    });
+
+    test('body in ApiSuccess preserves message field for TTS', () async {
+      _MockAdapter.nextStatusCode = 200;
+      _MockAdapter.nextResponseBody =
+          '{"message": "Zrozumiałem", "language": "pl"}';
+
+      final result = await client.post(
+        transcript,
+        url: 'https://example.com/api',
+      );
+
+      final body = (result as ApiSuccess).body!;
+      final parsed = jsonDecode(body) as Map<String, dynamic>;
+      expect(parsed['message'], 'Zrozumiałem');
+      expect(parsed['language'], 'pl');
+    });
   });
 }
 
 class _MockAdapter implements HttpClientAdapter {
   static int nextStatusCode = 200;
+  static String nextResponseBody = '{"ok":true}';
   static DioException? shouldThrow;
   static dynamic lastRequestData;
   static Map<String, dynamic>? lastHeaders;
@@ -213,8 +251,11 @@ class _MockAdapter implements HttpClientAdapter {
       );
     }
 
+    final body = nextResponseBody;
+    nextResponseBody = '{"ok":true}'; // reset
+
     return ResponseBody.fromString(
-      '{"ok":true}',
+      body,
       code,
       headers: {
         Headers.contentTypeHeader: ['application/json'],
