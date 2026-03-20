@@ -85,6 +85,38 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     state = _listeningOrBacklog();
   }
 
+  /// Restarts the VAD engine with the current [appConfigProvider] VAD config.
+  ///
+  /// Called when the user changes VAD parameters in Advanced Settings.
+  /// No-op when idle, in error, or suspended for manual recording (the new
+  /// config will be picked up automatically by [resumeAfterManualRecording]).
+  Future<void> reloadVadConfig() async {
+    if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
+    if (_suspendedForManualRecording) return;
+
+    if (state is HandsFreeCapturing) {
+      await _engine?.interruptCapture();
+    } else {
+      await _engineSub?.cancel();
+      _engineSub = null;
+      await _engine?.stop();
+    }
+    _engine = null;
+    _engineSub = null;
+
+    final config = _ref.read(appConfigProvider).vadConfig;
+    final engine = _ref.read(handsFreeEngineProvider);
+    _engine = engine;
+    final stream = engine.start(config: config);
+    _engineSub = stream.listen(
+      _onEngineEvent,
+      onError: (Object e) => _terminateWithError('Engine error: $e'),
+      onDone: _onEngineDone,
+      cancelOnError: false,
+    );
+    state = _listeningOrBacklog();
+  }
+
   /// Restarts the VAD engine after manual recording completes.
   ///
   /// Does NOT clear [_jobs] or [_jobCounter] — the backlog is preserved.
