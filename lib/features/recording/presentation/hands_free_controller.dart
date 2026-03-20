@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
@@ -281,6 +282,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
     // ── Transcribing ──
     _jobs[idx] = job.copyWith(state: const Transcribing());
+    unawaited(_ref.read(audioFeedbackServiceProvider).startProcessingFeedback());
     if (mounted) state = _listeningOrBacklog();
 
     String sttText;
@@ -296,6 +298,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     } catch (e) {
       unawaited(_cleanupWav(wavPath));
       if (!mounted) return;
+      unawaited(_ref.read(audioFeedbackServiceProvider).playError());
       _jobs[idx] = _jobs[idx].copyWith(state: JobFailed('STT error: $e'));
       state = _listeningOrBacklog();
       return;
@@ -337,16 +340,19 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       try {
         await storage.enqueue(transcript.id);
         if (!mounted) return;
+        unawaited(_ref.read(audioFeedbackServiceProvider).playSuccess());
         _jobs[idx] = _jobs[idx].copyWith(state: Completed(transcript.id));
       } catch (e) {
         // Rollback: remove the transcript so it doesn't orphan.
         unawaited(storage.deleteTranscript(transcript.id));
         if (!mounted) return;
+        unawaited(_ref.read(audioFeedbackServiceProvider).playError());
         _jobs[idx] =
             _jobs[idx].copyWith(state: JobFailed('Enqueue failed: $e'));
       }
     } catch (e) {
       if (!mounted) return;
+      unawaited(_ref.read(audioFeedbackServiceProvider).playError());
       _jobs[idx] =
           _jobs[idx].copyWith(state: JobFailed('Persist error: $e'));
     }

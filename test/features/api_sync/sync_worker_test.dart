@@ -6,6 +6,7 @@ import 'package:voice_agent/core/models/sync_status.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/api_client.dart';
+import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
@@ -158,6 +159,14 @@ class _SpyTtsService implements TtsService {
   void dispose() {}
 }
 
+class _StubAudioFeedbackService implements AudioFeedbackService {
+  @override Future<void> startProcessingFeedback() async {}
+  @override Future<void> stopLoop() async {}
+  @override Future<void> playSuccess() async {}
+  @override Future<void> playError() async {}
+  @override void dispose() {}
+}
+
 class FakeConnectivityService extends ConnectivityService {
   final _controller = StreamController<ConnectivityStatus>.broadcast();
 
@@ -202,6 +211,7 @@ void main() {
       connectivityService: connectivity,
       ttsService: tts,
       getTtsEnabled: () => ttsEnabled,
+      audioFeedbackService: _StubAudioFeedbackService(),
     );
   });
 
@@ -287,6 +297,7 @@ void main() {
         connectivityService: connectivity,
         ttsService: tts,
         getTtsEnabled: () => ttsEnabled,
+        audioFeedbackService: _StubAudioFeedbackService(),
       );
 
       await storage.saveTranscript(transcript);

@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
@@ -86,6 +87,7 @@ class RecordingController extends StateNotifier<RecordingState>
       _cleanupSubscription();
 
       state = const RecordingState.transcribing();
+      unawaited(_ref.read(audioFeedbackServiceProvider).startProcessingFeedback());
 
       final transcriptResult = await _sttService.transcribe(
         recordingResult.filePath,
@@ -94,9 +96,12 @@ class RecordingController extends StateNotifier<RecordingState>
       if (!mounted) return;
 
       if (transcriptResult.text.trim().isEmpty) {
-        state = silentOnEmpty
-            ? const RecordingState.idle()
-            : const RecordingState.error('Transcription returned empty text.');
+        if (silentOnEmpty) {
+          state = const RecordingState.idle();
+        } else {
+          unawaited(_ref.read(audioFeedbackServiceProvider).playError());
+          state = const RecordingState.error('Transcription returned empty text.');
+        }
         return;
       }
 
@@ -119,15 +124,18 @@ class RecordingController extends StateNotifier<RecordingState>
       try {
         await storage.enqueue(transcript.id);
         if (!mounted) return;
+        unawaited(_ref.read(audioFeedbackServiceProvider).playSuccess());
         state = const RecordingState.idle();
       } catch (e) {
         // Rollback: remove the transcript so it doesn't orphan.
         unawaited(storage.deleteTranscript(transcript.id));
         if (!mounted) return;
+        unawaited(_ref.read(audioFeedbackServiceProvider).playError());
         state = RecordingState.error('Failed to enqueue transcript: $e');
       }
     } catch (e) {
       _cleanupSubscription();
+      unawaited(_ref.read(audioFeedbackServiceProvider).playError());
       if (e is SttException) {
         state = RecordingState.error(e.message);
       } else {
