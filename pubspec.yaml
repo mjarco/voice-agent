@@ -23,6 +23,7 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   vad: ^0.0.7
   flutter_tts: ^4.2.5
+  audioplayers: ^6.0.0
 
 dev_dependencies:
   flutter_test:
@@ -38,3 +39,4 @@ flutter:
 
   assets:
     - assets/models/silero_vad_v5.onnx
+    - assets/audio/

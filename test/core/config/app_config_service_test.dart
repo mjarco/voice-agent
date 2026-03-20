@@ -111,6 +111,17 @@ void main() {
       expect(config.keepHistory, isFalse);
     });
 
+    test('saveAudioFeedbackEnabled then load round-trips', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final service = AppConfigService(prefs: prefs);
+
+      await service.saveAudioFeedbackEnabled(false);
+      final config = await service.load();
+
+      expect(config.audioFeedbackEnabled, isFalse);
+    });
+
     group('VAD config', () {
       test('load returns VadConfig.defaults() when keys are absent', () async {
         SharedPreferences.setMockInitialValues({});

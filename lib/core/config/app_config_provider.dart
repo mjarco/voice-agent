@@ -73,4 +73,9 @@ class AppConfigNotifier extends StateNotifier<AppConfig> {
     await _service.saveTtsEnabled(value);
     state = state.copyWith(ttsEnabled: value);
   }
+
+  Future<void> updateAudioFeedbackEnabled(bool value) async {
+    await _service.saveAudioFeedbackEnabled(value);
+    state = state.copyWith(audioFeedbackEnabled: value);
+  }
 }

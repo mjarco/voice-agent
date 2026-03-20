@@ -19,6 +19,8 @@ import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_exception.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
+import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
+import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -151,6 +153,14 @@ class FakeStorageService implements StorageService {
       [];
 }
 
+class _StubAudioFeedbackService implements AudioFeedbackService {
+  @override Future<void> startProcessingFeedback() async {}
+  @override Future<void> stopLoop() async {}
+  @override Future<void> playSuccess() async {}
+  @override Future<void> playError() async {}
+  @override void dispose() {}
+}
+
 class _FixedConfigService extends AppConfigService {
   _FixedConfigService(this._config);
 
@@ -189,6 +199,7 @@ ProviderContainer _makeContainer({
       storageServiceProvider.overrideWithValue(
         fakeStorage ?? FakeStorageService(),
       ),
+      audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
     ],
   );
 }

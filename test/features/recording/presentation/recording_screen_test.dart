@@ -22,6 +22,8 @@ import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
+import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
+import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
@@ -70,6 +72,14 @@ class _StubTtsService implements TtsService {
   @override void dispose() {}
 }
 
+class _StubAudioFeedbackService implements AudioFeedbackService {
+  @override Future<void> startProcessingFeedback() async {}
+  @override Future<void> stopLoop() async {}
+  @override Future<void> playSuccess() async {}
+  @override Future<void> playError() async {}
+  @override void dispose() {}
+}
+
 List<Override> get _baseOverrides => [
   storageServiceProvider.overrideWithValue(_StubStorage()),
   connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
@@ -78,6 +88,7 @@ List<Override> get _baseOverrides => [
     _FixedConfigService(const AppConfig(groqApiKey: 'test-key')),
   ),
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
+  audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
 ];
 
 void main() {
