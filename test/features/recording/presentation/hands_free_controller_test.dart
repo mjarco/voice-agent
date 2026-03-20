@@ -21,6 +21,8 @@ import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
 import 'package:voice_agent/features/recording/domain/stt_exception.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
+import 'package:voice_agent/core/tts/tts_provider.dart';
+import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
@@ -259,6 +261,14 @@ class _TrackingHfEngine implements HandsFreeEngine {
   void dispose() => _ctrl.close();
 }
 
+// ── Stubs ────────────────────────────────────────────────────────────────────
+
+class _StubTtsService implements TtsService {
+  @override Future<void> speak(String text, {String? languageCode}) async {}
+  @override Future<void> stop() async {}
+  @override void dispose() {}
+}
+
 // ── Container factory ────────────────────────────────────────────────────────
 
 ProviderContainer makeContainer({
@@ -282,6 +292,7 @@ ProviderContainer makeContainer({
     sttServiceProvider.overrideWithValue(sttService ?? _HangingSttService()),
     if (storageService != null)
       storageServiceProvider.overrideWithValue(storageService),
+    ttsServiceProvider.overrideWithValue(_StubTtsService()),
   ]);
   addTearDown(container.dispose);
   return container;

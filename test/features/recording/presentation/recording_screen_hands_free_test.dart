@@ -21,9 +21,18 @@ import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
+import 'package:voice_agent/core/tts/tts_provider.dart';
+import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 // ── Stubs ─────────────────────────────────────────────────────────────────────
+
+class _StubTtsService implements TtsService {
+  @override Future<void> speak(String text, {String? languageCode}) async {}
+  @override Future<void> stop() async {}
+  @override void dispose() {}
+}
+
 
 class _StubStorage implements StorageService {
   @override Future<String> getDeviceId() async => 'test-device';
@@ -107,6 +116,7 @@ List<Override> baseOverrides(FakeHfEngine engine) => [
       handsFreeEngineProvider.overrideWithValue(engine),
       sttServiceProvider.overrideWithValue(_NoOpSttService()),
       recordingServiceProvider.overrideWithValue(_NoOpRecordingService()),
+      ttsServiceProvider.overrideWithValue(_StubTtsService()),
     ];
 
 Future<void> pumpRecordScreen(

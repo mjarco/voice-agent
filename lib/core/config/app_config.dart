@@ -13,6 +13,7 @@ class AppConfig {
     this.language = 'auto',
     this.keepHistory = true,
     this.vadConfig = const VadConfig.defaults(),
+    this.ttsEnabled = true,
   });
 
   final String? apiUrl;
@@ -22,6 +23,7 @@ class AppConfig {
   final String language;
   final bool keepHistory;
   final VadConfig vadConfig;
+  final bool ttsEnabled;
 
   AppConfig copyWith({
     Object? apiUrl = _sentinel,
@@ -31,6 +33,7 @@ class AppConfig {
     String? language,
     bool? keepHistory,
     VadConfig? vadConfig,
+    bool? ttsEnabled,
   }) {
     return AppConfig(
       apiUrl: apiUrl == _sentinel ? this.apiUrl : apiUrl as String?,
@@ -41,6 +44,7 @@ class AppConfig {
       language: language ?? this.language,
       keepHistory: keepHistory ?? this.keepHistory,
       vadConfig: vadConfig ?? this.vadConfig,
+      ttsEnabled: ttsEnabled ?? this.ttsEnabled,
     );
   }
 }

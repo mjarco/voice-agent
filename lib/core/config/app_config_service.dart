@@ -23,6 +23,8 @@ class AppConfigService {
   static const _languageKey = 'language';
   static const _keepHistoryKey = 'keep_history';
 
+  static const _ttsEnabledKey = 'tts_enabled';
+
   static const _vadPositiveThresholdKey = 'vad_positive_threshold';
   static const _vadNegativeThresholdKey = 'vad_negative_threshold';
   static const _vadHangoverMsKey = 'vad_hangover_ms';
@@ -70,6 +72,7 @@ class AppConfigService {
       language: prefs.getString(_languageKey) ?? 'auto',
       keepHistory: prefs.getBool(_keepHistoryKey) ?? true,
       vadConfig: vadConfig,
+      ttsEnabled: prefs.getBool(_ttsEnabledKey) ?? true,
     );
   }
 
@@ -110,5 +113,10 @@ class AppConfigService {
   Future<void> saveKeepHistory(bool value) async {
     final prefs = await _preferences;
     await prefs.setBool(_keepHistoryKey, value);
+  }
+
+  Future<void> saveTtsEnabled(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool(_ttsEnabledKey, value);
   }
 }
