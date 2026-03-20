@@ -269,6 +269,13 @@ class _StubTtsService implements TtsService {
   @override void dispose() {}
 }
 
+class _SpyTtsService implements TtsService {
+  int stopCount = 0;
+  @override Future<void> speak(String text, {String? languageCode}) async {}
+  @override Future<void> stop() async { stopCount++; }
+  @override void dispose() {}
+}
+
 // ── Container factory ────────────────────────────────────────────────────────
 
 ProviderContainer makeContainer({
@@ -277,6 +284,7 @@ ProviderContainer makeContainer({
   bool recordingActive = false,
   SttService? sttService,
   StorageService? storageService,
+  TtsService? ttsService,
 }) {
   final container = ProviderContainer(overrides: [
     handsFreeEngineProvider.overrideWithValue(engine),
@@ -292,7 +300,7 @@ ProviderContainer makeContainer({
     sttServiceProvider.overrideWithValue(sttService ?? _HangingSttService()),
     if (storageService != null)
       storageServiceProvider.overrideWithValue(storageService),
-    ttsServiceProvider.overrideWithValue(_StubTtsService()),
+    ttsServiceProvider.overrideWithValue(ttsService ?? _StubTtsService()),
   ]);
   addTearDown(container.dispose);
   return container;
@@ -400,6 +408,18 @@ void main() {
       await Future.delayed(Duration.zero);
 
       expect(stateOf(c), isA<HandsFreeCapturing>());
+    });
+
+    test('EngineCapturing → TtsService.stop() called', () async {
+      final engine = FakeHandsFreeEngine();
+      final spy = _SpyTtsService();
+      final c = makeContainer(engine: engine, ttsService: spy);
+      await ctrl(c).startSession();
+
+      engine.emit(const EngineCapturing());
+      await Future.delayed(Duration.zero);
+
+      expect(spy.stopCount, 1);
     });
 
     test('EngineStopping → HandsFreeStopping', () async {
