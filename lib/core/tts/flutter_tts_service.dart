@@ -8,10 +8,18 @@ class FlutterTtsService implements TtsService {
 
   final FlutterTts _tts;
 
+  // Cache best voice per resolved language string to avoid repeated getVoices()
+  // calls. null value means "looked up, nothing better than system default".
+  final Map<String, Map<String, String>?> _voiceCache = {};
+
   @override
   Future<void> speak(String text, {String? languageCode}) async {
     final lang = _resolveLanguage(languageCode);
     await _tts.setLanguage(lang);
+    if (Platform.isIOS) {
+      final voice = await _bestVoice(lang);
+      if (voice != null) await _tts.setVoice(voice);
+    }
     await _tts.speak(text);
   }
 
@@ -33,5 +41,46 @@ class FlutterTtsService implements TtsService {
     }
     // Explicit code (e.g. "pl", "en") — passed as-is; best-effort on iOS.
     return code;
+  }
+
+  /// Returns the best available iOS voice for [lang], preferring premium >
+  /// enhanced > normal quality. Returns null when no voice matches or voices
+  /// cannot be listed (falls back to AVSpeechSynthesizer default selection).
+  Future<Map<String, String>?> _bestVoice(String lang) async {
+    if (_voiceCache.containsKey(lang)) return _voiceCache[lang];
+
+    // Match on the primary language tag (e.g. "pl" from "pl_PL" or "pl-PL").
+    final langPrefix = lang.split(RegExp(r'[_\-]')).first.toLowerCase();
+
+    final dynamic raw = await _tts.getVoices;
+    final voices = raw as List?;
+    if (voices == null) {
+      _voiceCache[lang] = null;
+      return null;
+    }
+
+    Map<String, String>? premium;
+    Map<String, String>? enhanced;
+    Map<String, String>? normal;
+
+    for (final entry in voices) {
+      final voice = Map<String, String>.from(entry as Map);
+      final name = (voice['name'] ?? '').toLowerCase();
+      final locale = (voice['locale'] ?? '').toLowerCase();
+
+      if (!locale.startsWith(langPrefix)) continue;
+
+      if (name.contains('premium')) {
+        premium ??= voice;
+      } else if (name.contains('enhanced')) {
+        enhanced ??= voice;
+      } else {
+        normal ??= voice;
+      }
+    }
+
+    final best = premium ?? enhanced ?? normal;
+    _voiceCache[lang] = best;
+    return best;
   }
 }
