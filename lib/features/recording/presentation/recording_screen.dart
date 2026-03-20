@@ -342,8 +342,10 @@ class _MicButtonState extends ConsumerState<_MicButton> {
   @override
   Widget build(BuildContext context) {
     final recState = ref.watch(recordingControllerProvider);
+    final hfState = ref.watch(handsFreeControllerProvider);
     final isRecording = recState is RecordingActive;
     final isTranscribing = recState is RecordingTranscribing;
+    final isHfCapturing = hfState is HandsFreeCapturing;
 
     // Clear press-and-hold flag when recording returns to idle or errors out.
     ref.listen<RecordingState>(recordingControllerProvider, (_, next) {
@@ -356,7 +358,7 @@ class _MicButtonState extends ConsumerState<_MicButton> {
         ? Colors.grey
         : isRecording && _isPressAndHold
             ? Colors.orange
-            : isRecording
+            : (isRecording || isHfCapturing)
                 ? Colors.red
                 : Colors.green;
 
