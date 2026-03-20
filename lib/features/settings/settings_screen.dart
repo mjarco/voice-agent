@@ -247,6 +247,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ref.read(appConfigProvider.notifier).updateTtsEnabled(v);
             },
           ),
+          SwitchListTile(
+            key: const Key('audio-feedback-tile'),
+            title: const Text('Audio feedback'),
+            subtitle: const Text('Play sounds during transcription and sync'),
+            value: config.audioFeedbackEnabled,
+            onChanged: (v) {
+              ref.read(appConfigProvider.notifier).updateAudioFeedbackEnabled(v);
+            },
+          ),
           _buildSectionHeader('Voice Activity Detection'),
           ListTile(
             key: const Key('advanced-vad-tile'),

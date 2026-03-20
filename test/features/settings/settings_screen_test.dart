@@ -11,6 +11,8 @@ import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
+import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
@@ -62,10 +64,19 @@ class _StubTtsService implements TtsService {
   @override void dispose() {}
 }
 
+class _StubAudioFeedbackService implements AudioFeedbackService {
+  @override Future<void> startProcessingFeedback() async {}
+  @override Future<void> stopLoop() async {}
+  @override Future<void> playSuccess() async {}
+  @override Future<void> playError() async {}
+  @override void dispose() {}
+}
+
 List<Override> _baseOverrides() => [
   storageServiceProvider.overrideWithValue(_StubStorage()),
   connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
+  audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
 ];
 
 Future<void> _navigateToSettings(WidgetTester tester) async {
@@ -192,6 +203,52 @@ void main() {
       expect(savedValue, isFalse);
     });
 
+    testWidgets('audioFeedbackEnabled toggle is visible and defaults to true', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _baseOverrides(),
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+      await tester.pumpAndSettle();
+
+      final tile = find.byKey(const Key('audio-feedback-tile'));
+      expect(tile, findsOneWidget);
+      final switchTile = tester.widget<SwitchListTile>(tile);
+      expect(switchTile.value, isTrue);
+    });
+
+    testWidgets('audioFeedbackEnabled toggle saves false when toggled off', (tester) async {
+      bool? savedValue;
+      final trackingService = _TrackingAudioFeedbackConfigService(
+        onSaveAudioFeedbackEnabled: (v) => savedValue = v,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides(),
+            appConfigServiceProvider.overrideWithValue(trackingService),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -500));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('audio-feedback-tile')));
+      await tester.pumpAndSettle();
+
+      expect(savedValue, isFalse);
+    });
+
     testWidgets('Groq API Key field saves on focus lost', (tester) async {
       String? savedKey;
       final trackingService = _TrackingConfigService(
@@ -254,4 +311,17 @@ class _TrackingTtsConfigService extends AppConfigService {
 
   @override
   Future<void> saveTtsEnabled(bool value) async => onSaveTtsEnabled(value);
+}
+
+class _TrackingAudioFeedbackConfigService extends AppConfigService {
+  _TrackingAudioFeedbackConfigService({required this.onSaveAudioFeedbackEnabled});
+
+  final void Function(bool) onSaveAudioFeedbackEnabled;
+
+  @override
+  Future<AppConfig> load() async => const AppConfig();
+
+  @override
+  Future<void> saveAudioFeedbackEnabled(bool value) async =>
+      onSaveAudioFeedbackEnabled(value);
 }

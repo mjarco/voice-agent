@@ -24,6 +24,7 @@ class AppConfigService {
   static const _keepHistoryKey = 'keep_history';
 
   static const _ttsEnabledKey = 'tts_enabled';
+  static const _audioFeedbackEnabledKey = 'audio_feedback_enabled';
 
   static const _vadPositiveThresholdKey = 'vad_positive_threshold';
   static const _vadNegativeThresholdKey = 'vad_negative_threshold';
@@ -73,6 +74,7 @@ class AppConfigService {
       keepHistory: prefs.getBool(_keepHistoryKey) ?? true,
       vadConfig: vadConfig,
       ttsEnabled: prefs.getBool(_ttsEnabledKey) ?? true,
+      audioFeedbackEnabled: prefs.getBool(_audioFeedbackEnabledKey) ?? true,
     );
   }
 
@@ -118,5 +120,10 @@ class AppConfigService {
   Future<void> saveTtsEnabled(bool value) async {
     final prefs = await _preferences;
     await prefs.setBool(_ttsEnabledKey, value);
+  }
+
+  Future<void> saveAudioFeedbackEnabled(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool(_audioFeedbackEnabledKey, value);
   }
 }

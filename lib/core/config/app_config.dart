@@ -14,6 +14,7 @@ class AppConfig {
     this.keepHistory = true,
     this.vadConfig = const VadConfig.defaults(),
     this.ttsEnabled = true,
+    this.audioFeedbackEnabled = true,
   });
 
   final String? apiUrl;
@@ -24,6 +25,7 @@ class AppConfig {
   final bool keepHistory;
   final VadConfig vadConfig;
   final bool ttsEnabled;
+  final bool audioFeedbackEnabled;
 
   AppConfig copyWith({
     Object? apiUrl = _sentinel,
@@ -34,6 +36,7 @@ class AppConfig {
     bool? keepHistory,
     VadConfig? vadConfig,
     bool? ttsEnabled,
+    bool? audioFeedbackEnabled,
   }) {
     return AppConfig(
       apiUrl: apiUrl == _sentinel ? this.apiUrl : apiUrl as String?,
@@ -45,6 +48,7 @@ class AppConfig {
       keepHistory: keepHistory ?? this.keepHistory,
       vadConfig: vadConfig ?? this.vadConfig,
       ttsEnabled: ttsEnabled ?? this.ttsEnabled,
+      audioFeedbackEnabled: audioFeedbackEnabled ?? this.audioFeedbackEnabled,
     );
   }
 }

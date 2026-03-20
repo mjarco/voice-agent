@@ -21,6 +21,8 @@ import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
+import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
+import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
@@ -33,6 +35,13 @@ class _StubTtsService implements TtsService {
   @override void dispose() {}
 }
 
+class _StubAudioFeedbackService implements AudioFeedbackService {
+  @override Future<void> startProcessingFeedback() async {}
+  @override Future<void> stopLoop() async {}
+  @override Future<void> playSuccess() async {}
+  @override Future<void> playError() async {}
+  @override void dispose() {}
+}
 
 class _StubStorage implements StorageService {
   @override Future<String> getDeviceId() async => 'test-device';
@@ -117,6 +126,7 @@ List<Override> baseOverrides(FakeHfEngine engine) => [
       sttServiceProvider.overrideWithValue(_NoOpSttService()),
       recordingServiceProvider.overrideWithValue(_NoOpRecordingService()),
       ttsServiceProvider.overrideWithValue(_StubTtsService()),
+      audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
     ];
 
 Future<void> pumpRecordScreen(

@@ -25,6 +25,8 @@ import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
+import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
+import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 // ── FakeHandsFreeEngine ──────────────────────────────────────────────────────
@@ -276,6 +278,14 @@ class _SpyTtsService implements TtsService {
   @override void dispose() {}
 }
 
+class _StubAudioFeedbackService implements AudioFeedbackService {
+  @override Future<void> startProcessingFeedback() async {}
+  @override Future<void> stopLoop() async {}
+  @override Future<void> playSuccess() async {}
+  @override Future<void> playError() async {}
+  @override void dispose() {}
+}
+
 // ── Container factory ────────────────────────────────────────────────────────
 
 ProviderContainer makeContainer({
@@ -285,6 +295,7 @@ ProviderContainer makeContainer({
   SttService? sttService,
   StorageService? storageService,
   TtsService? ttsService,
+  AudioFeedbackService? audioFeedbackService,
 }) {
   final container = ProviderContainer(overrides: [
     handsFreeEngineProvider.overrideWithValue(engine),
@@ -301,6 +312,9 @@ ProviderContainer makeContainer({
     if (storageService != null)
       storageServiceProvider.overrideWithValue(storageService),
     ttsServiceProvider.overrideWithValue(ttsService ?? _StubTtsService()),
+    audioFeedbackServiceProvider.overrideWithValue(
+      audioFeedbackService ?? _StubAudioFeedbackService(),
+    ),
   ]);
   addTearDown(container.dispose);
   return container;
