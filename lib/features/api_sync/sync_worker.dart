@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
 
 enum SyncWorkerState { idle, running, paused, stopped }
@@ -13,12 +15,16 @@ class SyncWorker {
     required this.apiClient,
     required this.apiConfig,
     required this.connectivityService,
+    required this.ttsService,
+    required this.getTtsEnabled,
   });
 
   final StorageService storageService;
   final ApiClient apiClient;
   final ApiConfig apiConfig;
   final ConnectivityService connectivityService;
+  final TtsService ttsService;
+  final bool Function() getTtsEnabled;
 
   SyncWorkerState _state = SyncWorkerState.idle;
   SyncWorkerState get state => _state;
@@ -115,8 +121,9 @@ class SyncWorker {
     );
 
     switch (result) {
-      case ApiSuccess():
+      case ApiSuccess(:final body):
         await storageService.markSent(item.id);
+        _maybeSpeak(body);
       case ApiPermanentFailure(:final message):
         await storageService.markFailed(item.id, message);
       case ApiTransientFailure(:final reason):
@@ -129,6 +136,20 @@ class SyncWorker {
         } else {
           await storageService.markFailed(item.id, reason);
         }
+    }
+  }
+
+  void _maybeSpeak(String? body) {
+    if (!getTtsEnabled()) return;
+    if (body == null) return;
+    try {
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final message = json['message'] as String?;
+      if (message == null || message.isEmpty) return;
+      final language = json['language'] as String?;
+      unawaited(ttsService.stop().then((_) => ttsService.speak(message, languageCode: language)));
+    } catch (_) {
+      // Non-JSON or unexpected shape — stay silent.
     }
   }
 

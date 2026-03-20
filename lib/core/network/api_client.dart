@@ -6,7 +6,8 @@ sealed class ApiResult {
 }
 
 class ApiSuccess extends ApiResult {
-  const ApiSuccess();
+  const ApiSuccess({this.body});
+  final String? body;
 }
 
 class ApiPermanentFailure extends ApiResult {
@@ -60,7 +61,9 @@ class ApiClient {
 
       final statusCode = response.statusCode ?? 0;
       if (statusCode >= 200 && statusCode < 300) {
-        return const ApiSuccess();
+        final dynamic data = response.data;
+        final String? body = data is String ? data : data?.toString();
+        return ApiSuccess(body: body);
       }
       return _classifyStatusCode(statusCode, response.statusMessage);
     } on DioException catch (e) {
