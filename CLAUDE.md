@@ -104,7 +104,14 @@ A1. /create-proposal          — write proposal in docs/proposals/{NNN}-{name}.
 A2. /proposal-review          — review proposal
 A3. Fix review issues          — address all P0/P1 issues found by the reviewer
 A4. Repeat A2–A3              — re-review until verdict: Ready
-A5. User approval             — wait for explicit user approval before proceeding
+A5. /codex-review             — ask Codex to review the proposal (round 1)
+A6. Fix Codex issues          — address issues raised by Codex
+A7. /codex-review (re-read)   — ask Codex to re-read the proposal and review again;
+                                explicitly instruct Codex to read the proposal file
+                                again before reviewing (it retains session context
+                                but must be told to re-read for the latest version)
+A8. Fix Codex issues          — address remaining issues from round 2
+A9. User approval             — wait for explicit user approval before proceeding
 ```
 
 #### Phase B — Proposal lands on main
@@ -145,8 +152,8 @@ D8. Approve and merge the PR to main
 - **Avoid generating commands that require human interaction.** Use non-interactive
   flags, write multiline content to temp files, and prefer `gh pr merge --auto`
   or direct merge over workflows that block on manual approval.
-- Phase A (proposal) requires user approval at step A5 — this is the only
-  mandatory human checkpoint. Everything after A5 is autonomous.
+- Phase A (proposal) requires user approval at step A9 — this is the only
+  mandatory human checkpoint. Everything after A9 is autonomous.
 
 **Not needed for:** bug fixes that don't change intended behavior, refactoring
 with no behavioral impact, test-only changes, documentation fixes. For these,
