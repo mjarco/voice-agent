@@ -8,6 +8,7 @@ import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
 import 'package:voice_agent/features/api_sync/sync_worker.dart';
 
@@ -127,6 +128,7 @@ class FakeStorageService implements StorageService {
 
 class FakeApiClient extends ApiClient {
   ApiResult nextResult = const ApiSuccess();
+  String? nextBody;
 
   @override
   Future<ApiResult> post(
@@ -134,8 +136,26 @@ class FakeApiClient extends ApiClient {
     required String url,
     String? token,
   }) async {
+    if (nextResult is ApiSuccess) return ApiSuccess(body: nextBody);
     return nextResult;
   }
+}
+
+class _SpyTtsService implements TtsService {
+  final List<String> log = [];
+
+  @override
+  Future<void> speak(String text, {String? languageCode}) async {
+    log.add('speak:$text:$languageCode');
+  }
+
+  @override
+  Future<void> stop() async {
+    log.add('stop');
+  }
+
+  @override
+  void dispose() {}
 }
 
 class FakeConnectivityService extends ConnectivityService {
@@ -157,6 +177,8 @@ void main() {
   late FakeStorageService storage;
   late FakeApiClient apiClient;
   late FakeConnectivityService connectivity;
+  late _SpyTtsService tts;
+  late bool ttsEnabled;
   late SyncWorker worker;
 
   final transcript = Transcript(
@@ -171,11 +193,15 @@ void main() {
     storage = FakeStorageService();
     apiClient = FakeApiClient();
     connectivity = FakeConnectivityService();
+    tts = _SpyTtsService();
+    ttsEnabled = true;
     worker = SyncWorker(
       storageService: storage,
       apiClient: apiClient,
       apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
       connectivityService: connectivity,
+      ttsService: tts,
+      getTtsEnabled: () => ttsEnabled,
     );
   });
 
@@ -259,6 +285,8 @@ void main() {
         apiClient: apiClient,
         apiConfig: const ApiConfig(), // url is null
         connectivityService: connectivity,
+        ttsService: tts,
+        getTtsEnabled: () => ttsEnabled,
       );
 
       await storage.saveTranscript(transcript);
@@ -292,6 +320,71 @@ void main() {
       connectivity.emitStatus(ConnectivityStatus.online);
       await Future.delayed(const Duration(milliseconds: 50));
       expect(worker.state, SyncWorkerState.running);
+    });
+
+    group('TTS playback', () {
+      test('parses message+language → stop() then speak()', () async {
+        await storage.saveTranscript(transcript);
+        await storage.enqueue('tx-1');
+        apiClient.nextBody = '{"message": "Understood", "language": "pl"}';
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        expect(tts.log, ['stop', 'speak:Understood:pl']);
+      });
+
+      test('stop() is called before speak()', () async {
+        await storage.saveTranscript(transcript);
+        await storage.enqueue('tx-1');
+        apiClient.nextBody = '{"message": "ok", "language": "en"}';
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        final stopIdx = tts.log.indexOf('stop');
+        final speakIdx = tts.log.indexWhere((e) => e.startsWith('speak:'));
+        expect(stopIdx, lessThan(speakIdx));
+      });
+
+      test('ignores non-JSON body', () async {
+        await storage.saveTranscript(transcript);
+        await storage.enqueue('tx-1');
+        apiClient.nextBody = 'not json at all';
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        expect(tts.log, isEmpty);
+      });
+
+      test('ignores JSON with no message field', () async {
+        await storage.saveTranscript(transcript);
+        await storage.enqueue('tx-1');
+        apiClient.nextBody = '{"status": "ok"}';
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        expect(tts.log, isEmpty);
+      });
+
+      test('does not speak when ttsEnabled is false', () async {
+        await storage.saveTranscript(transcript);
+        await storage.enqueue('tx-1');
+        apiClient.nextBody = '{"message": "hello"}';
+        ttsEnabled = false;
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        expect(tts.log, isEmpty);
+      });
     });
   });
 
