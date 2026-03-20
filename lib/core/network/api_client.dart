@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 
@@ -62,7 +64,8 @@ class ApiClient {
       final statusCode = response.statusCode ?? 0;
       if (statusCode >= 200 && statusCode < 300) {
         final dynamic data = response.data;
-        final String? body = data is String ? data : data?.toString();
+        final String? body =
+            data == null ? null : (data is String ? data : jsonEncode(data));
         return ApiSuccess(body: body);
       }
       return _classifyStatusCode(statusCode, response.statusMessage);
