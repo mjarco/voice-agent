@@ -42,6 +42,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       }
     });
 
+    ref.listen(appConfigProvider.select((c) => c.vadConfig), (prev, next) {
+      unawaited(ref.read(handsFreeControllerProvider.notifier).reloadVadConfig());
+    });
+
     final recState = ref.watch(recordingControllerProvider);
     final hfState = ref.watch(handsFreeControllerProvider);
     final recCtrl = ref.read(recordingControllerProvider.notifier);
@@ -242,6 +246,8 @@ class _ErrorStrip extends StatelessWidget {
           Text(
             message,
             key: const Key('hf-error-message'),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context)
                 .textTheme
                 .bodyMedium

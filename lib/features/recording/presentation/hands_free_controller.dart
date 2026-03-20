@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
@@ -85,22 +86,37 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     state = _listeningOrBacklog();
   }
 
+  /// Restarts the VAD engine with the current [appConfigProvider] VAD config.
+  ///
+  /// Called when the user changes VAD parameters in Advanced Settings.
+  /// No-op when idle, in error, or suspended for manual recording (the new
+  /// config will be picked up automatically by [resumeAfterManualRecording]).
+  Future<void> reloadVadConfig() async {
+    if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
+    if (_suspendedForManualRecording) return;
+
+    if (state is HandsFreeCapturing) {
+      await _engine?.interruptCapture();
+    } else {
+      await _engineSub?.cancel();
+      _engineSub = null;
+      await _engine?.stop();
+    }
+    _engine = null;
+    _engineSub = null;
+    if (!mounted) return;
+
+    _startEngine(_ref.read(appConfigProvider).vadConfig);
+    state = _listeningOrBacklog();
+  }
+
   /// Restarts the VAD engine after manual recording completes.
   ///
   /// Does NOT clear [_jobs] or [_jobCounter] — the backlog is preserved.
   Future<void> resumeAfterManualRecording() async {
     if (!_suspendedForManualRecording) return;
     _suspendedForManualRecording = false;
-    final config = _ref.read(appConfigProvider).vadConfig;
-    final engine = _ref.read(handsFreeEngineProvider);
-    _engine = engine;
-    final stream = engine.start(config: config);
-    _engineSub = stream.listen(
-      _onEngineEvent,
-      onError: (Object e) => _terminateWithError('Engine error: $e'),
-      onDone: _onEngineDone,
-      cancelOnError: false,
-    );
+    _startEngine(_ref.read(appConfigProvider).vadConfig);
     state = _listeningOrBacklog();
   }
 
@@ -149,9 +165,15 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // All guards passed — start engine.
     _jobs.clear();
     _jobCounter = 0;
-    _engine = engine;
+    _startEngine(_ref.read(appConfigProvider).vadConfig);
+  }
 
-    final stream = engine.start(config: _ref.read(appConfigProvider).vadConfig);
+  // ── Helpers — engine lifecycle ────────────────────────────────────────────
+
+  void _startEngine(VadConfig config) {
+    final engine = _ref.read(handsFreeEngineProvider);
+    _engine = engine;
+    final stream = engine.start(config: config);
     _engineSub = stream.listen(
       _onEngineEvent,
       onError: (Object e) => _terminateWithError('Engine error: $e'),
