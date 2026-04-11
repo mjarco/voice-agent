@@ -53,6 +53,8 @@ class FakeStorageService implements StorageService {
   Future<void> markPendingForRetry(String id) async {}
   @override
   Future<String> getDeviceId() async => 'test-device';
+  @override
+  Future<int> recoverStaleSending() async => 0;
 }
 
 void main() {

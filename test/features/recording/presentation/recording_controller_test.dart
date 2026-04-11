@@ -151,6 +151,9 @@ class FakeStorageService implements StorageService {
   Future<List<TranscriptWithStatus>> getTranscriptsWithStatus(
           {int limit = 20, int offset = 0}) async =>
       [];
+
+  @override
+  Future<int> recoverStaleSending() async => 0;
 }
 
 class _StubAudioFeedbackService implements AudioFeedbackService {

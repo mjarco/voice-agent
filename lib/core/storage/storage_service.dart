@@ -29,6 +29,10 @@ abstract class StorageService {
   /// Invariant: at most one sync_queue row per transcript.
   Future<void> reactivateForResend(String transcriptId);
 
+  /// Reset all `sending` items to `pending` on app startup.
+  /// Returns the number of recovered rows.
+  Future<int> recoverStaleSending();
+
   // -- Device --
   Future<String> getDeviceId();
 }

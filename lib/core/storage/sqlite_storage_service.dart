@@ -232,6 +232,15 @@ class SqliteStorageService implements StorageService {
     );
   }
 
+  @override
+  Future<int> recoverStaleSending() async {
+    return await _db.rawUpdate(
+      'UPDATE sync_queue SET status = ?, error_message = NULL '
+      'WHERE status = ?',
+      [SyncStatus.pending.name, SyncStatus.sending.name],
+    );
+  }
+
   // -- Device --
 
   @override
