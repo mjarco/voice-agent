@@ -48,6 +48,7 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-ARCH-005](ADR-ARCH-005-app-config-in-core.md) | App configuration ownership in core layer | Accepted |
 | [ADR-ARCH-006](ADR-ARCH-006-domain-port-pattern.md) | Domain port pattern for platform services | Accepted |
 | [ADR-ARCH-007](ADR-ARCH-007-async-db-init-before-runapp.md) | Async DB init before runApp | Accepted |
+| [ADR-ARCH-008](ADR-ARCH-008-ephemeral-cross-feature-state.md) | Ephemeral cross-feature state via core StateProvider | Accepted |
 
 ### AUDIO — Audio, STT & Recording
 
