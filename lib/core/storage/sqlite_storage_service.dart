@@ -30,6 +30,7 @@ class SqliteStorageService implements StorageService {
           await db.execute('PRAGMA foreign_keys = ON');
         },
         onCreate: _createDb,
+        onUpgrade: _onUpgrade,
       ),
     );
 
@@ -64,6 +65,18 @@ class SqliteStorageService implements StorageService {
     await db.execute(
       'CREATE INDEX idx_sync_queue_status ON sync_queue(status)',
     );
+  }
+
+  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    for (var v = oldVersion + 1; v <= newVersion; v++) {
+      switch (v) {
+        // Future migrations go here:
+        // case 2:
+        //   await _migrateV1ToV2(db);
+        default:
+          break;
+      }
+    }
   }
 
   // -- Transcripts --
