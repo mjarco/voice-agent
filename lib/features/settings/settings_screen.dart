@@ -120,12 +120,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         children: [
           _buildSectionHeader('API Configuration'),
           Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(
+              'Connect to a personal-agent backend for knowledge extraction and spoken replies.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: TextField(
               controller: _urlController,
               decoration: InputDecoration(
                 labelText: 'API URL',
-                hintText: 'https://your-api.com/endpoint',
+                hintText: 'http://192.168.x.x:8888/api/v1/voice/transcript',
+                helperText: 'Personal agent: http://<host>:8888/api/v1/voice/transcript',
+                helperMaxLines: 2,
                 border: const OutlineInputBorder(),
                 errorText: _urlError,
               ),
