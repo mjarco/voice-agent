@@ -176,13 +176,15 @@ class FakeStorageService implements StorageService {
   @override
   Future<void> markSent(String id) async {}
   @override
-  Future<void> markFailed(String id, String error) async {}
+  Future<void> markFailed(String id, String error, {int? overrideAttempts}) async {}
   @override
   Future<void> markPendingForRetry(String id) async {}
   @override
   Future<void> reactivateForResend(String transcriptId) async {}
   @override
   Future<int> recoverStaleSending() async => 0;
+  @override
+  Future<List<SyncQueueItem>> getFailedItems({int? maxAttempts}) async => [];
 }
 
 // ── _FixedConfigService ───────────────────────────────────────────────────────

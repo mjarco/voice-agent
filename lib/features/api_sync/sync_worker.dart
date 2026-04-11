@@ -132,7 +132,10 @@ class SyncWorker {
         unawaited(audioFeedbackService.playSuccess());
         _handleReply(body);
       case ApiPermanentFailure(:final message):
-        await storageService.markFailed(item.id, message);
+        // Exhaust retry budget — permanent failures should never be auto-retried
+        await storageService.markFailed(
+          item.id, message, overrideAttempts: _maxRetries,
+        );
         unawaited(audioFeedbackService.playError());
       case ApiTransientFailure(:final reason):
         final attempts = item.attempts + 1; // markSending already incremented
@@ -165,19 +168,14 @@ class SyncWorker {
   }
 
   Future<void> _promoteEligibleRetries() async {
-    // Query failed items and check backoff eligibility
-    // For simplicity, we get all failed items via a raw approach:
-    // getPendingItems only returns pending, so we need to check failed items
-    // through the storage service. Since StorageService doesn't expose
-    // getFailedItems(), we rely on the fact that markPendingForRetry
-    // only transitions failed items. We call it for items we know failed
-    // from previous drain cycles.
-    //
-    // In practice, the worker tracks which items it failed and when,
-    // but for MVP we skip the promotion step and let failed items stay
-    // failed until an external trigger (e.g., user resend from history).
-    //
-    // TODO: Add getFailedItems() to StorageService for proper backoff promotion
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final failed = await storageService.getFailedItems(maxAttempts: _maxRetries);
+    for (final item in failed) {
+      final delay = backoffForAttempt(item.attempts);
+      if ((item.lastAttemptAt ?? 0) + delay.inMilliseconds <= now) {
+        await storageService.markPendingForRetry(item.id);
+      }
+    }
   }
 
   static Duration backoffForAttempt(int attempt) {

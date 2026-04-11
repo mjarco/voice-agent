@@ -20,8 +20,9 @@ abstract class StorageService {
   Future<List<SyncQueueItem>> getPendingItems();
   Future<void> markSending(String id);
   Future<void> markSent(String id); // deletes the sync_queue row
-  Future<void> markFailed(String id, String error);
+  Future<void> markFailed(String id, String error, {int? overrideAttempts});
   Future<void> markPendingForRetry(String id);
+  Future<List<SyncQueueItem>> getFailedItems({int? maxAttempts});
 
   /// Reactivate a failed sync queue entry for the given transcript.
   /// Resets status to pending, attempts to 0, clears error.
