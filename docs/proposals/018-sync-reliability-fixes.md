@@ -1,6 +1,6 @@
 # Proposal 018 — Sync Reliability Fixes
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P005 (API Sync) — `SyncWorker` and sync queue must exist; merged
