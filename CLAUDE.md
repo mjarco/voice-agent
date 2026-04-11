@@ -89,6 +89,14 @@ lib/
   than format conversion + platform call, the logic belongs in the controller or
   domain layer.
 
+### Architecture Decision Records (ADRs)
+
+Architectural decisions are tracked in `docs/decisions/` as ADR files. The `/proposal-architectural-review` skill checks proposals against existing ADRs and drafts new ADRs for undocumented decisions.
+
+- ADR naming: `ADR-{NNN}-{short-description}.md`
+- ADRs are committed alongside the proposal they originate from (Phase B)
+- When modifying code, check relevant ADRs for constraints
+
 ---
 
 ## Development Workflow
@@ -100,25 +108,30 @@ Every feature or behavior change follows this pipeline **in order**:
 #### Phase A — Proposal (design before code)
 
 ```
-A1. /create-proposal          — write proposal in docs/proposals/{NNN}-{name}.md
-A2. /proposal-review          — review proposal
-A3. Fix review issues          — address all P0/P1 issues found by the reviewer
-A4. Repeat A2–A3              — re-review until verdict: Ready
-A5. /codex-review             — ask Codex to review the proposal (round 1)
-A6. Fix Codex issues          — address issues raised by Codex
-A7. /codex-review (re-read)   — ask Codex to re-read the proposal and review again;
-                                explicitly instruct Codex to read the proposal file
-                                again before reviewing (it retains session context
-                                but must be told to re-read for the latest version)
-A8. Fix Codex issues          — address remaining issues from round 2
-A9. User approval             — wait for explicit user approval before proceeding
+A1. /create-proposal           — write proposal in docs/proposals/{NNN}-{name}.md
+A2. /proposal-review           — review proposal
+A3. Fix review issues           — address all P0/P1 issues found by the reviewer
+A4. Repeat A2–A3               — re-review until verdict: Ready
+A5. /codex-review              — ask Codex to review the proposal (round 1)
+A6. Fix Codex issues           — address issues raised by Codex
+A7. /codex-review (re-read)    — ask Codex to re-read the proposal and review again;
+                                 explicitly instruct Codex to read the proposal file
+                                 again before reviewing (it retains session context
+                                 but must be told to re-read for the latest version)
+A8. Fix Codex issues           — address remaining issues from round 2
+A9. /proposal-architectural-review — ADR compliance + new ADR drafts for undocumented
+                                     decisions introduced by the proposal
+A10. Fix architectural findings — fix all ADR violations before proceeding
+A11. User approval             — wait for explicit user approval of proposal + ADRs
+A12. /proposal-review          — post-architecture review to catch inconsistencies
+                                 introduced by architectural fixes
 ```
 
-#### Phase B — Proposal lands on main
+#### Phase B — Proposal and ADRs land on main
 
 ```
 B1. Create a branch for the proposal document (e.g. docs/p{NNN}-proposal)
-B2. Commit the proposal file
+B2. Commit the proposal file + all new/updated ADR files (docs/decisions/)
 B3. Push and create a PR
 B4. Merge the PR
 ```
@@ -152,8 +165,12 @@ D8. Approve and merge the PR to main
 - **Avoid generating commands that require human interaction.** Use non-interactive
   flags, write multiline content to temp files, and prefer `gh pr merge --auto`
   or direct merge over workflows that block on manual approval.
-- Phase A (proposal) requires user approval at step A9 — this is the only
-  mandatory human checkpoint. Everything after A9 is autonomous.
+- Phase A (proposal) requires user approval at step A11 — this is the only
+  mandatory human checkpoint. Everything after A11 is autonomous.
+
+#### Phase E — Close out
+
+After all tasks are merged, update proposal status to `Implemented`.
 
 **Not needed for:** bug fixes that don't change intended behavior, refactoring
 with no behavioral impact, test-only changes, documentation fixes. For these,
