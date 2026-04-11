@@ -12,6 +12,7 @@ import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
@@ -212,6 +213,34 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('hf-segment-list')), findsOneWidget);
+    });
+  });
+
+  group('agent reply clearing', () {
+    testWidgets('HandsFreeCapturing clears latestAgentReplyProvider',
+        (tester) async {
+      final engine = FakeHfEngine();
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...baseOverrides(engine),
+            latestAgentReplyProvider.overrideWith((_) => 'stale reply'),
+          ],
+          child: Builder(builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return const App();
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(container.read(latestAgentReplyProvider), 'stale reply');
+
+      engine.emit(const EngineCapturing());
+      await tester.pumpAndSettle();
+
+      expect(container.read(latestAgentReplyProvider), isNull);
     });
   });
 

@@ -399,6 +399,106 @@ void main() {
     });
   });
 
+  group('onAgentReply callback', () {
+    test('is called with message on ApiSuccess', () async {
+      String? receivedReply;
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+        connectivityService: connectivity,
+        ttsService: tts,
+        getTtsEnabled: () => ttsEnabled,
+        audioFeedbackService: _StubAudioFeedbackService(),
+        onAgentReply: (reply) => receivedReply = reply,
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"message": "hello"}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(receivedReply, 'hello');
+    });
+
+    test('is called even when ttsEnabled is false', () async {
+      String? receivedReply;
+      ttsEnabled = false;
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+        connectivityService: connectivity,
+        ttsService: tts,
+        getTtsEnabled: () => ttsEnabled,
+        audioFeedbackService: _StubAudioFeedbackService(),
+        onAgentReply: (reply) => receivedReply = reply,
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"message": "hello"}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(receivedReply, 'hello');
+      expect(tts.log, isEmpty); // TTS not called
+    });
+
+    test('is NOT called on ApiPermanentFailure', () async {
+      String? receivedReply;
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+        connectivityService: connectivity,
+        ttsService: tts,
+        getTtsEnabled: () => ttsEnabled,
+        audioFeedbackService: _StubAudioFeedbackService(),
+        onAgentReply: (reply) => receivedReply = reply,
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiPermanentFailure(statusCode: 400, message: 'Bad');
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(receivedReply, isNull);
+    });
+
+    test('is NOT called when success body has no message field', () async {
+      String? receivedReply;
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+        connectivityService: connectivity,
+        ttsService: tts,
+        getTtsEnabled: () => ttsEnabled,
+        audioFeedbackService: _StubAudioFeedbackService(),
+        onAgentReply: (reply) => receivedReply = reply,
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"status": "ok"}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(receivedReply, isNull);
+    });
+  });
+
   group('backoffForAttempt', () {
     test('attempt 0 returns zero', () {
       expect(SyncWorker.backoffForAttempt(0), Duration.zero);

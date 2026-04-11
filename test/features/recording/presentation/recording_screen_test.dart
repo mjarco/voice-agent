@@ -11,6 +11,7 @@ import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
@@ -224,6 +225,63 @@ void main() {
       expect(find.text('Open Settings'), findsNothing);
     },
   );
+
+  group('Agent reply card', () {
+    testWidgets('shows card when latestAgentReplyProvider is non-null',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides,
+            apiUrlConfiguredProvider.overrideWithValue(true),
+            latestAgentReplyProvider.overrideWith((_) => 'Agent reply text'),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('agent-reply-card')), findsOneWidget);
+      expect(find.text('Agent reply text'), findsOneWidget);
+    });
+
+    testWidgets('hides card when latestAgentReplyProvider is null',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides,
+            apiUrlConfiguredProvider.overrideWithValue(true),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('agent-reply-card')), findsNothing);
+    });
+
+    testWidgets('dismiss button clears the reply card', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides,
+            apiUrlConfiguredProvider.overrideWithValue(true),
+            latestAgentReplyProvider.overrideWith((_) => 'Dismiss me'),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('agent-reply-card')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('agent-reply-dismiss')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('agent-reply-card')), findsNothing);
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
