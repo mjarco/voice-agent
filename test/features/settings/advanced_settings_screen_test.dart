@@ -149,7 +149,7 @@ void main() {
       // Scroll until the tile is visible in the settings ListView
       await tester.drag(
         find.byType(ListView).last,
-        const Offset(0, -400),
+        const Offset(0, -500),
       );
       await tester.pumpAndSettle();
 
