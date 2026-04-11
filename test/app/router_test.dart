@@ -38,6 +38,8 @@ class _StubStorageService implements StorageService {
     int limit = 20,
     int offset = 0,
   }) async => [];
+  @override
+  Future<int> recoverStaleSending() async => 0;
 }
 
 void main() {

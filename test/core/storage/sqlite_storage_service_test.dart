@@ -351,4 +351,74 @@ void main() {
       expect(items.length, 1, reason: 'Should never create duplicates');
     });
   });
+
+  group('recoverStaleSending', () {
+    final transcript = Transcript(
+      id: 'tx-stale',
+      text: 'stale test',
+      deviceId: 'dev',
+      createdAt: 1000,
+    );
+
+    test('resets sending items to pending', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-stale');
+
+      final items = await storage.getPendingItems();
+      final queueId = items.first.id;
+
+      await storage.markSending(queueId);
+
+      // Verify it's no longer pending
+      expect(await storage.getPendingItems(), isEmpty);
+
+      // Recover
+      final count = await storage.recoverStaleSending();
+      expect(count, 1);
+
+      // Now it's pending again
+      final recovered = await storage.getPendingItems();
+      expect(recovered.length, 1);
+      expect(recovered.first.status, SyncStatus.pending);
+      expect(recovered.first.errorMessage, isNull);
+    });
+
+    test('does not affect pending or failed items', () async {
+      await storage.saveTranscript(transcript);
+      final t2 = Transcript(id: 'tx-2', text: 'two', deviceId: 'dev', createdAt: 2000);
+      final t3 = Transcript(id: 'tx-3', text: 'three', deviceId: 'dev', createdAt: 3000);
+      await storage.saveTranscript(t2);
+      await storage.saveTranscript(t3);
+
+      await storage.enqueue('tx-stale'); // will stay pending
+      await storage.enqueue('tx-2'); // will become failed
+      await storage.enqueue('tx-3'); // will become sending (target for recovery)
+
+      final items = await storage.getPendingItems();
+      // Mark tx-2 as failed
+      final q2 = items.firstWhere((i) => i.transcriptId == 'tx-2');
+      await storage.markSending(q2.id);
+      await storage.markFailed(q2.id, 'err');
+
+      // Mark tx-3 as sending
+      final items2 = await storage.getPendingItems();
+      final q3 = items2.firstWhere((i) => i.transcriptId == 'tx-3');
+      await storage.markSending(q3.id);
+
+      final count = await storage.recoverStaleSending();
+      expect(count, 1); // only tx-3
+
+      // tx-stale still pending (unchanged)
+      final pending = await storage.getPendingItems();
+      expect(pending.length, 2); // tx-stale (original) + tx-3 (recovered)
+    });
+
+    test('returns 0 when no sending items exist', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-stale');
+
+      final count = await storage.recoverStaleSending();
+      expect(count, 0);
+    });
+  });
 }

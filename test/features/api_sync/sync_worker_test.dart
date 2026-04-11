@@ -125,6 +125,9 @@ class FakeStorageService implements StorageService {
 
   @override
   Future<void> reactivateForResend(String transcriptId) async {}
+
+  @override
+  Future<int> recoverStaleSending() async => 0;
 }
 
 class FakeApiClient extends ApiClient {

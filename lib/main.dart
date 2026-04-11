@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/app/app.dart';
@@ -8,6 +9,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final storage = await SqliteStorageService.initialize();
+
+  final recovered = await storage.recoverStaleSending();
+  if (kDebugMode && recovered > 0) {
+    debugPrint('Recovered $recovered stale sending items');
+  }
 
   runApp(
     ProviderScope(

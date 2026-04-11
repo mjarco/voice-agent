@@ -40,6 +40,8 @@ class _StubStorageService implements StorageService {
   Future<void> markPendingForRetry(String id) async {}
   @override
   Future<void> reactivateForResend(String transcriptId) async {}
+  @override
+  Future<int> recoverStaleSending() async => 0;
 }
 
 class _NoOpConnectivity extends ConnectivityService {
