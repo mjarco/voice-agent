@@ -1,6 +1,6 @@
 # Proposal 017 — Personal Agent Integration
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P005 (API Sync) — `SyncWorker._drain()` with `_handleReply()` response handling must exist; merged
