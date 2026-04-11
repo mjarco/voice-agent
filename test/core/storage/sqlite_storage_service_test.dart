@@ -352,6 +352,167 @@ void main() {
     });
   });
 
+  group('markFailed with overrideAttempts', () {
+    final transcript = Transcript(
+      id: 'tx-override',
+      text: 'override test',
+      deviceId: 'dev',
+      createdAt: 1000,
+    );
+
+    test('sets attempts to overrideAttempts value', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-override');
+
+      final items = await storage.getPendingItems();
+      final queueId = items.first.id;
+
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'permanent', overrideAttempts: 10);
+
+      final failed = await storage.getFailedItems();
+      expect(failed.length, 1);
+      expect(failed.first.attempts, 10);
+      expect(failed.first.errorMessage, 'permanent');
+    });
+
+    test('without overrideAttempts preserves current attempts', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-override');
+
+      final items = await storage.getPendingItems();
+      final queueId = items.first.id;
+
+      await storage.markSending(queueId); // attempts becomes 1
+      await storage.markFailed(queueId, 'transient error');
+
+      final failed = await storage.getFailedItems();
+      expect(failed.length, 1);
+      expect(failed.first.attempts, 1); // unchanged by markFailed
+    });
+  });
+
+  group('markPendingForRetry clears error_message', () {
+    final transcript = Transcript(
+      id: 'tx-retry',
+      text: 'retry test',
+      deviceId: 'dev',
+      createdAt: 1000,
+    );
+
+    test('error_message is null after markPendingForRetry', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-retry');
+
+      final items = await storage.getPendingItems();
+      final queueId = items.first.id;
+
+      await storage.markSending(queueId);
+      await storage.markFailed(queueId, 'some error');
+
+      // Verify error is set
+      final failed = await storage.getFailedItems();
+      expect(failed.first.errorMessage, 'some error');
+
+      await storage.markPendingForRetry(queueId);
+
+      final pending = await storage.getPendingItems();
+      expect(pending.length, 1);
+      expect(pending.first.errorMessage, isNull);
+    });
+  });
+
+  group('getFailedItems', () {
+    final transcript = Transcript(
+      id: 'tx-fail',
+      text: 'fail test',
+      deviceId: 'dev',
+      createdAt: 1000,
+    );
+
+    test('returns only failed items', () async {
+      await storage.saveTranscript(transcript);
+      final t2 = Transcript(id: 'tx-2', text: 'two', deviceId: 'dev', createdAt: 2000);
+      await storage.saveTranscript(t2);
+
+      await storage.enqueue('tx-fail');
+      await storage.enqueue('tx-2');
+
+      final items = await storage.getPendingItems();
+      // Fail only the first
+      final q1 = items.firstWhere((i) => i.transcriptId == 'tx-fail');
+      await storage.markSending(q1.id);
+      await storage.markFailed(q1.id, 'err');
+
+      final failed = await storage.getFailedItems();
+      expect(failed.length, 1);
+      expect(failed.first.transcriptId, 'tx-fail');
+    });
+
+    test('respects maxAttempts filter', () async {
+      await storage.saveTranscript(transcript);
+      final t2 = Transcript(id: 'tx-2', text: 'two', deviceId: 'dev', createdAt: 2000);
+      await storage.saveTranscript(t2);
+
+      await storage.enqueue('tx-fail');
+      await storage.enqueue('tx-2');
+
+      final items = await storage.getPendingItems();
+      final q1 = items.firstWhere((i) => i.transcriptId == 'tx-fail');
+      final q2 = items.firstWhere((i) => i.transcriptId == 'tx-2');
+
+      // Fail q1 with low attempts (retryable)
+      await storage.markSending(q1.id);
+      await storage.markFailed(q1.id, 'transient');
+
+      // Fail q2 with overrideAttempts=10 (permanent)
+      await storage.markSending(q2.id);
+      await storage.markFailed(q2.id, 'permanent', overrideAttempts: 10);
+
+      // With maxAttempts=10 → only q1 (attempts=1 < 10) is returned
+      final retryable = await storage.getFailedItems(maxAttempts: 10);
+      expect(retryable.length, 1);
+      expect(retryable.first.transcriptId, 'tx-fail');
+
+      // Without maxAttempts → both returned
+      final all = await storage.getFailedItems();
+      expect(all.length, 2);
+    });
+
+    test('orders by last_attempt_at ascending', () async {
+      await storage.saveTranscript(transcript);
+      final t2 = Transcript(id: 'tx-2', text: 'two', deviceId: 'dev', createdAt: 2000);
+      await storage.saveTranscript(t2);
+
+      await storage.enqueue('tx-fail');
+      await storage.enqueue('tx-2');
+
+      final items = await storage.getPendingItems();
+      final q1 = items.firstWhere((i) => i.transcriptId == 'tx-fail');
+      final q2 = items.firstWhere((i) => i.transcriptId == 'tx-2');
+
+      // Fail q2 first, then q1 — q2 should appear first in results
+      await storage.markSending(q2.id);
+      await storage.markFailed(q2.id, 'err');
+      await Future.delayed(const Duration(milliseconds: 10));
+      await storage.markSending(q1.id);
+      await storage.markFailed(q1.id, 'err');
+
+      final failed = await storage.getFailedItems();
+      expect(failed.length, 2);
+      expect(failed[0].transcriptId, 'tx-2'); // earlier last_attempt_at
+      expect(failed[1].transcriptId, 'tx-fail');
+    });
+
+    test('returns empty when no failed items', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-fail');
+
+      final failed = await storage.getFailedItems();
+      expect(failed, isEmpty);
+    });
+  });
+
   group('recoverStaleSending', () {
     final transcript = Transcript(
       id: 'tx-stale',

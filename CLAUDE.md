@@ -446,7 +446,7 @@ TranscriptResult {
 
 Passed via GoRouter `extra` to `/record/review`.
 
-### StorageService Contract (004 → 003, 005, 007)
+### StorageService Contract (004 → 003, 005, 007, 018)
 
 ```
 StorageService {
@@ -458,9 +458,11 @@ StorageService {
   getPendingItems() → List<SyncQueueItem>
   markSending(String id)
   markSent(String id)            // DELETES the sync_queue row
-  markFailed(String id, String error)
-  markPendingForRetry(String id)
+  markFailed(String id, String error, {int? overrideAttempts})  // P018-T2
+  markPendingForRetry(String id) // clears error_message (P018-T2)
+  getFailedItems({int? maxAttempts}) → List<SyncQueueItem>      // P018-T2
   getDeviceId() → String
+  recoverStaleSending() → int   // P018-T1: resets sending→pending
 }
 ```
 

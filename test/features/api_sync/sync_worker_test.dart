@@ -80,8 +80,8 @@ class FakeStorageService implements StorageService {
   }
 
   @override
-  Future<void> markFailed(String id, String error) async {
-    calls.add('markFailed:$id:$error');
+  Future<void> markFailed(String id, String error, {int? overrideAttempts}) async {
+    calls.add('markFailed:$id:$error${overrideAttempts != null ? ':override=$overrideAttempts' : ''}');
     final idx = queueItems.indexWhere((i) => i.id == id);
     if (idx >= 0) {
       final item = queueItems[idx];
@@ -89,7 +89,7 @@ class FakeStorageService implements StorageService {
         id: item.id,
         transcriptId: item.transcriptId,
         status: SyncStatus.failed,
-        attempts: item.attempts,
+        attempts: overrideAttempts ?? item.attempts,
         lastAttemptAt: item.lastAttemptAt,
         errorMessage: error,
         createdAt: item.createdAt,
@@ -109,9 +109,19 @@ class FakeStorageService implements StorageService {
         status: SyncStatus.pending,
         attempts: item.attempts,
         lastAttemptAt: item.lastAttemptAt,
+        errorMessage: null,
         createdAt: item.createdAt,
       );
     }
+  }
+
+  @override
+  Future<List<SyncQueueItem>> getFailedItems({int? maxAttempts}) async {
+    return queueItems.where((i) {
+      if (i.status != SyncStatus.failed) return false;
+      if (maxAttempts != null && i.attempts >= maxAttempts) return false;
+      return true;
+    }).toList();
   }
 
   @override
@@ -499,6 +509,127 @@ void main() {
       worker.stop();
 
       expect(receivedReply, isNull);
+    });
+  });
+
+  group('permanent failure discrimination', () {
+    test('permanent failure sets overrideAttempts to exhaust budget', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiPermanentFailure(
+        statusCode: 400,
+        message: 'Validation error',
+      );
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      // Verify markFailed was called with overrideAttempts
+      expect(
+        storage.calls.any((c) => c.contains('override=10')),
+        isTrue,
+      );
+      // Item should have attempts=10
+      expect(storage.queueItems.first.attempts, 10);
+    });
+
+    test('permanent failure is excluded from retry promotion', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiPermanentFailure(
+        statusCode: 400,
+        message: 'Bad request',
+      );
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      // After drain, item is failed with attempts=10
+      expect(storage.queueItems.first.status, SyncStatus.failed);
+      expect(storage.queueItems.first.attempts, 10);
+
+      // getFailedItems with maxAttempts=10 should exclude it
+      final retryable = await storage.getFailedItems(maxAttempts: 10);
+      expect(retryable, isEmpty);
+
+      worker.stop();
+    });
+
+    test('transient failure without overrideAttempts leaves retry budget intact', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiTransientFailure(reason: 'timeout');
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      // Should NOT have overrideAttempts in the call
+      expect(
+        storage.calls.any((c) => c.contains('override=')),
+        isFalse,
+      );
+      // Attempts = 1 (from markSending increment)
+      expect(storage.queueItems.first.attempts, 1);
+    });
+  });
+
+  group('retry promotion (_promoteEligibleRetries)', () {
+    test('promotes failed item whose backoff has elapsed', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      // Manually simulate a failed item with old lastAttemptAt
+      final idx = storage.queueItems.indexWhere((i) => i.transcriptId == 'tx-1');
+      storage.queueItems[idx] = SyncQueueItem(
+        id: storage.queueItems[idx].id,
+        transcriptId: 'tx-1',
+        status: SyncStatus.failed,
+        attempts: 1,
+        lastAttemptAt: DateTime.now().millisecondsSinceEpoch - 60000, // 60s ago
+        errorMessage: 'timeout',
+        createdAt: 1000,
+      );
+
+      // Don't let drain actually re-process it — just check promotion
+      apiClient.nextResult = const ApiSuccess();
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      // Should have been promoted to pending
+      expect(
+        storage.calls.any((c) => c.startsWith('markPendingForRetry:')),
+        isTrue,
+      );
+    });
+
+    test('does not promote item whose backoff has not elapsed', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      // Simulate failed item with very recent lastAttemptAt
+      final idx = storage.queueItems.indexWhere((i) => i.transcriptId == 'tx-1');
+      storage.queueItems[idx] = SyncQueueItem(
+        id: storage.queueItems[idx].id,
+        transcriptId: 'tx-1',
+        status: SyncStatus.failed,
+        attempts: 1,
+        lastAttemptAt: DateTime.now().millisecondsSinceEpoch, // just now
+        errorMessage: 'timeout',
+        createdAt: 1000,
+      );
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      // Should NOT have been promoted
+      expect(
+        storage.calls.any((c) => c.startsWith('markPendingForRetry:')),
+        isFalse,
+      );
     });
   });
 

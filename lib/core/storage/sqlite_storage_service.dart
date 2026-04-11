@@ -208,13 +208,17 @@ class SqliteStorageService implements StorageService {
   }
 
   @override
-  Future<void> markFailed(String id, String error) async {
+  Future<void> markFailed(String id, String error, {int? overrideAttempts}) async {
+    final values = <String, Object?>{
+      'status': SyncStatus.failed.name,
+      'error_message': error,
+    };
+    if (overrideAttempts != null) {
+      values['attempts'] = overrideAttempts;
+    }
     await _db.update(
       'sync_queue',
-      {
-        'status': SyncStatus.failed.name,
-        'error_message': error,
-      },
+      values,
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -224,10 +228,25 @@ class SqliteStorageService implements StorageService {
   Future<void> markPendingForRetry(String id) async {
     await _db.update(
       'sync_queue',
-      {'status': SyncStatus.pending.name},
+      {'status': SyncStatus.pending.name, 'error_message': null},
       where: 'id = ? AND status = ?',
       whereArgs: [id, SyncStatus.failed.name],
     );
+  }
+
+  @override
+  Future<List<SyncQueueItem>> getFailedItems({int? maxAttempts}) async {
+    final rows = await _db.query(
+      'sync_queue',
+      where: maxAttempts != null
+          ? 'status = ? AND attempts < ?'
+          : 'status = ?',
+      whereArgs: maxAttempts != null
+          ? [SyncStatus.failed.name, maxAttempts]
+          : [SyncStatus.failed.name],
+      orderBy: 'last_attempt_at ASC',
+    );
+    return rows.map(SyncQueueItem.fromMap).toList();
   }
 
   @override
