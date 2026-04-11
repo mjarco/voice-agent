@@ -72,6 +72,7 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-DATA-003](ADR-DATA-003-plain-dart-models.md) | Plain Dart models with manual serialization | Accepted |
 | [ADR-DATA-004](ADR-DATA-004-credential-storage-split.md) | Credential storage split | Accepted |
 | [ADR-DATA-005](ADR-DATA-005-device-id-uuidv4.md) | Device ID as UUIDv4 in SharedPreferences | Accepted |
+| [ADR-DATA-006](ADR-DATA-006-permanent-failure-attempt-override.md) | Permanent failure discrimination via attempt count override | Accepted |
 
 ### NET — Network & Sync
 
