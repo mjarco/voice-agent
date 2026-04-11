@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
@@ -46,11 +47,19 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       unawaited(ref.read(handsFreeControllerProvider.notifier).reloadVadConfig());
     });
 
+    // Clear agent reply when hands-free starts capturing
+    ref.listen<HandsFreeSessionState>(handsFreeControllerProvider, (prev, next) {
+      if (next is HandsFreeCapturing) {
+        ref.read(latestAgentReplyProvider.notifier).state = null;
+      }
+    });
+
     final recState = ref.watch(recordingControllerProvider);
     final hfState = ref.watch(handsFreeControllerProvider);
     final recCtrl = ref.read(recordingControllerProvider.notifier);
     final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
     final isApiConfigured = ref.watch(apiUrlConfiguredProvider);
+    final agentReply = ref.watch(latestAgentReplyProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Record')),
@@ -73,6 +82,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
               child: _buildRecordingArea(context, recState, recCtrl),
             ),
           ),
+          _AgentReplyCard(reply: agentReply, onDismiss: () {
+            ref.read(latestAgentReplyProvider.notifier).state = null;
+          }),
           _HandsFreeSection(
             hfState: hfState,
             onRetry: () => hfCtrl.startSession(),
@@ -129,6 +141,46 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           ],
         ),
     };
+  }
+}
+
+// ── Agent reply card ─────────────────────────────────────────────────────────
+
+class _AgentReplyCard extends StatelessWidget {
+  const _AgentReplyCard({required this.reply, required this.onDismiss});
+
+  final String? reply;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      child: reply != null
+          ? Card(
+              key: const Key('agent-reply-card'),
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: Text(reply!)),
+                      IconButton(
+                        key: const Key('agent-reply-dismiss'),
+                        icon: const Icon(Icons.close),
+                        onPressed: onDismiss,
+                        tooltip: 'Dismiss agent reply',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : const SizedBox.shrink(),
+    );
   }
 }
 
@@ -306,6 +358,7 @@ class _MicButtonState extends ConsumerState<_MicButton> {
 
     if (recState is RecordingIdle) {
       if (hfState is HandsFreeStopping) return; // no-op — wait for stop
+      ref.read(latestAgentReplyProvider.notifier).state = null;
       await ref.read(ttsServiceProvider).stop();
       await hfCtrl.suspendForManualRecording();
       await recCtrl.startRecording();
@@ -327,6 +380,7 @@ class _MicButtonState extends ConsumerState<_MicButton> {
     _longPressActive = true;
     setState(() => _isPressAndHold = true);
 
+    ref.read(latestAgentReplyProvider.notifier).state = null;
     final recCtrl = ref.read(recordingControllerProvider.notifier);
     final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
     await ref.read(ttsServiceProvider).stop();

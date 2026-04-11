@@ -13,6 +13,7 @@ import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
@@ -278,6 +279,64 @@ void main() {
       // silentOnEmpty → RecordingIdle, no error
       expect(find.byIcon(Icons.error), findsNothing);
       expect(find.text('Tap to record'), findsOneWidget);
+    });
+  });
+
+  group('Agent reply clearing', () {
+    testWidgets('tap clears latestAgentReplyProvider', (tester) async {
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides,
+            latestAgentReplyProvider.overrideWith((_) => 'old reply'),
+          ],
+          child: Builder(builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return const App();
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify reply card is visible
+      expect(find.byKey(const Key('agent-reply-card')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('record-button')));
+      await tester.pumpAndSettle();
+
+      expect(container.read(latestAgentReplyProvider), isNull);
+    });
+
+    testWidgets('long-press clears latestAgentReplyProvider', (tester) async {
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides,
+            latestAgentReplyProvider.overrideWith((_) => 'old reply'),
+          ],
+          child: Builder(builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return const App();
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('agent-reply-card')), findsOneWidget);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const Key('record-button'))),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+
+      expect(container.read(latestAgentReplyProvider), isNull);
+
+      await gesture.up();
+      await tester.pumpAndSettle();
     });
   });
 

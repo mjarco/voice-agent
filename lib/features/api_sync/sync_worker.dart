@@ -19,6 +19,7 @@ class SyncWorker {
     required this.ttsService,
     required this.getTtsEnabled,
     required this.audioFeedbackService,
+    this.onAgentReply,
   });
 
   final StorageService storageService;
@@ -28,6 +29,7 @@ class SyncWorker {
   final TtsService ttsService;
   final bool Function() getTtsEnabled;
   final AudioFeedbackService audioFeedbackService;
+  final void Function(String reply)? onAgentReply;
 
   SyncWorkerState _state = SyncWorkerState.idle;
   SyncWorkerState get state => _state;
@@ -128,7 +130,7 @@ class SyncWorker {
       case ApiSuccess(:final body):
         await storageService.markSent(item.id);
         unawaited(audioFeedbackService.playSuccess());
-        _maybeSpeak(body);
+        _handleReply(body);
       case ApiPermanentFailure(:final message):
         await storageService.markFailed(item.id, message);
         unawaited(audioFeedbackService.playError());
@@ -146,15 +148,17 @@ class SyncWorker {
     }
   }
 
-  void _maybeSpeak(String? body) {
-    if (!getTtsEnabled()) return;
+  void _handleReply(String? body) {
     if (body == null) return;
     try {
       final json = jsonDecode(body) as Map<String, dynamic>;
       final message = json['message'] as String?;
       if (message == null || message.isEmpty) return;
       final language = json['language'] as String?;
-      unawaited(ttsService.stop().then((_) => ttsService.speak(message, languageCode: language)));
+      if (getTtsEnabled()) {
+        unawaited(ttsService.stop().then((_) => ttsService.speak(message, languageCode: language)));
+      }
+      onAgentReply?.call(message);
     } catch (_) {
       // Non-JSON or unexpected shape — stay silent.
     }

@@ -3,6 +3,7 @@ import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
@@ -29,6 +30,9 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     ttsService: ref.watch(ttsServiceProvider),
     getTtsEnabled: () => ref.read(appConfigProvider).ttsEnabled,
     audioFeedbackService: ref.watch(audioFeedbackServiceProvider),
+    onAgentReply: (reply) {
+      ref.read(latestAgentReplyProvider.notifier).state = reply;
+    },
   );
 
   worker.start();
