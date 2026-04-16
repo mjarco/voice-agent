@@ -226,6 +226,7 @@ void main() {
       ttsService: tts,
       getTtsEnabled: () => ttsEnabled,
       audioFeedbackService: _StubAudioFeedbackService(),
+      isAppForegrounded: () => true,
     );
   });
 
@@ -312,6 +313,7 @@ void main() {
         ttsService: tts,
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
+        isAppForegrounded: () => true,
       );
 
       await storage.saveTranscript(transcript);
@@ -424,6 +426,7 @@ void main() {
         ttsService: tts,
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
+        isAppForegrounded: () => true,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -449,6 +452,7 @@ void main() {
         ttsService: tts,
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
+        isAppForegrounded: () => true,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -474,6 +478,7 @@ void main() {
         ttsService: tts,
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
+        isAppForegrounded: () => true,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -498,6 +503,7 @@ void main() {
         ttsService: tts,
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
+        isAppForegrounded: () => true,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -631,6 +637,73 @@ void main() {
         storage.calls.any((c) => c.startsWith('markPendingForRetry:')),
         isFalse,
       );
+    });
+  });
+
+  group('foreground gating', () {
+    test('drain skips processing when app is backgrounded', () async {
+      bool foregrounded = false;
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+        connectivityService: connectivity,
+        ttsService: tts,
+        getTtsEnabled: () => ttsEnabled,
+        audioFeedbackService: _StubAudioFeedbackService(),
+        isAppForegrounded: () => foregrounded,
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Item should still be pending — drain was gated
+      expect(storage.queueItems.first.status, SyncStatus.pending);
+      expect(
+        storage.calls.any((c) => c.startsWith('markSending:')),
+        isFalse,
+      );
+
+      worker.stop();
+    });
+
+    test('drain processes items when app returns to foreground', () async {
+      bool foregrounded = false;
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+        connectivityService: connectivity,
+        ttsService: tts,
+        getTtsEnabled: () => ttsEnabled,
+        audioFeedbackService: _StubAudioFeedbackService(),
+        isAppForegrounded: () => foregrounded,
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiSuccess();
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Still pending
+      expect(storage.queueItems.first.status, SyncStatus.pending);
+
+      // Simulate foreground
+      foregrounded = true;
+      await Future.delayed(const Duration(seconds: 6));
+
+      // Now processed
+      expect(
+        storage.calls.any((c) => c.startsWith('markSent:')),
+        isTrue,
+      );
+
+      worker.stop();
     });
   });
 

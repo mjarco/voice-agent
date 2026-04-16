@@ -8,6 +8,7 @@ import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/providers/activation_providers.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_exception.dart';
@@ -56,6 +57,15 @@ class RecordingController extends StateNotifier<RecordingState>
       return;
     }
 
+    // Pause wake word detection so Porcupine releases the microphone.
+    final completer = Completer<void>();
+    _ref.read(wakeWordPauseRequestProvider.notifier).state = completer;
+    try {
+      await completer.future.timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // Timeout or error — proceed anyway; Porcupine may not be running.
+    }
+
     try {
       if (!await _sttService.isModelLoaded()) {
         await _sttService.loadModel();
@@ -74,6 +84,7 @@ class RecordingController extends StateNotifier<RecordingState>
       state = const RecordingState.recording();
     } catch (e) {
       _cleanupSubscription();
+      _clearWakeWordPauseRequest();
       state = RecordingState.error('Failed to start recording: $e');
     }
   }
@@ -82,6 +93,7 @@ class RecordingController extends StateNotifier<RecordingState>
   /// If [silentOnEmpty] is true and the transcription result is empty,
   /// emits [RecordingIdle] without an error (used for press-and-hold).
   Future<void> stopAndTranscribe({bool silentOnEmpty = false}) async {
+    _clearWakeWordPauseRequest();
     try {
       final recordingResult = await _service.stop();
       _cleanupSubscription();
@@ -146,6 +158,7 @@ class RecordingController extends StateNotifier<RecordingState>
   }
 
   Future<void> cancelRecording() async {
+    _clearWakeWordPauseRequest();
     try {
       await _service.cancel();
     } catch (_) {
@@ -162,6 +175,10 @@ class RecordingController extends StateNotifier<RecordingState>
   void _cleanupSubscription() {
     _elapsedSub?.cancel();
     _elapsedSub = null;
+  }
+
+  void _clearWakeWordPauseRequest() {
+    _ref.read(wakeWordPauseRequestProvider.notifier).state = null;
   }
 
   @override

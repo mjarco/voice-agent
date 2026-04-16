@@ -19,6 +19,7 @@ class SyncWorker {
     required this.ttsService,
     required this.getTtsEnabled,
     required this.audioFeedbackService,
+    required this.isAppForegrounded,
     this.onAgentReply,
   });
 
@@ -29,6 +30,7 @@ class SyncWorker {
   final TtsService ttsService;
   final bool Function() getTtsEnabled;
   final AudioFeedbackService audioFeedbackService;
+  final bool Function() isAppForegrounded;
   final void Function(String reply)? onAgentReply;
 
   SyncWorkerState _state = SyncWorkerState.idle;
@@ -95,6 +97,7 @@ class SyncWorker {
 
   Future<void> _drain() async {
     if (_state != SyncWorkerState.running) return;
+    if (!isAppForegrounded()) return;
 
     // Check if API URL is configured
     final url = apiConfig.url;
