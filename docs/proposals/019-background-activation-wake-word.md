@@ -1,6 +1,6 @@
 # Proposal 019 — Background Activation & Wake Word Detection
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P012 (Hands-Free Local VAD) — `HandsFreeController`, `HandsFreeOrchestrator`, VAD pipeline must exist; merged
