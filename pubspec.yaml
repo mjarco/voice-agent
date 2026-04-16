@@ -24,6 +24,7 @@ dependencies:
   vad: ^0.0.7
   flutter_tts: ^4.2.5
   audioplayers: ^6.0.0
+  flutter_foreground_task: ^9.2.2
 
 dev_dependencies:
   flutter_test:
