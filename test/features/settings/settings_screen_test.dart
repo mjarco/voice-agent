@@ -252,6 +252,153 @@ void main() {
       expect(savedValue, isFalse);
     });
 
+    testWidgets('Background Activation section is visible', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _baseOverrides(),
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Background Activation'), findsOneWidget);
+      expect(find.byKey(const Key('background-listening-tile')), findsOneWidget);
+    });
+
+    testWidgets('Background listening defaults to off', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _baseOverrides(),
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      await tester.pumpAndSettle();
+
+      final tile = tester.widget<SwitchListTile>(
+          find.byKey(const Key('background-listening-tile')));
+      expect(tile.value, isFalse);
+    });
+
+    testWidgets('Wake word tile is disabled when background listening is off',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _baseOverrides(),
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      await tester.pumpAndSettle();
+
+      final tile = tester.widget<SwitchListTile>(
+          find.byKey(const Key('wake-word-tile')));
+      expect(tile.onChanged, isNull);
+    });
+
+    testWidgets('Wake word tile is enabled when background listening is on',
+        (tester) async {
+      final seededService = _SeededConfigService(
+        const AppConfig(backgroundListeningEnabled: true),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides(),
+            appConfigServiceProvider.overrideWithValue(seededService),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      await tester.pumpAndSettle();
+
+      final tile = tester.widget<SwitchListTile>(
+          find.byKey(const Key('wake-word-tile')));
+      expect(tile.onChanged, isNotNull);
+    });
+
+    testWidgets('Sensitivity slider is visible when wake word enabled',
+        (tester) async {
+      final seededService = _SeededConfigService(
+        const AppConfig(
+          backgroundListeningEnabled: true,
+          wakeWordEnabled: true,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides(),
+            appConfigServiceProvider.overrideWithValue(seededService),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -900));
+      await tester.pumpAndSettle();
+
+      final slider = find.byKey(const Key('wake-word-sensitivity-slider'));
+      expect(slider, findsOneWidget);
+      final sliderWidget = tester.widget<Slider>(slider);
+      expect(sliderWidget.value, 0.5);
+      expect(sliderWidget.onChanged, isNotNull);
+    });
+
+    testWidgets('Picovoice access key field is visible and persists on blur',
+        (tester) async {
+      String? savedKey;
+      final trackingService = _TrackingWakeWordConfigService(
+        onSavePicovoiceAccessKey: (k) => savedKey = k,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides(),
+            appConfigServiceProvider.overrideWithValue(trackingService),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+      await tester.pumpAndSettle();
+
+      final field = find.byKey(const Key('picovoice-key-field'));
+      expect(field, findsOneWidget);
+
+      await tester.tap(field);
+      await tester.pump();
+      await tester.enterText(field, 'test-access-key');
+
+      // Programmatically unfocus to trigger the Focus.onFocusChange callback
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump();
+
+      expect(savedKey, 'test-access-key');
+    });
+
     testWidgets('Groq API Key field saves on focus lost', (tester) async {
       String? savedKey;
       final trackingService = _TrackingConfigService(
@@ -327,4 +474,19 @@ class _TrackingAudioFeedbackConfigService extends AppConfigService {
   @override
   Future<void> saveAudioFeedbackEnabled(bool value) async =>
       onSaveAudioFeedbackEnabled(value);
+}
+
+class _TrackingWakeWordConfigService extends AppConfigService {
+  _TrackingWakeWordConfigService({
+    this.onSavePicovoiceAccessKey,
+  });
+
+  final void Function(String)? onSavePicovoiceAccessKey;
+
+  @override
+  Future<AppConfig> load() async => const AppConfig();
+
+  @override
+  Future<void> savePicovoiceAccessKey(String key) async =>
+      onSavePicovoiceAccessKey?.call(key);
 }
