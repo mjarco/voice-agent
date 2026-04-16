@@ -12,5 +12,13 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let controller = window?.rootViewController as? FlutterViewController {
+      ActivationBridge.shared.configure(with: controller.binaryMessenger)
+    }
+  }
+
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    super.applicationDidBecomeActive(application)
+    ActivationBridge.shared.checkPendingActivation()
   }
 }
