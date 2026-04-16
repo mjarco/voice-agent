@@ -15,6 +15,11 @@ class AppConfig {
     this.vadConfig = const VadConfig.defaults(),
     this.ttsEnabled = true,
     this.audioFeedbackEnabled = true,
+    this.backgroundListeningEnabled = false,
+    this.wakeWordEnabled = false,
+    this.picovoiceAccessKey,
+    this.wakeWordKeyword = 'jarvis',
+    this.wakeWordSensitivity = 0.5,
   });
 
   final String? apiUrl;
@@ -26,6 +31,11 @@ class AppConfig {
   final VadConfig vadConfig;
   final bool ttsEnabled;
   final bool audioFeedbackEnabled;
+  final bool backgroundListeningEnabled;
+  final bool wakeWordEnabled;
+  final String? picovoiceAccessKey;
+  final String wakeWordKeyword;
+  final double wakeWordSensitivity;
 
   AppConfig copyWith({
     Object? apiUrl = _sentinel,
@@ -37,6 +47,11 @@ class AppConfig {
     VadConfig? vadConfig,
     bool? ttsEnabled,
     bool? audioFeedbackEnabled,
+    bool? backgroundListeningEnabled,
+    bool? wakeWordEnabled,
+    Object? picovoiceAccessKey = _sentinel,
+    String? wakeWordKeyword,
+    double? wakeWordSensitivity,
   }) {
     return AppConfig(
       apiUrl: apiUrl == _sentinel ? this.apiUrl : apiUrl as String?,
@@ -49,6 +64,14 @@ class AppConfig {
       vadConfig: vadConfig ?? this.vadConfig,
       ttsEnabled: ttsEnabled ?? this.ttsEnabled,
       audioFeedbackEnabled: audioFeedbackEnabled ?? this.audioFeedbackEnabled,
+      backgroundListeningEnabled:
+          backgroundListeningEnabled ?? this.backgroundListeningEnabled,
+      wakeWordEnabled: wakeWordEnabled ?? this.wakeWordEnabled,
+      picovoiceAccessKey: picovoiceAccessKey == _sentinel
+          ? this.picovoiceAccessKey
+          : picovoiceAccessKey as String?,
+      wakeWordKeyword: wakeWordKeyword ?? this.wakeWordKeyword,
+      wakeWordSensitivity: wakeWordSensitivity ?? this.wakeWordSensitivity,
     );
   }
 }

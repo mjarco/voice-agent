@@ -78,4 +78,29 @@ class AppConfigNotifier extends StateNotifier<AppConfig> {
     await _service.saveAudioFeedbackEnabled(value);
     state = state.copyWith(audioFeedbackEnabled: value);
   }
+
+  Future<void> updateBackgroundListeningEnabled(bool value) async {
+    await _service.saveBackgroundListeningEnabled(value);
+    state = state.copyWith(backgroundListeningEnabled: value);
+  }
+
+  Future<void> updateWakeWordEnabled(bool value) async {
+    await _service.saveWakeWordEnabled(value);
+    state = state.copyWith(wakeWordEnabled: value);
+  }
+
+  Future<void> updatePicovoiceAccessKey(String key) async {
+    await _service.savePicovoiceAccessKey(key);
+    state = state.copyWith(picovoiceAccessKey: key);
+  }
+
+  Future<void> updateWakeWordKeyword(String keyword) async {
+    await _service.saveWakeWordKeyword(keyword);
+    state = state.copyWith(wakeWordKeyword: keyword);
+  }
+
+  Future<void> updateWakeWordSensitivity(double value) async {
+    await _service.saveWakeWordSensitivity(value);
+    state = state.copyWith(wakeWordSensitivity: value);
+  }
 }

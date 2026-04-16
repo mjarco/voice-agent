@@ -26,6 +26,12 @@ class AppConfigService {
   static const _ttsEnabledKey = 'tts_enabled';
   static const _audioFeedbackEnabledKey = 'audio_feedback_enabled';
 
+  static const _backgroundListeningEnabledKey = 'background_listening_enabled';
+  static const _wakeWordEnabledKey = 'wake_word_enabled';
+  static const _picovoiceAccessKeyKey = 'picovoice_access_key';
+  static const _wakeWordKeywordKey = 'wake_word_keyword';
+  static const _wakeWordSensitivityKey = 'wake_word_sensitivity';
+
   static const _vadPositiveThresholdKey = 'vad_positive_threshold';
   static const _vadNegativeThresholdKey = 'vad_negative_threshold';
   static const _vadHangoverMsKey = 'vad_hangover_ms';
@@ -48,6 +54,13 @@ class AppConfigService {
     String? groqApiKey;
     try {
       groqApiKey = await _secureStorage.read(key: _groqApiKeyKey);
+    } catch (_) {
+      // Secure storage may fail on some devices — treat as absent
+    }
+    String? picovoiceAccessKey;
+    try {
+      picovoiceAccessKey =
+          await _secureStorage.read(key: _picovoiceAccessKeyKey);
     } catch (_) {
       // Secure storage may fail on some devices — treat as absent
     }
@@ -75,6 +88,13 @@ class AppConfigService {
       vadConfig: vadConfig,
       ttsEnabled: prefs.getBool(_ttsEnabledKey) ?? true,
       audioFeedbackEnabled: prefs.getBool(_audioFeedbackEnabledKey) ?? true,
+      backgroundListeningEnabled:
+          prefs.getBool(_backgroundListeningEnabledKey) ?? false,
+      wakeWordEnabled: prefs.getBool(_wakeWordEnabledKey) ?? false,
+      picovoiceAccessKey: picovoiceAccessKey,
+      wakeWordKeyword: prefs.getString(_wakeWordKeywordKey) ?? 'jarvis',
+      wakeWordSensitivity:
+          prefs.getDouble(_wakeWordSensitivityKey) ?? 0.5,
     );
   }
 
@@ -125,5 +145,29 @@ class AppConfigService {
   Future<void> saveAudioFeedbackEnabled(bool value) async {
     final prefs = await _preferences;
     await prefs.setBool(_audioFeedbackEnabledKey, value);
+  }
+
+  Future<void> saveBackgroundListeningEnabled(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool(_backgroundListeningEnabledKey, value);
+  }
+
+  Future<void> saveWakeWordEnabled(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool(_wakeWordEnabledKey, value);
+  }
+
+  Future<void> savePicovoiceAccessKey(String key) async {
+    await _secureStorage.write(key: _picovoiceAccessKeyKey, value: key);
+  }
+
+  Future<void> saveWakeWordKeyword(String keyword) async {
+    final prefs = await _preferences;
+    await prefs.setString(_wakeWordKeywordKey, keyword);
+  }
+
+  Future<void> saveWakeWordSensitivity(double value) async {
+    final prefs = await _preferences;
+    await prefs.setDouble(_wakeWordSensitivityKey, value);
   }
 }
