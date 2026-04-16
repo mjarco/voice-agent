@@ -1,10 +1,50 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 
 void main() {
+  group('AppConfig.copyWith', () {
+    test('picovoiceAccessKey sentinel allows setting to null', () {
+      const config = AppConfig(picovoiceAccessKey: 'key');
+      final updated = config.copyWith(picovoiceAccessKey: null);
+      expect(updated.picovoiceAccessKey, isNull);
+    });
+
+    test('picovoiceAccessKey omitted preserves value', () {
+      const config = AppConfig(picovoiceAccessKey: 'key');
+      final updated = config.copyWith(backgroundListeningEnabled: true);
+      expect(updated.picovoiceAccessKey, 'key');
+    });
+
+    test('new fields have correct defaults', () {
+      const config = AppConfig();
+      expect(config.backgroundListeningEnabled, isFalse);
+      expect(config.wakeWordEnabled, isFalse);
+      expect(config.picovoiceAccessKey, isNull);
+      expect(config.wakeWordKeyword, 'jarvis');
+      expect(config.wakeWordSensitivity, 0.5);
+    });
+
+    test('copyWith updates new fields', () {
+      const config = AppConfig();
+      final updated = config.copyWith(
+        backgroundListeningEnabled: true,
+        wakeWordEnabled: true,
+        picovoiceAccessKey: 'pv_key',
+        wakeWordKeyword: 'computer',
+        wakeWordSensitivity: 0.8,
+      );
+      expect(updated.backgroundListeningEnabled, isTrue);
+      expect(updated.wakeWordEnabled, isTrue);
+      expect(updated.picovoiceAccessKey, 'pv_key');
+      expect(updated.wakeWordKeyword, 'computer');
+      expect(updated.wakeWordSensitivity, 0.8);
+    });
+  });
+
   group('AppConfigService', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
@@ -120,6 +160,113 @@ void main() {
       final config = await service.load();
 
       expect(config.audioFeedbackEnabled, isFalse);
+    });
+
+    group('background activation config', () {
+      test('load returns defaults for new fields when storage is empty',
+          () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final service = AppConfigService(prefs: prefs);
+
+        final config = await service.load();
+
+        expect(config.backgroundListeningEnabled, isFalse);
+        expect(config.wakeWordEnabled, isFalse);
+        expect(config.picovoiceAccessKey, isNull);
+        expect(config.wakeWordKeyword, 'jarvis');
+        expect(config.wakeWordSensitivity, 0.5);
+      });
+
+      test('saveBackgroundListeningEnabled then load round-trips', () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final service = AppConfigService(prefs: prefs);
+
+        await service.saveBackgroundListeningEnabled(true);
+        final config = await service.load();
+
+        expect(config.backgroundListeningEnabled, isTrue);
+      });
+
+      test('saveWakeWordEnabled then load round-trips', () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final service = AppConfigService(prefs: prefs);
+
+        await service.saveWakeWordEnabled(true);
+        final config = await service.load();
+
+        expect(config.wakeWordEnabled, isTrue);
+      });
+
+      test('savePicovoiceAccessKey then load round-trips', () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final service = AppConfigService(prefs: prefs);
+
+        await service.savePicovoiceAccessKey('pv_test_key_12345');
+        final config = await service.load();
+
+        expect(config.picovoiceAccessKey, 'pv_test_key_12345');
+      });
+
+      test('saveWakeWordKeyword then load round-trips', () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final service = AppConfigService(prefs: prefs);
+
+        await service.saveWakeWordKeyword('computer');
+        final config = await service.load();
+
+        expect(config.wakeWordKeyword, 'computer');
+      });
+
+      test('saveWakeWordSensitivity then load round-trips', () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final service = AppConfigService(prefs: prefs);
+
+        await service.saveWakeWordSensitivity(0.8);
+        final config = await service.load();
+
+        expect(config.wakeWordSensitivity, 0.8);
+      });
+
+      test('picovoiceAccessKey survives SecureStorage failure gracefully',
+          () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        // Use a fresh service — FlutterSecureStorage mock has no key stored,
+        // so read returns null (simulating empty/failed storage)
+        final service = AppConfigService(prefs: prefs);
+
+        final config = await service.load();
+
+        expect(config.picovoiceAccessKey, isNull);
+      });
+
+      test('all background activation fields preserved alongside other config',
+          () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final service = AppConfigService(prefs: prefs);
+
+        await service.saveApiUrl('https://test.com');
+        await service.saveBackgroundListeningEnabled(true);
+        await service.saveWakeWordEnabled(true);
+        await service.savePicovoiceAccessKey('pv_key');
+        await service.saveWakeWordKeyword('alexa');
+        await service.saveWakeWordSensitivity(0.7);
+        final config = await service.load();
+
+        expect(config.apiUrl, 'https://test.com');
+        expect(config.backgroundListeningEnabled, isTrue);
+        expect(config.wakeWordEnabled, isTrue);
+        expect(config.picovoiceAccessKey, 'pv_key');
+        expect(config.wakeWordKeyword, 'alexa');
+        expect(config.wakeWordSensitivity, 0.7);
+      });
     });
 
     group('VAD config', () {
