@@ -15,6 +15,8 @@ import 'package:voice_agent/features/activation/domain/wake_word_service.dart';
 import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
 import 'package:voice_agent/features/activation/presentation/wake_word_provider.dart';
 
+import '../../../helpers/in_memory_bridge_store.dart';
+
 // ---------------------------------------------------------------------------
 // Fakes
 // ---------------------------------------------------------------------------
@@ -133,6 +135,7 @@ Future<({ProviderContainer container, FakeWakeWordService wakeWord, FakeAudioFee
       ),
       wakeWordServiceProvider.overrideWithValue(wakeWord),
       audioFeedbackServiceProvider.overrideWithValue(audio),
+      bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
     ],
   );
   // Wait for async config to load before creating the controller.
@@ -147,6 +150,8 @@ Future<({ProviderContainer container, FakeWakeWordService wakeWord, FakeAudioFee
 // ---------------------------------------------------------------------------
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('ActivationController', () {
     test('initial state is idle', () async {
       final s = await _setup();

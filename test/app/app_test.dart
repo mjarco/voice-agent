@@ -9,6 +9,9 @@ import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
+
+import '../helpers/in_memory_bridge_store.dart';
 
 class _StubStorageService implements StorageService {
   @override
@@ -54,6 +57,7 @@ class _NoOpConnectivity extends ConnectivityService {
 List<Override> get _testOverrides => [
       storageServiceProvider.overrideWithValue(_StubStorageService()),
       connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
+      bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
     ];
 
 void main() {

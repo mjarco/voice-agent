@@ -97,11 +97,16 @@ class ActivationController extends StateNotifier<ActivationState> {
         _ref.read(handsFreeSessionStatusProvider.notifier).state =
             const HandsFreeSessionInactive();
         startListening();
-      case HandsFreeSessionFailed(message: final msg):
+      case HandsFreeSessionFailed(
+          message: final msg,
+          requiresSettings: final rs,
+        ):
         _ref.read(handsFreeSessionStatusProvider.notifier).state =
             const HandsFreeSessionInactive();
-        state = ActivationError(message: msg);
-        _scheduleRetry();
+        state = ActivationError(message: msg, requiresSettings: rs);
+        if (!rs) {
+          _scheduleRetry();
+        }
       case HandsFreeSessionRunning():
       case HandsFreeSessionInactive():
         break;
@@ -128,11 +133,11 @@ class ActivationController extends StateNotifier<ActivationState> {
     }
   }
 
-  void _onDetection(int keywordIndex) {
+  Future<void> _onDetection(int keywordIndex) async {
     if (state is! ActivationListening) return;
 
     // Stop Porcupine before handing off to hands-free recording.
-    wakeWordService.stop();
+    await wakeWordService.stop();
 
     final keyword = (state as ActivationListening).keyword;
     state = const ActivationHandsFreeActive(

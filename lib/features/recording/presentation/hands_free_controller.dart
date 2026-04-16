@@ -153,7 +153,10 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         requiresSettings: true,
         jobs: [],
       );
-      _signalSessionFailed('Microphone permission denied.');
+      _signalSessionFailed(
+        'Microphone permission denied.',
+        requiresSettings: true,
+      );
       return;
     }
 
@@ -166,7 +169,10 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         requiresAppSettings: true,
         jobs: [],
       );
-      _signalSessionFailed('Groq API key not set.');
+      _signalSessionFailed(
+        'Groq API key not set.',
+        requiresSettings: true,
+      );
       return;
     }
 
@@ -418,7 +424,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _engine = null;
     _triggeredByActivation = false;
 
-    _signalSessionFailed(message);
+    _signalSessionFailed(message, requiresSettings: requiresSettings);
 
     state = HandsFreeSessionError(
       message: message,
@@ -427,9 +433,15 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     );
   }
 
-  void _signalSessionFailed(String message) {
+  void _signalSessionFailed(
+    String message, {
+    bool requiresSettings = false,
+  }) {
     _ref.read(handsFreeSessionStatusProvider.notifier).state =
-        HandsFreeSessionFailed(message: message);
+        HandsFreeSessionFailed(
+      message: message,
+      requiresSettings: requiresSettings,
+    );
   }
 
   /// Polls until no job is in [Transcribing] or [Persisting] state, with a

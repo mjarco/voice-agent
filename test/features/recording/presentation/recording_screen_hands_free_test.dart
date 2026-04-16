@@ -27,6 +27,9 @@ import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
+import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
+
+import '../../../helpers/in_memory_bridge_store.dart';
 
 // ── Stubs ─────────────────────────────────────────────────────────────────────
 
@@ -131,6 +134,7 @@ List<Override> baseOverrides(FakeHfEngine engine) => [
       recordingServiceProvider.overrideWithValue(_NoOpRecordingService()),
       ttsServiceProvider.overrideWithValue(_StubTtsService()),
       audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
+      bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
     ];
 
 Future<void> pumpRecordScreen(

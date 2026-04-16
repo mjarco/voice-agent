@@ -19,6 +19,10 @@ class HandsFreeSessionCompletedOk extends HandsFreeSessionStatus {
 }
 
 class HandsFreeSessionFailed extends HandsFreeSessionStatus {
-  const HandsFreeSessionFailed({required this.message});
+  const HandsFreeSessionFailed({
+    required this.message,
+    this.requiresSettings = false,
+  });
   final String message;
+  final bool requiresSettings;
 }
