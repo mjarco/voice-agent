@@ -8,6 +8,8 @@ import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/providers/activation_providers.dart';
+import 'package:voice_agent/core/providers/hands_free_session_status.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
@@ -38,6 +40,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   HandsFreeEngine? _engine;
   StreamSubscription<HandsFreeEngineEvent>? _engineSub;
+  bool _triggeredByActivation = false;
 
   // ── Job list ─────────────────────────────────────────────────────────────
   // Mutable list kept in controller; copied into each emitted state.
@@ -124,7 +127,9 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused && this.state is! HandsFreeIdle) {
+    if (state == AppLifecycleState.paused &&
+        this.state is! HandsFreeIdle &&
+        !_triggeredByActivation) {
       _terminateWithError(
         'Interrupted: app backgrounded',
         requiresSettings: false,
@@ -134,9 +139,10 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   // ── Public API ────────────────────────────────────────────────────────────
 
-  Future<void> startSession() async {
+  Future<void> startSession({bool triggeredByActivation = false}) async {
     if (state is! HandsFreeIdle && state is! HandsFreeSessionError) return;
 
+    _triggeredByActivation = triggeredByActivation;
     final engine = _ref.read(handsFreeEngineProvider);
 
     // Guard 1 — microphone permission.
@@ -147,6 +153,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         requiresSettings: true,
         jobs: [],
       );
+      _signalSessionFailed('Microphone permission denied.');
       return;
     }
 
@@ -159,12 +166,15 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         requiresAppSettings: true,
         jobs: [],
       );
+      _signalSessionFailed('Groq API key not set.');
       return;
     }
 
     // All guards passed — start engine.
     _jobs.clear();
     _jobCounter = 0;
+    _ref.read(handsFreeSessionStatusProvider.notifier).state =
+        const HandsFreeSessionRunning();
     _startEngine(_ref.read(appConfigProvider).vadConfig);
   }
 
@@ -202,6 +212,9 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // Drain: wait until no job is in Transcribing or Persisting state.
     await _drainInFlightJobs();
 
+    _triggeredByActivation = false;
+    _ref.read(handsFreeSessionStatusProvider.notifier).state =
+        const HandsFreeSessionCompletedOk();
     state = const HandsFreeIdle();
     _jobs.clear();
     _jobCounter = 0;
@@ -403,12 +416,20 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _engineSub = null;
     unawaited(_engine?.stop());
     _engine = null;
+    _triggeredByActivation = false;
+
+    _signalSessionFailed(message);
 
     state = HandsFreeSessionError(
       message: message,
       requiresSettings: requiresSettings,
       jobs: List<SegmentJob>.unmodifiable(_jobs),
     );
+  }
+
+  void _signalSessionFailed(String message) {
+    _ref.read(handsFreeSessionStatusProvider.notifier).state =
+        HandsFreeSessionFailed(message: message);
   }
 
   /// Polls until no job is in [Transcribing] or [Persisting] state, with a
