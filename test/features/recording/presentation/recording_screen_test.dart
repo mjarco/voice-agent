@@ -29,6 +29,9 @@ import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
+import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
+
+import '../../../helpers/in_memory_bridge_store.dart';
 
 class _StubStorage implements StorageService {
   @override Future<String> getDeviceId() async => 'test';
@@ -93,6 +96,7 @@ List<Override> get _baseOverrides => [
   ),
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
+  bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
 ];
 
 void main() {

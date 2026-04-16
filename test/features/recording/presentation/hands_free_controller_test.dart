@@ -27,6 +27,8 @@ import 'package:voice_agent/features/recording/presentation/hands_free_controlle
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
+import 'package:voice_agent/core/providers/activation_providers.dart';
+import 'package:voice_agent/core/providers/hands_free_session_status.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 // ── FakeHandsFreeEngine ──────────────────────────────────────────────────────
@@ -521,6 +523,125 @@ void main() {
       await Future.delayed(Duration.zero);
 
       expect(stateOf(c), isA<HandsFreeIdle>());
+    });
+  });
+
+  // ── Activation-triggered background immunity ───────────────────────────────
+
+  group('triggeredByActivation', () {
+    test('app paused with triggeredByActivation: true → session NOT cancelled',
+        () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession(triggeredByActivation: true);
+      engine.emit(const EngineListening());
+      await Future.delayed(Duration.zero);
+
+      ctrl(c).didChangeAppLifecycleState(AppLifecycleState.paused);
+      await Future.delayed(Duration.zero);
+
+      // Session must still be alive — not in error or idle.
+      expect(stateOf(c), isA<HandsFreeListening>());
+    });
+
+    test(
+        'app paused with triggeredByActivation: false → session cancelled '
+        '(control test)', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession(triggeredByActivation: false);
+      engine.emit(const EngineListening());
+      await Future.delayed(Duration.zero);
+
+      ctrl(c).didChangeAppLifecycleState(AppLifecycleState.paused);
+      await Future.delayed(Duration.zero);
+
+      expect(stateOf(c), isA<HandsFreeSessionError>());
+    });
+
+    test('stopSession clears triggeredByActivation', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession(triggeredByActivation: true);
+      engine.emit(const EngineListening());
+      await Future.delayed(Duration.zero);
+
+      await ctrl(c).stopSession();
+
+      // Start a new session WITHOUT activation trigger.
+      await ctrl(c).startSession();
+      engine.emit(const EngineListening());
+      await Future.delayed(Duration.zero);
+
+      // App paused should now cancel (flag was cleared by previous stopSession).
+      ctrl(c).didChangeAppLifecycleState(AppLifecycleState.paused);
+      await Future.delayed(Duration.zero);
+      expect(stateOf(c), isA<HandsFreeSessionError>());
+    });
+  });
+
+  // ── Session status provider signals ─────────────────────────────────────────
+
+  group('session status signals', () {
+    test('successful start → HandsFreeSessionRunning', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+
+      await ctrl(c).startSession();
+
+      final status = c.read(handsFreeSessionStatusProvider);
+      expect(status, isA<HandsFreeSessionRunning>());
+    });
+
+    test('stopSession → HandsFreeSessionCompletedOk', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession();
+      engine.emit(const EngineListening());
+      await Future.delayed(Duration.zero);
+
+      await ctrl(c).stopSession();
+
+      final status = c.read(handsFreeSessionStatusProvider);
+      expect(status, isA<HandsFreeSessionCompletedOk>());
+    });
+
+    test('permission denied → HandsFreeSessionFailed(requiresSettings: true)',
+        () async {
+      final engine = FakeHandsFreeEngine()..permissionGranted = false;
+      final c = makeContainer(engine: engine);
+
+      await ctrl(c).startSession();
+
+      final status =
+          c.read(handsFreeSessionStatusProvider) as HandsFreeSessionFailed;
+      expect(status.requiresSettings, isTrue);
+      expect(status.message, contains('permission'));
+    });
+
+    test('missing Groq key → HandsFreeSessionFailed(requiresSettings: true)',
+        () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine, groqApiKey: null);
+
+      await ctrl(c).startSession();
+
+      final status =
+          c.read(handsFreeSessionStatusProvider) as HandsFreeSessionFailed;
+      expect(status.requiresSettings, isTrue);
+    });
+
+    test('engine error → HandsFreeSessionFailed', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession();
+
+      engine.emit(const EngineError('VAD crashed'));
+      await Future.delayed(Duration.zero);
+
+      final status =
+          c.read(handsFreeSessionStatusProvider) as HandsFreeSessionFailed;
+      expect(status.message, contains('VAD crashed'));
     });
   });
 

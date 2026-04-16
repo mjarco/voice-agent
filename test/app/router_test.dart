@@ -7,6 +7,9 @@ import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
+
+import '../helpers/in_memory_bridge_store.dart';
 
 class _StubStorageService implements StorageService {
   @override
@@ -47,6 +50,7 @@ class _StubStorageService implements StorageService {
 void main() {
   final overrides = [
     storageServiceProvider.overrideWithValue(_StubStorageService()),
+    bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
   ];
 
   group('Tab state preservation', () {
