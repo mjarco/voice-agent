@@ -17,8 +17,10 @@ import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
+import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../helpers/in_memory_bridge_store.dart';
+import '../../helpers/stub_background_service.dart';
 
 class _StubStorage implements StorageService {
   @override Future<String> getDeviceId() async => 'test';
@@ -84,6 +86,7 @@ List<Override> _baseOverrides() => [
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
   bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
+  backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
 ];
 
 Future<void> _navigateToSettings(WidgetTester tester) async {

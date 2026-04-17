@@ -100,6 +100,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.read(appConfigProvider.notifier).updatePicovoiceAccessKey(key);
   }
 
+  Future<void> _onWakeWordChanged(bool value) async {
+    if (value) {
+      // Verify microphone permission before enabling wake word.
+      final status = await Permission.microphone.request();
+      if (status.isDenied || status.isPermanentlyDenied) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Microphone permission required for wake word'),
+            action: status.isPermanentlyDenied
+                ? SnackBarAction(
+                    label: 'Settings',
+                    onPressed: openAppSettings,
+                  )
+                : null,
+          ),
+        );
+        return;
+      }
+    }
+    ref.read(appConfigProvider.notifier).updateWakeWordEnabled(value);
+  }
+
   Future<void> _onBackgroundListeningChanged(bool value) async {
     if (value && Platform.isAndroid) {
       final status = await Permission.notification.request();
@@ -318,11 +341,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: const Text('Activate recording with a spoken keyword'),
             value: config.wakeWordEnabled,
             onChanged: config.backgroundListeningEnabled
-                ? (v) {
-                    ref
-                        .read(appConfigProvider.notifier)
-                        .updateWakeWordEnabled(v);
-                  }
+                ? _onWakeWordChanged
                 : null,
           ),
           Padding(

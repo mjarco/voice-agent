@@ -14,6 +14,7 @@ import UIKit
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let controller = window?.rootViewController as? FlutterViewController {
       ActivationBridge.shared.configure(with: controller.binaryMessenger)
+      AudioSessionBridge.shared.configure(with: controller.binaryMessenger)
     }
   }
 
