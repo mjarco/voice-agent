@@ -54,6 +54,16 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       }
     });
 
+    // Pause VAD while TTS is playing to avoid mic picking up speaker output.
+    ref.listen<bool>(ttsPlayingProvider, (prev, next) {
+      final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
+      if (next) {
+        unawaited(hfCtrl.suspendForTts());
+      } else {
+        unawaited(hfCtrl.resumeAfterTts());
+      }
+    });
+
     final recState = ref.watch(recordingControllerProvider);
     final hfState = ref.watch(handsFreeControllerProvider);
     final recCtrl = ref.read(recordingControllerProvider.notifier);
@@ -82,9 +92,15 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
               child: _buildRecordingArea(context, recState, recCtrl),
             ),
           ),
-          _AgentReplyCard(reply: agentReply, onDismiss: () {
-            ref.read(latestAgentReplyProvider.notifier).state = null;
-          }),
+          _AgentReplyCard(
+            reply: agentReply,
+            isSpeaking: ref.watch(ttsPlayingProvider),
+            onStop: () => ref.read(ttsServiceProvider).stop(),
+            onDismiss: () {
+              unawaited(ref.read(ttsServiceProvider).stop());
+              ref.read(latestAgentReplyProvider.notifier).state = null;
+            },
+          ),
           _HandsFreeSection(
             hfState: hfState,
             onRetry: () => hfCtrl.startSession(),
@@ -147,9 +163,16 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
 // ── Agent reply card ─────────────────────────────────────────────────────────
 
 class _AgentReplyCard extends StatelessWidget {
-  const _AgentReplyCard({required this.reply, required this.onDismiss});
+  const _AgentReplyCard({
+    required this.reply,
+    required this.isSpeaking,
+    required this.onStop,
+    required this.onDismiss,
+  });
 
   final String? reply;
+  final bool isSpeaking;
+  final VoidCallback onStop;
   final VoidCallback onDismiss;
 
   @override
@@ -168,6 +191,13 @@ class _AgentReplyCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(child: Text(reply!)),
+                      if (isSpeaking)
+                        IconButton(
+                          key: const Key('agent-reply-stop'),
+                          icon: const Icon(Icons.stop_circle),
+                          onPressed: onStop,
+                          tooltip: 'Stop speaking',
+                        ),
                       IconButton(
                         key: const Key('agent-reply-dismiss'),
                         icon: const Icon(Icons.close),

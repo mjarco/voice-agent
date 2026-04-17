@@ -1,15 +1,25 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 
 class FlutterTtsService implements TtsService {
   FlutterTtsService({FlutterTts? tts, bool? isIOS})
       : _tts = tts ?? FlutterTts(),
-        _isIOS = isIOS ?? Platform.isIOS;
+        _isIOS = isIOS ?? Platform.isIOS {
+    _tts.setStartHandler(() => _speaking.value = true);
+    _tts.setCompletionHandler(() => _speaking.value = false);
+    _tts.setCancelHandler(() => _speaking.value = false);
+    _tts.setErrorHandler((_) => _speaking.value = false);
+  }
 
   final FlutterTts _tts;
   final bool _isIOS;
+  final ValueNotifier<bool> _speaking = ValueNotifier(false);
+
+  @override
+  ValueListenable<bool> get isSpeaking => _speaking;
 
   // Cache best voice per resolved language string to avoid repeated getVoices()
   // calls. null value means "looked up, nothing better than system default".
@@ -34,6 +44,7 @@ class FlutterTtsService implements TtsService {
   @override
   void dispose() {
     _tts.stop();
+    _speaking.dispose();
   }
 
   String _resolveLanguage(String? code) {

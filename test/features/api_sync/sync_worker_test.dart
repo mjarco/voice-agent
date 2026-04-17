@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -156,6 +157,7 @@ class FakeApiClient extends ApiClient {
 }
 
 class _SpyTtsService implements TtsService {
+  @override ValueListenable<bool> get isSpeaking => ValueNotifier(false);
   final List<String> log = [];
 
   @override

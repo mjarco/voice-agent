@@ -61,6 +61,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   // ignore: prefer_final_fields — T3 mutates this field
   bool _suspendedForManualRecording = false;
+  bool _suspendedForTts = false;
 
   bool get isSuspendedForManualRecording => _suspendedForManualRecording;
 
@@ -123,13 +124,44 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     state = _listeningOrBacklog();
   }
 
+
+  // ── TTS suspension ──────────────────────────────────────────────────────
+
+  /// Pauses the VAD engine while TTS is playing to prevent the mic from
+  /// picking up speaker output.
+  Future<void> suspendForTts() async {
+    if (_suspendedForTts || _suspendedForManualRecording) return;
+    if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
+
+    if (state is HandsFreeCapturing) {
+      await _engine?.interruptCapture();
+    } else {
+      await _engineSub?.cancel();
+      await _engine?.stop();
+    }
+    _engineSub = null;
+    _engine = null;
+    _suspendedForTts = true;
+    state = _listeningOrBacklog();
+  }
+
+  /// Restarts the VAD engine after TTS finishes playing.
+  Future<void> resumeAfterTts() async {
+    if (!_suspendedForTts) return;
+    _suspendedForTts = false;
+    if (_suspendedForManualRecording) return;
+    _startEngine(_ref.read(appConfigProvider).vadConfig);
+    state = _listeningOrBacklog();
+  }
+
   // ── Background lifecycle ─────────────────────────────────────────────────
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused &&
         this.state is! HandsFreeIdle &&
-        !_triggeredByActivation) {
+        !_triggeredByActivation &&
+        !_ref.read(appConfigProvider).backgroundListeningEnabled) {
       _terminateWithError(
         'Interrupted: app backgrounded',
         requiresSettings: false,
