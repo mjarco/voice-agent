@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -36,6 +37,7 @@ import '../../../helpers/stub_background_service.dart';
 // ── Stubs ─────────────────────────────────────────────────────────────────────
 
 class _StubTtsService implements TtsService {
+  @override ValueListenable<bool> get isSpeaking => ValueNotifier(false);
   @override Future<void> speak(String text, {String? languageCode}) async {}
   @override Future<void> stop() async {}
   @override void dispose() {}

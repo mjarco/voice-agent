@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -66,6 +67,7 @@ class _SeededConfigService extends AppConfigService {
 }
 
 class _StubTtsService implements TtsService {
+  @override ValueListenable<bool> get isSpeaking => ValueNotifier(false);
   @override Future<void> speak(String text, {String? languageCode}) async {}
   @override Future<void> stop() async {}
   @override void dispose() {}

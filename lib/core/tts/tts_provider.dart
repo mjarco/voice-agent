@@ -7,3 +7,15 @@ final ttsServiceProvider = Provider<TtsService>((ref) {
   ref.onDispose(tts.dispose);
   return tts;
 });
+
+/// Whether TTS is currently playing audio. Used by hands-free controller
+/// to pause VAD during playback (avoids mic picking up speaker output).
+final ttsPlayingProvider = Provider<bool>((ref) {
+  final tts = ref.watch(ttsServiceProvider);
+  final notifier = tts.isSpeaking;
+  // Bridge ValueListenable → Riverpod: invalidate self on each change.
+  void listener() => ref.invalidateSelf();
+  notifier.addListener(listener);
+  ref.onDispose(() => notifier.removeListener(listener));
+  return notifier.value;
+});
