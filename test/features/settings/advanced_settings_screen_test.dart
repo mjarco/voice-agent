@@ -24,8 +24,10 @@ import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
+import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../helpers/in_memory_bridge_store.dart';
+import '../../helpers/stub_background_service.dart';
 import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 
@@ -107,6 +109,7 @@ List<Override> _baseOverrides({AppConfigService? configService}) => [
   if (configService != null)
     appConfigServiceProvider.overrideWithValue(configService),
   bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
+  backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
 ];
 
 /// Pumps [AdvancedSettingsScreen] directly inside a minimal scaffold+router

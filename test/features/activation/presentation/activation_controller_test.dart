@@ -14,8 +14,10 @@ import 'package:voice_agent/features/activation/domain/activation_state.dart';
 import 'package:voice_agent/features/activation/domain/wake_word_service.dart';
 import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
 import 'package:voice_agent/features/activation/presentation/wake_word_provider.dart';
+import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../../helpers/in_memory_bridge_store.dart';
+import '../../../helpers/stub_background_service.dart';
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -136,6 +138,7 @@ Future<({ProviderContainer container, FakeWakeWordService wakeWord, FakeAudioFee
       wakeWordServiceProvider.overrideWithValue(wakeWord),
       audioFeedbackServiceProvider.overrideWithValue(audio),
       bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
+      backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
     ],
   );
   // Wait for async config to load before creating the controller.
@@ -496,6 +499,105 @@ void main() {
         final state = s.container.read(activationControllerProvider);
         expect(state, isA<ActivationError>());
         expect((state as ActivationError).requiresSettings, isTrue);
+      });
+    });
+
+    group('auto-retry', () {
+      test(
+          'transient error (requiresSettings: false) retries after 5 seconds',
+          () async {
+        final s = await _setup();
+        addTearDown(s.container.dispose);
+        final notifier =
+            s.container.read(activationControllerProvider.notifier);
+
+        await notifier.startListening();
+        expect(s.container.read(activationControllerProvider),
+            isA<ActivationListening>());
+
+        // Emit transient error — triggers _scheduleRetry.
+        s.wakeWord
+            .emitError(const AudioCaptureFailed(reason: 'mic unavailable'));
+        await Future.delayed(Duration.zero);
+        expect(s.container.read(activationControllerProvider),
+            isA<ActivationError>());
+        final startsBefore = s.wakeWord.startCallCount;
+
+        // Wait for the 5-second retry timer to fire.
+        await Future.delayed(const Duration(seconds: 6));
+        expect(s.wakeWord.startCallCount, startsBefore + 1,
+            reason: 'transient error should auto-retry after 5s');
+        expect(s.container.read(activationControllerProvider),
+            isA<ActivationListening>());
+      });
+
+      test('config error (requiresSettings: true) does NOT auto-retry',
+          () async {
+        final s = await _setup();
+        addTearDown(s.container.dispose);
+        final notifier =
+            s.container.read(activationControllerProvider.notifier);
+
+        await notifier.startListening();
+
+        // Emit config error.
+        s.wakeWord.emitError(const InvalidAccessKey());
+        await Future.delayed(Duration.zero);
+        expect(s.container.read(activationControllerProvider),
+            isA<ActivationError>());
+        final startsBefore = s.wakeWord.startCallCount;
+
+        // Wait past the retry window — should NOT retry.
+        await Future.delayed(const Duration(seconds: 6));
+        expect(s.wakeWord.startCallCount, startsBefore,
+            reason: 'config errors must not auto-retry');
+        expect(s.container.read(activationControllerProvider),
+            isA<ActivationError>());
+      });
+
+      test(
+          'session failure (requiresSettings: false) schedules retry; '
+          '(requiresSettings: true) does not', () async {
+        final s = await _setup();
+        addTearDown(s.container.dispose);
+        final notifier =
+            s.container.read(activationControllerProvider.notifier);
+
+        // Start listening → detect wake word → session active.
+        await notifier.startListening();
+        s.wakeWord.emitDetection(0);
+        await Future.delayed(Duration.zero);
+
+        // Transient session failure → should retry.
+        notifier.onSessionStatusChanged(
+          const HandsFreeSessionFailed(
+            message: 'engine error',
+            requiresSettings: false,
+          ),
+        );
+        expect(s.container.read(activationControllerProvider),
+            isA<ActivationError>());
+        final startsA = s.wakeWord.startCallCount;
+
+        await Future.delayed(const Duration(seconds: 6));
+        expect(s.wakeWord.startCallCount, startsA + 1,
+            reason: 'transient session failure should retry');
+
+        // Now trigger session active again → config failure.
+        s.wakeWord.emitDetection(0);
+        await Future.delayed(Duration.zero);
+
+        notifier.onSessionStatusChanged(
+          const HandsFreeSessionFailed(
+            message: 'permission denied',
+            requiresSettings: true,
+          ),
+        );
+        final startsB = s.wakeWord.startCallCount;
+
+        await Future.delayed(const Duration(seconds: 6));
+        expect(s.wakeWord.startCallCount, startsB,
+            reason: 'config session failure must not retry');
       });
     });
   });
