@@ -1,6 +1,6 @@
 # Proposal 025 — Shared API Client Layer
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P005 (API Sync Client) — establishes `ApiClient`, `ApiResult` sealed type, and `apiConfigProvider`; merged
