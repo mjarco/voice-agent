@@ -8,10 +8,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
+import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
-
-/// Provider for ApiClient — lives here to avoid settings importing api_sync.
-final _apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -145,7 +143,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     setState(() => _testStatus = _TestStatus.testing);
 
-    final apiClient = ref.read(_apiClientProvider);
+    final apiClient = ref.read(apiClientProvider);
     final token = _tokenController.text;
 
     final result = await apiClient.testConnection(
@@ -160,6 +158,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ApiSuccess() => _TestStatus.success,
         ApiPermanentFailure() => _TestStatus.error,
         ApiTransientFailure() => _TestStatus.error,
+        ApiNotConfigured() => _TestStatus.error,
       };
     });
   }

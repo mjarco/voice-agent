@@ -23,10 +23,17 @@ class ApiTransientFailure extends ApiResult {
   final String reason;
 }
 
+class ApiNotConfigured extends ApiResult {
+  const ApiNotConfigured();
+}
+
 class ApiClient {
-  ApiClient({Dio? dio}) : _dio = dio ?? _createDefaultDio();
+  ApiClient({Dio? dio, this.baseUrl, this.token})
+      : _dio = dio ?? _createDefaultDio();
 
   final Dio _dio;
+  final String? baseUrl;
+  final String? token;
 
   static Dio _createDefaultDio() {
     return Dio(BaseOptions(
@@ -68,9 +75,9 @@ class ApiClient {
             data == null ? null : (data is String ? data : jsonEncode(data));
         return ApiSuccess(body: body);
       }
-      return _classifyStatusCode(statusCode, response.statusMessage);
+      return classifyStatusCode(statusCode, response.statusMessage);
     } on DioException catch (e) {
-      return _classifyDioException(e);
+      return classifyDioException(e);
     }
   }
 
@@ -97,13 +104,71 @@ class ApiClient {
       if (statusCode >= 200 && statusCode < 300) {
         return const ApiSuccess();
       }
-      return _classifyStatusCode(statusCode, response.statusMessage);
+      return classifyStatusCode(statusCode, response.statusMessage);
     } on DioException catch (e) {
-      return _classifyDioException(e);
+      return classifyDioException(e);
     }
   }
 
-  ApiResult _classifyStatusCode(int statusCode, String? message) {
+  Future<ApiResult> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) {
+    return request('GET', path, queryParameters: queryParameters);
+  }
+
+  Future<ApiResult> patch(
+    String path, {
+    Map<String, dynamic>? data,
+  }) {
+    return request('PATCH', path, data: data);
+  }
+
+  Future<ApiResult> delete(String path) {
+    return request('DELETE', path);
+  }
+
+  Future<ApiResult> request(
+    String method,
+    String path, {
+    Map<String, dynamic>? data,
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    if (baseUrl == null) return const ApiNotConfigured();
+
+    final url = '$baseUrl$path';
+    try {
+      final response = await _dio.request<dynamic>(
+        url,
+        data: data,
+        queryParameters: queryParameters,
+        options: Options(
+          method: method,
+          headers: {
+            'Content-Type': 'application/json',
+            if (token != null && token!.isNotEmpty)
+              'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      final statusCode = response.statusCode ?? 0;
+      if (statusCode >= 200 && statusCode < 300) {
+        final dynamic responseData = response.data;
+        final String? body = responseData == null
+            ? null
+            : (responseData is String
+                ? responseData
+                : jsonEncode(responseData));
+        return ApiSuccess(body: body);
+      }
+      return classifyStatusCode(statusCode, response.statusMessage);
+    } on DioException catch (e) {
+      return classifyDioException(e);
+    }
+  }
+
+  ApiResult classifyStatusCode(int statusCode, String? message) {
     if (statusCode == 408 || statusCode == 429 || statusCode >= 500) {
       return ApiTransientFailure(
         reason: 'Server error: $statusCode ${message ?? ''}',
@@ -115,10 +180,10 @@ class ApiClient {
     );
   }
 
-  ApiResult _classifyDioException(DioException e) {
+  ApiResult classifyDioException(DioException e) {
     final statusCode = e.response?.statusCode;
     if (statusCode != null) {
-      return _classifyStatusCode(statusCode, e.response?.statusMessage);
+      return classifyStatusCode(statusCode, e.response?.statusMessage);
     }
 
     switch (e.type) {

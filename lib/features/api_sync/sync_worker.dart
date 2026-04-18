@@ -151,6 +151,8 @@ class SyncWorker {
           await storageService.markFailed(item.id, reason);
         }
         unawaited(audioFeedbackService.playError());
+      case ApiNotConfigured():
+        break;
     }
   }
 
