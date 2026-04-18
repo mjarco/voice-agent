@@ -32,3 +32,26 @@ Dio provides timeout granularity and typed exceptions that map cleanly to the se
 - Groq STT service uses Dio's `FormData` for multipart WAV upload.
 - No-redirect policy may surprise users whose API is behind a load balancer with redirects — they must configure the final URL directly.
 - `testConnection()` sends `{'test': true}` POST to verify endpoint reachability without polluting the backend.
+
+## Amendment: Pre-request conditions and multiple Dio instances (P025)
+
+### Fourth ApiResult subtype
+
+The sealed `ApiResult` type is extended with a fourth subtype for pre-request conditions:
+
+- `ApiNotConfigured` — the API base URL is not set. Returned by generic methods (`get`, `request`, `patch`, `delete`) when `baseUrl` is null. Never returned by the legacy `post()` or `testConnection()` methods.
+
+Taxonomy:
+
+- **Pre-request conditions:** `ApiNotConfigured`. Checked before any HTTP call is made. No HTTP status code, no Dio interaction.
+- **Post-request outcomes:** `ApiSuccess`, `ApiPermanentFailure`, `ApiTransientFailure`. Result of an actual HTTP request.
+
+Growth constraint: new `ApiResult` subtypes should only be added when the condition must be handled identically to HTTP results (i.e., the caller uses one `switch` over all outcomes). Conditions that can be checked independently (e.g., network connectivity) should be handled before calling `ApiClient`, not encoded as result subtypes.
+
+### Classify methods promoted to public
+
+`classifyStatusCode` and `classifyDioException` are public so that `SseClient` can reuse error classification without duplicating logic. They are pure functions with no side effects.
+
+### Multiple Dio instances
+
+`SseClient` creates its own Dio instance with an extended receive timeout (10 minutes) for long-running SSE streams. All Dio instances MUST preserve the security settings: `followRedirects: false`. Timeout values may be adjusted for the use case.
