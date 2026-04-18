@@ -86,6 +86,7 @@ void main() {
       expect(item.recordId, 'rec-1');
       expect(item.text, 'Task text');
       expect(item.topicRef, 'topic:work');
+      expect(item.timeWindow, TimeWindow.day);
       expect(item.originRole, OriginRole.user);
       expect(item.status, RecordStatus.active);
       expect(item.linkedConversationCount, 3);

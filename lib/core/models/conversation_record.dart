@@ -49,7 +49,8 @@ enum RecordStatus {
   done;
 
   static RecordStatus fromString(String value) {
-    return RecordStatus.values.firstWhere((e) => e.name == value);
+    return RecordStatus.values.firstWhere((e) => e.name == value,
+        orElse: () => throw ArgumentError('Unknown RecordStatus: $value'));
   }
 }
 
@@ -59,7 +60,8 @@ enum OriginRole {
   system;
 
   static OriginRole fromString(String value) {
-    return OriginRole.values.firstWhere((e) => e.name == value);
+    return OriginRole.values.firstWhere((e) => e.name == value,
+        orElse: () => throw ArgumentError('Unknown OriginRole: $value'));
   }
 }
 

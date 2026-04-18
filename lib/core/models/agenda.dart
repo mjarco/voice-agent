@@ -24,12 +24,15 @@ class AgendaResponse {
       granularity: map['granularity'] as String,
       from: map['from'] as String,
       to: map['to'] as String,
-      items: (map['items'] as List<dynamic>)
-          .map((e) => AgendaItem.fromMap(e as Map<String, dynamic>))
-          .toList(),
-      routineItems: (map['routine_items'] as List<dynamic>)
-          .map((e) => AgendaRoutineItem.fromMap(e as Map<String, dynamic>))
-          .toList(),
+      items: (map['items'] as List<dynamic>?)
+              ?.map((e) => AgendaItem.fromMap(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      routineItems: (map['routine_items'] as List<dynamic>?)
+              ?.map(
+                  (e) => AgendaRoutineItem.fromMap(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 
@@ -61,7 +64,7 @@ class AgendaItem {
   final String text;
   final String? topicRef;
   final String scheduledFor;
-  final String timeWindow;
+  final TimeWindow timeWindow;
   final OriginRole originRole;
   final RecordStatus status;
   final int linkedConversationCount;
@@ -72,7 +75,7 @@ class AgendaItem {
       text: map['text'] as String,
       topicRef: map['topic_ref'] as String?,
       scheduledFor: map['scheduled_for'] as String,
-      timeWindow: map['time_window'] as String,
+      timeWindow: TimeWindow.fromString(map['time_window'] as String),
       originRole: OriginRole.fromString(map['origin_role'] as String),
       status: RecordStatus.fromString(map['status'] as String),
       linkedConversationCount: map['linked_conversation_count'] as int,
@@ -85,7 +88,7 @@ class AgendaItem {
       'text': text,
       'topic_ref': topicRef,
       'scheduled_for': scheduledFor,
-      'time_window': timeWindow,
+      'time_window': timeWindow.toJson(),
       'origin_role': originRole.name,
       'status': status.name,
       'linked_conversation_count': linkedConversationCount,

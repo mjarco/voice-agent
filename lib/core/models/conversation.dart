@@ -3,7 +3,9 @@ enum ConversationStatus {
   closed;
 
   static ConversationStatus fromString(String value) {
-    return ConversationStatus.values.firstWhere((e) => e.name == value);
+    return ConversationStatus.values.firstWhere((e) => e.name == value,
+        orElse: () =>
+            throw ArgumentError('Unknown ConversationStatus: $value'));
   }
 }
 
@@ -12,7 +14,8 @@ enum EventRole {
   agent;
 
   static EventRole fromString(String value) {
-    return EventRole.values.firstWhere((e) => e.name == value);
+    return EventRole.values.firstWhere((e) => e.name == value,
+        orElse: () => throw ArgumentError('Unknown EventRole: $value'));
   }
 }
 

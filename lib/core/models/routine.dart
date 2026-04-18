@@ -5,7 +5,8 @@ enum RoutineStatus {
   archived;
 
   static RoutineStatus fromString(String value) {
-    return RoutineStatus.values.firstWhere((e) => e.name == value);
+    return RoutineStatus.values.firstWhere((e) => e.name == value,
+        orElse: () => throw ArgumentError('Unknown RoutineStatus: $value'));
   }
 }
 
