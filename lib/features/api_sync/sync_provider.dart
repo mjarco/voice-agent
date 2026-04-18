@@ -1,18 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
-import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
+import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
 import 'package:voice_agent/features/api_sync/sync_worker.dart';
-
-final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient();
-});
 
 final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
   return ConnectivityService();

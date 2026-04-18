@@ -212,6 +212,145 @@ void main() {
       expect(parsed['language'], 'pl');
     });
   });
+
+  group('Generic methods', () {
+    late ApiClient configuredClient;
+
+    setUp(() {
+      dio = Dio();
+      dio.httpClientAdapter = _MockAdapter();
+      configuredClient = ApiClient(
+        dio: dio,
+        baseUrl: 'https://agent.jarco.casa/api/v1',
+        token: 'test-token',
+      );
+    });
+
+    test('get sends GET with correct URL', () async {
+      _MockAdapter.nextStatusCode = 200;
+      _MockAdapter.lastRequestMethod = null;
+
+      final result = await configuredClient.get('/agenda',
+          queryParameters: {'date': '2026-04-18'});
+
+      expect(result, isA<ApiSuccess>());
+      expect(_MockAdapter.lastRequestPath,
+          'https://agent.jarco.casa/api/v1/agenda');
+      expect(_MockAdapter.lastRequestMethod, 'GET');
+    });
+
+    test('request sends POST with data', () async {
+      _MockAdapter.nextStatusCode = 200;
+
+      final result = await configuredClient.request(
+        'POST',
+        '/records/abc/done',
+        data: {'note': 'completed'},
+      );
+
+      expect(result, isA<ApiSuccess>());
+      expect(_MockAdapter.lastRequestPath,
+          'https://agent.jarco.casa/api/v1/records/abc/done');
+      expect(_MockAdapter.lastRequestMethod, 'POST');
+      expect(
+        (_MockAdapter.lastRequestData as Map<String, dynamic>)['note'],
+        'completed',
+      );
+    });
+
+    test('patch sends PATCH with data', () async {
+      _MockAdapter.nextStatusCode = 200;
+
+      final result = await configuredClient.patch(
+        '/routines/abc/occurrences/xyz',
+        data: {'status': 'done'},
+      );
+
+      expect(result, isA<ApiSuccess>());
+      expect(_MockAdapter.lastRequestMethod, 'PATCH');
+    });
+
+    test('delete sends DELETE', () async {
+      _MockAdapter.nextStatusCode = 200;
+
+      final result =
+          await configuredClient.delete('/conversations/abc/events/xyz');
+
+      expect(result, isA<ApiSuccess>());
+      expect(_MockAdapter.lastRequestMethod, 'DELETE');
+    });
+
+    test('injects Authorization header', () async {
+      _MockAdapter.nextStatusCode = 200;
+      _MockAdapter.lastHeaders = null;
+
+      await configuredClient.get('/plan');
+
+      expect(
+        _MockAdapter.lastHeaders?['Authorization'],
+        'Bearer test-token',
+      );
+    });
+
+    test('omits Authorization header when token is null', () async {
+      final noTokenClient = ApiClient(
+        dio: dio,
+        baseUrl: 'https://example.com/api/v1',
+      );
+      _MockAdapter.nextStatusCode = 200;
+      _MockAdapter.lastHeaders = null;
+
+      await noTokenClient.get('/plan');
+
+      expect(_MockAdapter.lastHeaders?['Authorization'], isNull);
+    });
+
+    test('returns ApiNotConfigured when baseUrl is null', () async {
+      final unconfigured = ApiClient(dio: dio);
+      final result = await unconfigured.get('/agenda');
+
+      expect(result, isA<ApiNotConfigured>());
+    });
+
+    test('classifies 500 as ApiTransientFailure', () async {
+      _MockAdapter.nextStatusCode = 500;
+
+      final result = await configuredClient.get('/plan');
+
+      expect(result, isA<ApiTransientFailure>());
+    });
+
+    test('classifies 400 as ApiPermanentFailure', () async {
+      _MockAdapter.nextStatusCode = 400;
+
+      final result = await configuredClient.get('/plan');
+
+      expect(result, isA<ApiPermanentFailure>());
+    });
+
+    test('no double slash in composed URL path', () async {
+      _MockAdapter.nextStatusCode = 200;
+
+      await configuredClient.get('/agenda');
+
+      final path = _MockAdapter.lastRequestPath!;
+      final afterScheme = path.replaceFirst(RegExp(r'https?://'), '');
+      expect(afterScheme, isNot(contains('//')));
+    });
+
+    test('200 response body is valid JSON', () async {
+      _MockAdapter.nextStatusCode = 200;
+      _MockAdapter.nextResponseBody = '{"data": {"items": []}}';
+
+      final result = await configuredClient.get('/agenda');
+
+      expect(result, isA<ApiSuccess>());
+      final body = (result as ApiSuccess).body;
+      expect(body, isNotNull);
+      final parsed = jsonDecode(body!) as Map<String, dynamic>;
+      expect(parsed['data'], isA<Map>());
+    });
+  });
 }
 
 class _MockAdapter implements HttpClientAdapter {
@@ -220,6 +359,8 @@ class _MockAdapter implements HttpClientAdapter {
   static DioException? shouldThrow;
   static dynamic lastRequestData;
   static Map<String, dynamic>? lastHeaders;
+  static String? lastRequestMethod;
+  static String? lastRequestPath;
 
   @override
   Future<ResponseBody> fetch(
@@ -229,6 +370,8 @@ class _MockAdapter implements HttpClientAdapter {
   ) async {
     lastRequestData = options.data;
     lastHeaders = options.headers;
+    lastRequestMethod = options.method;
+    lastRequestPath = options.path;
 
     if (shouldThrow != null) {
       final e = shouldThrow!;
