@@ -117,6 +117,9 @@ class SseClient {
     } on DioException catch (e) {
       controller.addError(apiClient.classifyDioException(e));
       await controller.close();
+    } catch (e) {
+      controller.addError(e);
+      await controller.close();
     }
   }
 }
