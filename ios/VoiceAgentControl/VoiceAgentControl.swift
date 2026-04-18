@@ -1,62 +1,88 @@
-import AppIntents
-import SwiftUI
+//
+//  VoiceAgentControl.swift
+//  VoiceAgentControl
+//
+//  Created by Michal Jarco on 17/04/2026.
+//
+
 import WidgetKit
+import SwiftUI
 
-// MARK: - Toggle Intent
-
-@available(iOS 18.0, *)
-struct ToggleVoiceAgentIntent: SetValueIntent {
-    static var title: LocalizedStringResource = "Toggle Voice Agent"
-    static var description: IntentDescription = "Toggles voice agent background listening"
-
-    /// When true, the system launches the app before performing the intent.
-    static var openAppWhenRun: Bool = true
-
-    @Parameter(title: "Listening")
-    var value: Bool
-
-    func perform() async throws -> some IntentResult {
-        let defaults = UserDefaults(suiteName: "group.com.voiceagent.shared")
-        defaults?.set(true, forKey: "activation_requested")
-        return .result()
+struct Provider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> SimpleEntry {
+        SimpleEntry(date: Date(), configuration: ConfigurationAppIntent())
     }
-}
 
-// MARK: - Control Widget
+    func snapshot(for configuration: ConfigurationAppIntent, in context: Context) async -> SimpleEntry {
+        SimpleEntry(date: Date(), configuration: configuration)
+    }
+    
+    func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
+        var entries: [SimpleEntry] = []
 
-@available(iOS 18.0, *)
-struct VoiceAgentControl: ControlWidget {
-    var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(
-            kind: "com.voiceagent.VoiceAgentControl"
-        ) {
-            ControlWidgetToggle(
-                "Voice Agent",
-                isOn: isListening(),
-                action: ToggleVoiceAgentIntent()
-            ) { isOn in
-                Label(
-                    isOn ? "Listening" : "Voice Agent",
-                    systemImage: isOn ? "mic.fill" : "mic.slash"
-                )
-            }
+        // Generate a timeline consisting of five entries an hour apart, starting from the current date.
+        let currentDate = Date()
+        for hourOffset in 0 ..< 5 {
+            let entryDate = Calendar.current.date(byAdding: .hour, value: hourOffset, to: currentDate)!
+            let entry = SimpleEntry(date: entryDate, configuration: configuration)
+            entries.append(entry)
         }
-        .displayName("Voice Agent")
-        .description("Toggle voice agent background listening")
+
+        return Timeline(entries: entries, policy: .atEnd)
     }
 
-    private func isListening() -> Bool {
-        let defaults = UserDefaults(suiteName: "group.com.voiceagent.shared")
-        return defaults?.string(forKey: "activation_state") == "listening"
+//    func relevances() async -> WidgetRelevances<ConfigurationAppIntent> {
+//        // Generate a list containing the contexts this widget is relevant in.
+//    }
+}
+
+struct SimpleEntry: TimelineEntry {
+    let date: Date
+    let configuration: ConfigurationAppIntent
+}
+
+struct VoiceAgentControlEntryView : View {
+    var entry: Provider.Entry
+
+    var body: some View {
+        VStack {
+            Text("Time:")
+            Text(entry.date, style: .time)
+
+            Text("Favorite Emoji:")
+            Text(entry.configuration.favoriteEmoji)
+        }
     }
 }
 
-// MARK: - Widget Bundle
+struct VoiceAgentControl: Widget {
+    let kind: String = "VoiceAgentControl"
 
-@available(iOS 18.0, *)
-@main
-struct VoiceAgentControlBundle: WidgetBundle {
-    var body: some Widget {
-        VoiceAgentControl()
+    var body: some WidgetConfiguration {
+        AppIntentConfiguration(kind: kind, intent: ConfigurationAppIntent.self, provider: Provider()) { entry in
+            VoiceAgentControlEntryView(entry: entry)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
     }
+}
+
+extension ConfigurationAppIntent {
+    fileprivate static var smiley: ConfigurationAppIntent {
+        let intent = ConfigurationAppIntent()
+        intent.favoriteEmoji = "😀"
+        return intent
+    }
+    
+    fileprivate static var starEyes: ConfigurationAppIntent {
+        let intent = ConfigurationAppIntent()
+        intent.favoriteEmoji = "🤩"
+        return intent
+    }
+}
+
+#Preview(as: .systemSmall) {
+    VoiceAgentControl()
+} timeline: {
+    SimpleEntry(date: .now, configuration: .smiley)
+    SimpleEntry(date: .now, configuration: .starEyes)
 }

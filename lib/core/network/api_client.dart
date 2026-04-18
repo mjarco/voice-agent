@@ -31,7 +31,7 @@ class ApiClient {
   static Dio _createDefaultDio() {
     return Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(minutes: 2),
       followRedirects: false,
       maxRedirects: 0,
     ));

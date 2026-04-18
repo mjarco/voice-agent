@@ -1,4 +1,4 @@
-.PHONY: deps model vad-model analyze test verify clean setup doctor env run-web run-ios run-macos simulator help
+.PHONY: deps model vad-model analyze test verify clean setup doctor env run-web run-ios run-macos simulator install-ios help
 
 WHISPER_MODEL_URL := https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
 WHISPER_MODEL_DIR := assets/models
@@ -107,6 +107,19 @@ run-macos:
 ## simulator: Open iOS Simulator
 simulator:
 	@open -a Simulator
+
+## install-ios: Build and install on a physical iOS device (USB or wireless)
+install-ios:
+	@DEVICE_ID=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/^[ \t]+|[ \t]+$$/, "", $$2); print $$2}'); \
+	if [ -z "$$DEVICE_ID" ]; then \
+		echo "ERROR: No physical iOS device found."; \
+		echo "Connect your iPhone via USB or enable wireless debugging:"; \
+		echo "  Xcode > Window > Devices and Simulators > pair your device"; \
+		exit 1; \
+	fi; \
+	DEVICE_NAME=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/[ \t]+$$/, "", $$1); print $$1}'); \
+	echo "Installing on: $$DEVICE_NAME ($$DEVICE_ID)"; \
+	flutter run -d "$$DEVICE_ID"
 
 ## devices: List available devices
 devices:
