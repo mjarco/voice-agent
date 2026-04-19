@@ -1,6 +1,6 @@
 # Proposal 007 — Transcript History Screen
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - Proposal 004 (Local Storage) — provides `transcripts` table, `sync_queue` table, and `StorageService` interface.

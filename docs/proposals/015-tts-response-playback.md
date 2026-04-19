@@ -1,6 +1,6 @@
 # Proposal 015 — TTS Response Playback
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P014 (Recording Mode Overhaul) — integration of TTS interruption on tap/press-hold

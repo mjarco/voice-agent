@@ -1,6 +1,6 @@
 # Proposal 014 — Recording Mode Overhaul
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P012 (HandsFreeOrchestrator + VAD) — merged ✓

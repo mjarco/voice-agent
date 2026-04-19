@@ -1,6 +1,6 @@
 # Proposal 012 — Hands-Free Mode with Local VAD
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - Proposal 001 (Audio Capture) — provides microphone capture and WAV output.

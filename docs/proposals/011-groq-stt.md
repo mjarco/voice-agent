@@ -1,6 +1,6 @@
 # Proposal 011 — Groq Cloud STT
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - None — `SttService` interface already exists and is injected via Riverpod

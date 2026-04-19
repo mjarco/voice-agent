@@ -1,6 +1,6 @@
 # Proposal 003 — Transcript Review & Edit
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - Proposal 002 (Speech-to-Text Engine) — provides `TranscriptResult` from the STT service that this screen displays.

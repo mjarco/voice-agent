@@ -1,6 +1,6 @@
 # Proposal 004 — Local Storage & Offline Queue
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 Proposal 000 (Project Bootstrap) — project structure and dependencies exist.
