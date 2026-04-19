@@ -1,6 +1,6 @@
 # Proposal 021 — Agenda Screen
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P020 (Navigation Restructure) — provides `/agenda` route placeholder (branch 0)
