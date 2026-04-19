@@ -1,6 +1,6 @@
 # Proposal 008 — App Navigation & UI Shell
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - Proposal 000 (Project Bootstrap) — provides `lib/app/router.dart`, GoRouter dependency, and directory structure.

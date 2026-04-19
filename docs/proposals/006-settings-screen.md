@@ -1,6 +1,6 @@
 # Proposal 006 — Settings Screen
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - Proposal 004 (Local Storage) — provides device ID via `StorageService.getDeviceId()`, displayed in the About section.

@@ -1,6 +1,6 @@
 # Proposal 002 — Speech-to-Text Engine (On-Device)
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - Proposal 000 (Project Bootstrap) — directory structure, shared dependencies.

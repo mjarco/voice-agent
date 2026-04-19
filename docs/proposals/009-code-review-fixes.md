@@ -1,6 +1,6 @@
 # Proposal 009 — Code Review Fixes
 
-## Status: Approved
+## Status: Implemented
 
 ## Prerequisites
 All proposals 000–008 merged.

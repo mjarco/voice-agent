@@ -1,6 +1,6 @@
 # Proposal 013 — VAD Advanced Settings Screen
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P012 (Hands-Free Mode with Local VAD) — fully merged

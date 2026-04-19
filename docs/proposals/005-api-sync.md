@@ -1,6 +1,6 @@
 # Proposal 005 — API Sync Client
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 Proposal 004 (Local Storage & Offline Queue) — requires the `sync_queue` table and

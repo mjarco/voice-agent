@@ -1,6 +1,6 @@
 # Proposal 000 — Project Bootstrap
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 None — this is the root of the dependency tree.

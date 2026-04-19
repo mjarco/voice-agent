@@ -1,6 +1,6 @@
 # Proposal 001 — Audio Capture
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - Proposal 000 (Project Bootstrap) — directory structure, shared dependencies, buildable app shell.

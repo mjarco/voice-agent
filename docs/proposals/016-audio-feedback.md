@@ -1,6 +1,6 @@
 # Proposal 016 — Audio Feedback During Processing
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P014 (Recording Mode Overhaul) — `RecordingController.stopAndTranscribe()` must exist (T1/T2)
