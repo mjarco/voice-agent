@@ -1,6 +1,6 @@
 # Proposal 023 — Plan Screen
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P020 (Navigation Restructure) — provides `/plan` route with `PlanPlaceholderScreen`
