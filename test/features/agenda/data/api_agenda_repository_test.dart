@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/features/agenda/data/api_agenda_repository.dart';

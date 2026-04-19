@@ -1,6 +1,6 @@
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
-import 'package:voice_agent/app/placeholders/agenda_placeholder_screen.dart';
+import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
 import 'package:voice_agent/app/placeholders/chat_placeholder_screen.dart';
 import 'package:voice_agent/app/placeholders/plan_placeholder_screen.dart';
 import 'package:voice_agent/app/placeholders/routines_placeholder_screen.dart';
@@ -23,7 +23,7 @@ GoRouter createRouter() => GoRouter(
           routes: [
             GoRoute(
               path: '/agenda',
-              builder: (context, state) => const AgendaPlaceholderScreen(),
+              builder: (context, state) => const AgendaScreen(),
             ),
           ],
         ),
