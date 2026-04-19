@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
+import 'package:voice_agent/core/network/sse_client.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
@@ -8,6 +9,10 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     baseUrl: deriveBaseUrl(config.apiUrl),
     token: config.apiToken,
   );
+});
+
+final sseClientProvider = Provider<SseClient>((ref) {
+  return SseClient(apiClient: ref.watch(apiClientProvider));
 });
 
 String? deriveBaseUrl(String? apiUrl) {
