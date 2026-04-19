@@ -57,7 +57,6 @@ void main() {
             {
               'entry_id': 'e-4',
               'display_text': 'Ship feature X',
-              'plan_bucket': 'committed',
               'confidence': 1.0,
               'conversation_id': 'conv-4',
               'created_at': '2026-03-01T00:00:00.000Z',
@@ -158,7 +157,7 @@ void main() {
 
       expect(entry.entryId, 'e-1');
       expect(entry.displayText, 'Do thing');
-      expect(entry.planBucket, 'committed');
+      expect(entry.planBucket, PlanBucket.committed);
       expect(entry.confidence, 0.9);
       expect(entry.closedAt, isNull);
       expect(entry.recordType, isNull);
@@ -174,7 +173,7 @@ void main() {
         'record_type': 'constraint',
       });
 
-      expect(entry.recordType, 'constraint');
+      expect(entry.recordType, RecordType.constraint);
       expect(entry.planBucket, isNull);
     });
 
@@ -182,7 +181,6 @@ void main() {
       final entry = PlanEntry.fromMap({
         'entry_id': 'e-3',
         'display_text': 'Done thing',
-        'plan_bucket': 'committed',
         'confidence': 1.0,
         'conversation_id': 'conv-3',
         'created_at': '2026-03-01T00:00:00.000Z',
@@ -209,10 +207,50 @@ void main() {
 
       expect(roundTripped.entryId, entry.entryId);
       expect(roundTripped.displayText, entry.displayText);
-      expect(roundTripped.planBucket, entry.planBucket);
+      expect(roundTripped.planBucket, PlanBucket.candidate);
       expect(roundTripped.confidence, entry.confidence);
-      expect(roundTripped.recordType, entry.recordType);
+      expect(roundTripped.recordType, RecordType.preference);
       expect(roundTripped.closedAt, isNotNull);
+    });
+
+    test('fromMap handles unknown plan_bucket as null', () {
+      final entry = PlanEntry.fromMap({
+        'entry_id': 'e-1',
+        'display_text': 'Unknown bucket',
+        'plan_bucket': 'unknown_value',
+        'confidence': 0.5,
+        'conversation_id': 'conv-1',
+        'created_at': '2026-04-18T00:00:00.000Z',
+      });
+
+      expect(entry.planBucket, isNull);
+    });
+
+    test('fromMap handles unknown record_type as null', () {
+      final entry = PlanEntry.fromMap({
+        'entry_id': 'e-1',
+        'display_text': 'Unknown type',
+        'confidence': 0.5,
+        'conversation_id': 'conv-1',
+        'created_at': '2026-04-18T00:00:00.000Z',
+        'record_type': 'unknown_type',
+      });
+
+      expect(entry.recordType, isNull);
+    });
+
+    test('PlanBucket enum covers all values', () {
+      expect(PlanBucket.fromJson('committed'), PlanBucket.committed);
+      expect(PlanBucket.fromJson('candidate'), PlanBucket.candidate);
+      expect(PlanBucket.fromJson('proposed'), PlanBucket.proposed);
+      expect(PlanBucket.fromJson(null), isNull);
+    });
+
+    test('RecordType enum covers all values', () {
+      expect(RecordType.fromJson('constraint'), RecordType.constraint);
+      expect(RecordType.fromJson('preference'), RecordType.preference);
+      expect(RecordType.fromJson('decision'), RecordType.decision);
+      expect(RecordType.fromJson(null), isNull);
     });
   });
 }
