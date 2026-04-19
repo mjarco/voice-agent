@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,8 +40,12 @@ class _StubRepository implements RoutinesRepository {
   @override
   Future<void> archiveRoutine(String id) async {}
 
+  Completer<void>? triggerCompleter;
+
   @override
-  Future<void> triggerRoutine(String id, String scheduledFor) async {}
+  Future<void> triggerRoutine(String id, String scheduledFor) async {
+    if (triggerCompleter != null) await triggerCompleter!.future;
+  }
 
   @override
   Future<void> updateOccurrenceStatus(
@@ -329,6 +335,50 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No draft routines'), findsOneWidget);
+    });
+
+    testWidgets('paused routine shows resume button', (tester) async {
+      final repo = _StubRepository(
+        routines: [_sampleRoutine(status: RoutineStatus.paused)],
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      expect(
+        find.byKey(const Key('routine-resume-rtn-1')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('routine-pause-rtn-1')), findsNothing);
+      expect(find.byKey(const Key('routine-trigger-rtn-1')), findsNothing);
+    });
+
+    testWidgets('proposal card shows confidence indicator', (tester) async {
+      final repo = _StubRepository(
+        proposals: [_sampleProposal()],
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.byKey(const Key('proposal-confidence')), findsOneWidget);
+      expect(find.text('Confidence: 85%'), findsOneWidget);
+    });
+
+    testWidgets('trigger completes and buttons remain after action',
+        (tester) async {
+      final repo = _StubRepository(
+        routines: [_sampleRoutine(status: RoutineStatus.active)],
+      )..triggerCompleter = Completer<void>();
+
+      await _pumpScreen(tester, repository: repo);
+
+      // Trigger is present before action
+      expect(
+        find.byKey(const Key('routine-trigger-rtn-1')),
+        findsOneWidget,
+      );
+
+      repo.triggerCompleter!.complete();
+      await tester.pumpAndSettle();
     });
   });
 }

@@ -24,6 +24,8 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
     RoutineStatus.archived,
   ];
 
+  final Set<String> _busyIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -132,6 +134,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
                 ],
                 ...routines.map((r) => _RoutineCard(
                       routine: r,
+                      isBusy: _busyIds.contains(r.id),
                       onTap: () => _navigateToDetail(r.id),
                       onTrigger:
                           r.status == RoutineStatus.active
@@ -140,6 +143,10 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
                       onPause:
                           r.status == RoutineStatus.active
                               ? () => _handlePause(r.id)
+                              : null,
+                      onResume:
+                          r.status == RoutineStatus.paused
+                              ? () => _handleResume(r.id)
                               : null,
                     )),
               ],
@@ -174,11 +181,13 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
   }
 
   Future<void> _handleTrigger(String id) async {
+    setState(() => _busyIds.add(id));
     final now = DateTime.now();
     final date =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final notifier = ref.read(routinesNotifierProvider.notifier);
     final success = await notifier.triggerRoutine(id, date);
+    if (mounted) setState(() => _busyIds.remove(id));
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -189,13 +198,29 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
   }
 
   Future<void> _handlePause(String id) async {
+    setState(() => _busyIds.add(id));
     final notifier = ref.read(routinesNotifierProvider.notifier);
     final success = await notifier.pauseRoutine(id);
+    if (mounted) setState(() => _busyIds.remove(id));
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content:
                 Text(notifier.lastActionError ?? 'Failed to pause')),
+      );
+    }
+  }
+
+  Future<void> _handleResume(String id) async {
+    setState(() => _busyIds.add(id));
+    final notifier = ref.read(routinesNotifierProvider.notifier);
+    final success = await notifier.activateRoutine(id);
+    if (mounted) setState(() => _busyIds.remove(id));
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text(notifier.lastActionError ?? 'Failed to resume')),
       );
     }
   }
@@ -301,6 +326,14 @@ class _ProposalCard extends StatelessWidget {
                   Chip(label: Text(proposal.cadence!)),
               ],
             ),
+            const SizedBox(height: 4),
+            Text(
+              'Confidence: ${(proposal.confidence * 100).toStringAsFixed(0)}%',
+              key: const Key('proposal-confidence'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+            ),
             const SizedBox(height: 8),
             ...proposal.items.take(3).map(
                   (item) => Padding(
@@ -336,14 +369,18 @@ class _ProposalCard extends StatelessWidget {
 class _RoutineCard extends StatelessWidget {
   const _RoutineCard({
     required this.routine,
+    required this.isBusy,
     required this.onTap,
     this.onTrigger,
     this.onPause,
+    this.onResume,
   });
   final Routine routine;
+  final bool isBusy;
   final VoidCallback onTap;
   final VoidCallback? onTrigger;
   final VoidCallback? onPause;
+  final VoidCallback? onResume;
 
   @override
   Widget build(BuildContext context) {
@@ -380,20 +417,35 @@ class _RoutineCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (onTrigger != null)
-                IconButton(
-                  key: Key('routine-trigger-${routine.id}'),
-                  icon: const Icon(Icons.play_arrow),
-                  tooltip: 'Trigger now',
-                  onPressed: onTrigger,
-                ),
-              if (onPause != null)
-                IconButton(
-                  key: Key('routine-pause-${routine.id}'),
-                  icon: const Icon(Icons.pause),
-                  tooltip: 'Pause',
-                  onPressed: onPause,
-                ),
+              if (isBusy)
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else ...[
+                if (onTrigger != null)
+                  IconButton(
+                    key: Key('routine-trigger-${routine.id}'),
+                    icon: const Icon(Icons.play_arrow),
+                    tooltip: 'Trigger now',
+                    onPressed: onTrigger,
+                  ),
+                if (onPause != null)
+                  IconButton(
+                    key: Key('routine-pause-${routine.id}'),
+                    icon: const Icon(Icons.pause),
+                    tooltip: 'Pause',
+                    onPressed: onPause,
+                  ),
+                if (onResume != null)
+                  IconButton(
+                    key: Key('routine-resume-${routine.id}'),
+                    icon: const Icon(Icons.play_circle_outline),
+                    tooltip: 'Resume',
+                    onPressed: onResume,
+                  ),
+              ],
             ],
           ),
         ),

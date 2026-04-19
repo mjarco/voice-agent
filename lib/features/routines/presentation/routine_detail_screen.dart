@@ -5,15 +5,29 @@ import 'package:voice_agent/features/routines/domain/routine_detail_state.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_notifier.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
 
-class RoutineDetailScreen extends ConsumerWidget {
+class RoutineDetailScreen extends ConsumerStatefulWidget {
   const RoutineDetailScreen({super.key, required this.routineId});
   final String routineId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(routineDetailNotifierProvider(routineId));
+  ConsumerState<RoutineDetailScreen> createState() =>
+      _RoutineDetailScreenState();
+}
+
+class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
+  final Set<String> _busyActions = {};
+
+  bool get _isAnyBusy => _busyActions.isNotEmpty;
+
+  void _setBusy(String action) => setState(() => _busyActions.add(action));
+  void _clearBusy(String action) => setState(() => _busyActions.remove(action));
+
+  @override
+  Widget build(BuildContext context) {
+    final state =
+        ref.watch(routineDetailNotifierProvider(widget.routineId));
     final notifier =
-        ref.read(routineDetailNotifierProvider(routineId).notifier);
+        ref.read(routineDetailNotifierProvider(widget.routineId).notifier);
 
     return Scaffold(
       appBar: AppBar(
@@ -41,14 +55,13 @@ class RoutineDetailScreen extends ConsumerWidget {
       RoutineDetailLoading() =>
         const Center(child: CircularProgressIndicator()),
       RoutineDetailLoaded(routine: final routine, occurrences: final occs) =>
-        _buildContent(context, routine, occs, notifier),
+        _buildContent(routine, occs, notifier),
       RoutineDetailError(message: final message) =>
-        _buildError(context, message, notifier),
+        _buildError(message, notifier),
     };
   }
 
   Widget _buildContent(
-    BuildContext context,
     Routine routine,
     List<RoutineOccurrence> occurrences,
     RoutineDetailNotifier notifier,
@@ -66,15 +79,17 @@ class RoutineDetailScreen extends ConsumerWidget {
           _OccurrencesSection(
             occurrences: occurrences,
             onUpdateStatus: (occId, status) =>
-                _handleUpdateOccurrence(context, notifier, occId, status),
+                _handleUpdateOccurrence(notifier, occId, status),
           ),
           const Divider(),
           _ActionsSection(
             routine: routine,
-            onActivate: () => _handleActivate(context, notifier),
-            onPause: () => _handlePause(context, notifier),
-            onArchive: () => _handleArchive(context, notifier),
-            onTrigger: () => _handleTrigger(context, notifier),
+            busyActions: _busyActions,
+            isAnyBusy: _isAnyBusy,
+            onActivate: () => _handleActivate(notifier),
+            onPause: () => _handlePause(notifier),
+            onArchive: () => _handleArchive(notifier),
+            onTrigger: () => _handleTrigger(notifier),
           ),
           const SizedBox(height: 32),
         ],
@@ -83,7 +98,6 @@ class RoutineDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildError(
-    BuildContext context,
     String message,
     RoutineDetailNotifier notifier,
   ) {
@@ -105,12 +119,12 @@ class RoutineDetailScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleActivate(
-    BuildContext context,
-    RoutineDetailNotifier notifier,
-  ) async {
+  Future<void> _handleActivate(RoutineDetailNotifier notifier) async {
+    _setBusy('activate');
     final success = await notifier.activateRoutine();
-    if (!success && context.mounted) {
+    if (!mounted) return;
+    _clearBusy('activate');
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content:
@@ -119,12 +133,12 @@ class RoutineDetailScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _handlePause(
-    BuildContext context,
-    RoutineDetailNotifier notifier,
-  ) async {
+  Future<void> _handlePause(RoutineDetailNotifier notifier) async {
+    _setBusy('pause');
     final success = await notifier.pauseRoutine();
-    if (!success && context.mounted) {
+    if (!mounted) return;
+    _clearBusy('pause');
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(notifier.lastActionError ?? 'Failed to pause')),
@@ -132,10 +146,7 @@ class RoutineDetailScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _handleArchive(
-    BuildContext context,
-    RoutineDetailNotifier notifier,
-  ) async {
+  Future<void> _handleArchive(RoutineDetailNotifier notifier) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -157,8 +168,11 @@ class RoutineDetailScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
 
+    _setBusy('archive');
     final success = await notifier.archiveRoutine();
-    if (!success && context.mounted) {
+    if (!mounted) return;
+    _clearBusy('archive');
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content:
@@ -167,15 +181,15 @@ class RoutineDetailScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _handleTrigger(
-    BuildContext context,
-    RoutineDetailNotifier notifier,
-  ) async {
+  Future<void> _handleTrigger(RoutineDetailNotifier notifier) async {
+    _setBusy('trigger');
     final now = DateTime.now();
     final date =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final success = await notifier.triggerRoutine(date);
-    if (!success && context.mounted) {
+    if (!mounted) return;
+    _clearBusy('trigger');
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content:
@@ -185,14 +199,14 @@ class RoutineDetailScreen extends ConsumerWidget {
   }
 
   Future<void> _handleUpdateOccurrence(
-    BuildContext context,
     RoutineDetailNotifier notifier,
     String occurrenceId,
     OccurrenceStatus status,
   ) async {
     final success =
         await notifier.updateOccurrenceStatus(occurrenceId, status);
-    if (!success && context.mounted) {
+    if (!mounted) return;
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(
@@ -341,12 +355,16 @@ class _OccurrencesSection extends StatelessWidget {
 class _ActionsSection extends StatelessWidget {
   const _ActionsSection({
     required this.routine,
+    required this.busyActions,
+    required this.isAnyBusy,
     required this.onActivate,
     required this.onPause,
     required this.onArchive,
     required this.onTrigger,
   });
   final Routine routine;
+  final Set<String> busyActions;
+  final bool isAnyBusy;
   final VoidCallback onActivate;
   final VoidCallback onPause;
   final VoidCallback onArchive;
@@ -362,35 +380,98 @@ class _ActionsSection extends StatelessWidget {
         children: [
           if (routine.status == RoutineStatus.draft ||
               routine.status == RoutineStatus.paused)
-            FilledButton.icon(
-              key: const Key('detail-activate-button'),
+            _ActionButton(
+              widgetKey: const Key('detail-activate-button'),
+              label: 'Activate',
+              icon: Icons.play_arrow,
+              isBusy: busyActions.contains('activate'),
+              isDisabled: isAnyBusy,
               onPressed: onActivate,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Activate'),
+              filled: true,
             ),
           if (routine.status == RoutineStatus.active)
-            OutlinedButton.icon(
-              key: const Key('detail-pause-button'),
+            _ActionButton(
+              widgetKey: const Key('detail-pause-button'),
+              label: 'Pause',
+              icon: Icons.pause,
+              isBusy: busyActions.contains('pause'),
+              isDisabled: isAnyBusy,
               onPressed: onPause,
-              icon: const Icon(Icons.pause),
-              label: const Text('Pause'),
+              filled: false,
             ),
           if (routine.status == RoutineStatus.active)
-            FilledButton.icon(
-              key: const Key('detail-trigger-button'),
+            _ActionButton(
+              widgetKey: const Key('detail-trigger-button'),
+              label: 'Trigger Now',
+              icon: Icons.bolt,
+              isBusy: busyActions.contains('trigger'),
+              isDisabled: isAnyBusy,
               onPressed: onTrigger,
-              icon: const Icon(Icons.bolt),
-              label: const Text('Trigger Now'),
+              filled: true,
             ),
           if (routine.status != RoutineStatus.archived)
-            OutlinedButton.icon(
-              key: const Key('detail-archive-button'),
+            _ActionButton(
+              widgetKey: const Key('detail-archive-button'),
+              label: 'Archive',
+              icon: Icons.archive,
+              isBusy: busyActions.contains('archive'),
+              isDisabled: isAnyBusy,
               onPressed: onArchive,
-              icon: const Icon(Icons.archive),
-              label: const Text('Archive'),
+              filled: false,
             ),
         ],
       ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.widgetKey,
+    required this.label,
+    required this.icon,
+    required this.isBusy,
+    required this.isDisabled,
+    required this.onPressed,
+    required this.filled,
+  });
+
+  final Key widgetKey;
+  final String label;
+  final IconData icon;
+  final bool isBusy;
+  final bool isDisabled;
+  final VoidCallback onPressed;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = isBusy
+        ? const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18),
+              const SizedBox(width: 4),
+              Text(label),
+            ],
+          );
+
+    if (filled) {
+      return FilledButton(
+        key: widgetKey,
+        onPressed: isDisabled ? null : onPressed,
+        child: child,
+      );
+    }
+    return OutlinedButton(
+      key: widgetKey,
+      onPressed: isDisabled ? null : onPressed,
+      child: child,
     );
   }
 }
