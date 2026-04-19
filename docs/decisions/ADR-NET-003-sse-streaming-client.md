@@ -32,3 +32,20 @@ Composing with `ApiClient` for URL/auth avoids duplicating configuration logic. 
 - Feature code handles errors differently for streaming vs. request-response: `switch` on `ApiResult` for `ApiClient`, stream error handlers for `SseClient`.
 - The SSE Dio instance's 10-minute timeout is specific to the LLM chat use case. Other streaming use cases may need different timeouts — the constructor accepts an optional `Dio` for customization.
 - SSE reconnection is not implemented. Each request is a single request-response stream. Reconnection logic, if needed, belongs in the feature layer.
+
+## Amendment: sseClientProvider co-location (P024)
+
+`sseClientProvider` is defined in `lib/core/providers/api_client_provider.dart` alongside
+`apiClientProvider`. Both providers depend on the same base URL and auth token configuration;
+co-locating them in the same file keeps related infrastructure providers together and avoids
+a separate file for a single-line provider.
+
+```dart
+// lib/core/providers/api_client_provider.dart
+final sseClientProvider = Provider<SseClient>((ref) {
+  return SseClient(apiClient: ref.watch(apiClientProvider));
+});
+```
+
+This is the required location for `sseClientProvider`. Feature providers that need `SseClient`
+access it via `ref.watch(sseClientProvider)`, not by constructing `SseClient` directly.
