@@ -1,3 +1,33 @@
+enum PlanBucket {
+  committed,
+  candidate,
+  proposed;
+
+  static PlanBucket? fromJson(String? value) => switch (value) {
+        'committed' => PlanBucket.committed,
+        'candidate' => PlanBucket.candidate,
+        'proposed' => PlanBucket.proposed,
+        _ => null,
+      };
+
+  String toJson() => name;
+}
+
+enum RecordType {
+  constraint,
+  preference,
+  decision;
+
+  static RecordType? fromJson(String? value) => switch (value) {
+        'constraint' => RecordType.constraint,
+        'preference' => RecordType.preference,
+        'decision' => RecordType.decision,
+        _ => null,
+      };
+
+  String toJson() => name;
+}
+
 class PlanResponse {
   const PlanResponse({
     required this.topics,
@@ -107,25 +137,25 @@ class PlanEntry {
 
   final String entryId;
   final String displayText;
-  final String? planBucket;
+  final PlanBucket? planBucket;
   final double confidence;
   final String conversationId;
   final DateTime createdAt;
   final DateTime? closedAt;
-  final String? recordType;
+  final RecordType? recordType;
 
   factory PlanEntry.fromMap(Map<String, dynamic> map) {
     return PlanEntry(
       entryId: map['entry_id'] as String,
       displayText: map['display_text'] as String,
-      planBucket: map['plan_bucket'] as String?,
+      planBucket: PlanBucket.fromJson(map['plan_bucket'] as String?),
       confidence: (map['confidence'] as num).toDouble(),
       conversationId: map['conversation_id'] as String,
       createdAt: DateTime.parse(map['created_at'] as String),
       closedAt: map['closed_at'] != null
           ? DateTime.parse(map['closed_at'] as String)
           : null,
-      recordType: map['record_type'] as String?,
+      recordType: RecordType.fromJson(map['record_type'] as String?),
     );
   }
 
@@ -133,12 +163,12 @@ class PlanEntry {
     return {
       'entry_id': entryId,
       'display_text': displayText,
-      'plan_bucket': planBucket,
+      'plan_bucket': planBucket?.toJson(),
       'confidence': confidence,
       'conversation_id': conversationId,
       'created_at': createdAt.toIso8601String(),
       'closed_at': closedAt?.toIso8601String(),
-      'record_type': recordType,
+      'record_type': recordType?.toJson(),
     };
   }
 }
