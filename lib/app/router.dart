@@ -2,7 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
 import 'package:voice_agent/app/placeholders/chat_placeholder_screen.dart';
-import 'package:voice_agent/app/placeholders/plan_placeholder_screen.dart';
+import 'package:voice_agent/features/plan/presentation/plan_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
 import 'package:voice_agent/features/history/history_screen.dart';
@@ -33,7 +33,7 @@ GoRouter createRouter() => GoRouter(
           routes: [
             GoRoute(
               path: '/plan',
-              builder: (context, state) => const PlanPlaceholderScreen(),
+              builder: (context, state) => const PlanScreen(),
             ),
           ],
         ),
