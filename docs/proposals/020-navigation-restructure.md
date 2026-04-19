@@ -1,6 +1,6 @@
 # Proposal 020 — Navigation Restructure (5-Tab Layout)
 
-## Status: Approved
+## Status: Implemented
 
 ## Prerequisites
 - P008 (App Navigation) — defines the current 3-tab shell with `StatefulShellRoute.indexedStack`; merged
