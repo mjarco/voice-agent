@@ -316,8 +316,10 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           pendingUserMessage: current.pendingUserMessage,
           toolProgress: current.toolProgress,
         );
-      case ThreadLoading() || ThreadError():
+      case ThreadLoading():
         _pendingModel = model;
+      case ThreadError():
+        break;
     }
   }
 
@@ -354,8 +356,10 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           pendingUserMessage: current.pendingUserMessage,
           toolProgress: current.toolProgress,
         );
-      case ThreadLoading() || ThreadError():
+      case ThreadLoading():
         _pendingBackend = backend;
+      case ThreadError():
+        break;
     }
   }
 
