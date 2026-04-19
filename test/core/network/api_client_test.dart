@@ -270,6 +270,56 @@ void main() {
       expect(_MockAdapter.lastRequestMethod, 'PATCH');
     });
 
+    test('postJson sends POST with data', () async {
+      _MockAdapter.nextStatusCode = 200;
+
+      final result = await configuredClient.postJson(
+        '/records/abc/done',
+        data: {'note': 'completed'},
+      );
+
+      expect(result, isA<ApiSuccess>());
+      expect(_MockAdapter.lastRequestPath,
+          'https://agent.jarco.casa/api/v1/records/abc/done');
+      expect(_MockAdapter.lastRequestMethod, 'POST');
+      expect(
+        (_MockAdapter.lastRequestData as Map<String, dynamic>)['note'],
+        'completed',
+      );
+    });
+
+    test('postJson sends POST without data', () async {
+      _MockAdapter.nextStatusCode = 200;
+
+      final result = await configuredClient.postJson('/records/abc/done');
+
+      expect(result, isA<ApiSuccess>());
+      expect(_MockAdapter.lastRequestMethod, 'POST');
+    });
+
+    test('postJson returns ApiNotConfigured when baseUrl is null', () async {
+      final unconfigured = ApiClient(dio: dio);
+      final result = await unconfigured.postJson('/records/abc/done');
+
+      expect(result, isA<ApiNotConfigured>());
+    });
+
+    test('postJson classifies 500 as ApiTransientFailure', () async {
+      _MockAdapter.nextStatusCode = 500;
+
+      final result = await configuredClient.postJson('/records/abc/done');
+
+      expect(result, isA<ApiTransientFailure>());
+    });
+
+    test('postJson classifies 400 as ApiPermanentFailure', () async {
+      _MockAdapter.nextStatusCode = 400;
+
+      final result = await configuredClient.postJson('/records/abc/done');
+
+      expect(result, isA<ApiPermanentFailure>());
+    });
+
     test('delete sends DELETE', () async {
       _MockAdapter.nextStatusCode = 200;
 
