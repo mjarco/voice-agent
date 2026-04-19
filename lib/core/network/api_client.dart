@@ -124,6 +124,13 @@ class ApiClient {
     return request('PATCH', path, data: data);
   }
 
+  Future<ApiResult> postJson(
+    String path, {
+    Map<String, dynamic>? data,
+  }) {
+    return request('POST', path, data: data);
+  }
+
   Future<ApiResult> delete(String path) {
     return request('DELETE', path);
   }
