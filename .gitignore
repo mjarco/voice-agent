@@ -54,4 +54,13 @@ assets/models/
 .claude/settings.local.json
 
 # Codex CLI session state (local only, not for sharing)
-.codex/review-session-id
+.codex/
+
+# Claude Code local skills
+.claude/skills/
+
+# Sound effect samples (not production assets)
+mixkit-*.wav
+
+# iOS extensions not yet integrated
+ios/VoiceAgentControl/
