@@ -1,6 +1,6 @@
 # Proposal 024 — Chat Screen
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P020 (Navigation Restructure) — provides `/chat` route placeholder (branch 4)
