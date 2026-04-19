@@ -71,3 +71,21 @@ layer repository implementation:
 
 This preserves the `ApiResult` abstraction boundary: HTTP semantics stop at
 the data layer, and the domain layer works with business concepts.
+
+### Non-2xx response body constraint on domain exception messages (P023)
+
+`ApiClient` discards non-2xx response bodies — only the HTTP status code and
+`response.statusMessage` (the HTTP reason phrase, e.g. "Conflict") are available
+when a request fails. Features that map HTTP 4xx errors to domain exceptions
+**must not** attempt to forward backend-provided error detail from the response
+body, as no body content is accessible.
+
+Consequence: when a feature exception maps a 4xx to a user-visible SnackBar
+message (e.g., `PlanConflictException`, `RoutineAlreadyTriggedException`), the
+message must be:
+- A hardcoded, human-readable domain string defined in the exception class, OR
+- Derived solely from the HTTP status code (not the response body).
+
+If a feature needs backend-provided error detail in its SnackBar, the `ApiClient`
+must first be extended to preserve 4xx response bodies — that is a separate,
+scoped change requiring its own proposal task.
