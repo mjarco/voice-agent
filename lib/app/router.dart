@@ -3,7 +3,8 @@ import 'package:voice_agent/app/app_shell_scaffold.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
 import 'package:voice_agent/app/placeholders/chat_placeholder_screen.dart';
 import 'package:voice_agent/app/placeholders/plan_placeholder_screen.dart';
-import 'package:voice_agent/app/placeholders/routines_placeholder_screen.dart';
+import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
+import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
 import 'package:voice_agent/features/history/history_screen.dart';
 import 'package:voice_agent/features/history/transcript_detail_screen.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
@@ -65,7 +66,16 @@ GoRouter createRouter() => GoRouter(
           routes: [
             GoRoute(
               path: '/routines',
-              builder: (context, state) => const RoutinesPlaceholderScreen(),
+              builder: (context, state) => const RoutinesScreen(),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  builder: (context, state) {
+                    final id = state.pathParameters['id']!;
+                    return RoutineDetailScreen(routineId: id);
+                  },
+                ),
+              ],
             ),
           ],
         ),
