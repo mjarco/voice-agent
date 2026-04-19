@@ -1,7 +1,8 @@
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
-import 'package:voice_agent/app/placeholders/chat_placeholder_screen.dart';
+import 'package:voice_agent/features/chat/presentation/conversations_screen.dart';
+import 'package:voice_agent/features/chat/presentation/thread_screen.dart';
 import 'package:voice_agent/features/plan/presentation/plan_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
@@ -84,7 +85,16 @@ GoRouter createRouter() => GoRouter(
           routes: [
             GoRoute(
               path: '/chat',
-              builder: (context, state) => const ChatPlaceholderScreen(),
+              builder: (_, _) => const ConversationsScreen(),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  builder: (_, state) {
+                    final id = state.pathParameters['id']!;
+                    return ThreadScreen(conversationId: id);
+                  },
+                ),
+              ],
             ),
           ],
         ),
