@@ -563,5 +563,34 @@ void main() {
       final empty = notifier.state as ThreadEmpty;
       expect(empty.selectedBackend, 'backend-b');
     });
+
+    test('selectModel updates streaming state', () async {
+      final repo = _StubRepository()..conversationResult = _conv();
+      final notifier =
+          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+      await Future.microtask(() {});
+      await Future.microtask(() {});
+
+      await notifier.send('hello');
+      expect(notifier.state, isA<ThreadStreaming>());
+
+      notifier.selectModel('model-streaming');
+
+      final streaming = notifier.state as ThreadStreaming;
+      expect(streaming.selectedModel, 'model-streaming');
+    });
+
+    test('selectModel during error state is a no-op', () async {
+      final repo = _StubRepository()..conversationResult = null;
+      final notifier =
+          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+      await Future.microtask(() {});
+      await Future.microtask(() {});
+
+      expect(notifier.state, isA<ThreadError>());
+      notifier.selectModel('model-ignored');
+
+      expect(notifier.state, isA<ThreadError>());
+    });
   });
 }
