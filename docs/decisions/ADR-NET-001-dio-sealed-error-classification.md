@@ -55,3 +55,19 @@ Growth constraint: new `ApiResult` subtypes should only be added when the condit
 ### Multiple Dio instances
 
 `SseClient` creates its own Dio instance with an extended receive timeout (10 minutes) for long-running SSE streams. All Dio instances MUST preserve the security settings: `followRedirects: false`. Timeout values may be adjusted for the use case.
+
+## Amendment: Domain exception pattern for HTTP error differentiation (P022)
+
+When a feature's notifier must distinguish between different API failure modes
+(e.g., 409 Conflict vs. generic error), the translation happens in the data
+layer repository implementation:
+
+- The feature defines a sealed exception hierarchy in `domain/` (e.g.,
+  `RoutinesException` with subtypes `RoutinesGeneralException`,
+  `RoutineAlreadyTriggedException`).
+- The data layer maps `ApiPermanentFailure` with specific status codes to
+  the corresponding domain exception subtype.
+- The notifier pattern-matches on exception subtypes, never on HTTP status codes.
+
+This preserves the `ApiResult` abstraction boundary: HTTP semantics stop at
+the data layer, and the domain layer works with business concepts.
