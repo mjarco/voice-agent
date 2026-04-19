@@ -28,7 +28,6 @@ import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../helpers/in_memory_bridge_store.dart';
 import '../../helpers/stub_background_service.dart';
-import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 
 // ── Stubs ─────────────────────────────────────────────────────────────────────
@@ -273,8 +272,6 @@ void main() {
           child: const App(),
         ),
       );
-      // Ensure we're on the record screen regardless of prior router state.
-      router.go('/record');
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('vad-params-strip')), findsOneWidget);
@@ -296,7 +293,6 @@ void main() {
           child: const App(),
         ),
       );
-      router.go('/record');
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('vad-params-strip')));

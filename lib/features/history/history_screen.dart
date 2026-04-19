@@ -64,7 +64,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 final item = state.items[index];
                 return _HistoryListTile(
                   item: item,
-                  onTap: () => context.push('/history/${item.id}'),
+                  onTap: () => context.push('/record/history/${item.id}'),
                 );
               },
             ),

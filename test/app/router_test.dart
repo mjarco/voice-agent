@@ -56,8 +56,8 @@ void main() {
     backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
   ];
 
-  group('Tab state preservation', () {
-    testWidgets('Switching tabs preserves state (indexedStack)', (tester) async {
+  group('5-tab navigation', () {
+    testWidgets('initial location is /record (center tab)', (tester) async {
       await tester.pumpWidget(
         ProviderScope(overrides: overrides, child: const App()),
       );
@@ -65,7 +65,31 @@ void main() {
 
       expect(find.text('Record'), findsWidgets);
 
-      await tester.tap(find.byIcon(Icons.history));
+      final navBar = tester.widget<NavigationBar>(
+        find.byType(NavigationBar),
+      );
+      expect(navBar.selectedIndex, 2);
+    });
+
+    testWidgets('all 5 tab destinations render', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(overrides: overrides, child: const App()),
+      );
+      await tester.pumpAndSettle();
+
+      final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
+      expect(navBar.destinations.length, 5);
+    });
+
+    testWidgets('switching tabs preserves state (indexedStack)', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(overrides: overrides, child: const App()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Record'), findsWidgets);
+
+      await tester.tap(find.byIcon(Icons.calendar_today));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byIcon(Icons.mic));
@@ -74,8 +98,7 @@ void main() {
       final navBar = tester.widget<NavigationBar>(
         find.byType(NavigationBar),
       );
-      expect(navBar.selectedIndex, 1);
+      expect(navBar.selectedIndex, 2);
     });
   });
-
 }

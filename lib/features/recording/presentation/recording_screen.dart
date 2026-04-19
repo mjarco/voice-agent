@@ -72,7 +72,19 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final agentReply = ref.watch(latestAgentReplyProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Record')),
+      appBar: AppBar(
+        title: const Text('Record'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () => context.push('/record/history'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => context.push('/settings'),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           if (!isApiConfigured)
@@ -82,7 +94,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => context.go('/settings'),
+                  onPressed: () => context.push('/settings'),
                   child: const Text('Go to Settings'),
                 ),
               ],
@@ -139,7 +151,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
             const SizedBox(height: 24),
             if (requiresAppSettings)
               FilledButton.icon(
-                onPressed: () => context.go('/settings'),
+                onPressed: () => context.push('/settings'),
                 icon: const Icon(Icons.settings),
                 label: const Text('Go to Settings'),
               )
@@ -344,7 +356,7 @@ class _ErrorStrip extends StatelessWidget {
               ),
               if (requiresAppSettings)
                 TextButton(
-                  onPressed: () => context.go('/settings'),
+                  onPressed: () => context.push('/settings'),
                   child: const Text('Go to Settings'),
                 )
               else if (requiresSettings)
