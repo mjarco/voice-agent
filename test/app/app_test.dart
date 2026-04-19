@@ -64,19 +64,21 @@ List<Override> get _testOverrides => [
     ];
 
 void main() {
-  testWidgets('App renders with shell and 3 tabs', (tester) async {
+  testWidgets('App renders with shell and 5 tabs', (tester) async {
     await tester.pumpWidget(
       ProviderScope(overrides: _testOverrides, child: const App()),
     );
     await tester.pumpAndSettle();
 
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('History'), findsWidgets);
+    expect(find.text('Agenda'), findsWidgets);
+    expect(find.text('Plan'), findsWidgets);
     expect(find.text('Record'), findsWidgets);
-    expect(find.text('Settings'), findsWidgets);
+    expect(find.text('Routines'), findsWidgets);
+    expect(find.text('Chat'), findsWidgets);
   });
 
-  testWidgets('Default tab is Record', (tester) async {
+  testWidgets('Default tab is Record (index 2)', (tester) async {
     await tester.pumpWidget(
       ProviderScope(overrides: _testOverrides, child: const App()),
     );
@@ -85,16 +87,16 @@ void main() {
     final navBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
-    expect(navBar.selectedIndex, 1);
+    expect(navBar.selectedIndex, 2);
   });
 
-  testWidgets('Tapping History tab shows History screen', (tester) async {
+  testWidgets('Tapping Agenda tab switches to index 0', (tester) async {
     await tester.pumpWidget(
       ProviderScope(overrides: _testOverrides, child: const App()),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.history));
+    await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle();
 
     final navBar = tester.widget<NavigationBar>(
@@ -103,19 +105,19 @@ void main() {
     expect(navBar.selectedIndex, 0);
   });
 
-  testWidgets('Tapping Settings tab shows Settings screen', (tester) async {
+  testWidgets('Tapping Chat tab switches to index 4', (tester) async {
     await tester.pumpWidget(
       ProviderScope(overrides: _testOverrides, child: const App()),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.settings));
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
     await tester.pumpAndSettle();
 
     final navBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
-    expect(navBar.selectedIndex, 2);
+    expect(navBar.selectedIndex, 4);
   });
 
   testWidgets('App uses Material 3', (tester) async {

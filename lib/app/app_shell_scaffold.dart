@@ -73,16 +73,24 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.history),
-            label: 'History',
+            icon: Icon(Icons.calendar_today),
+            label: 'Agenda',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.checklist),
+            label: 'Plan',
           ),
           NavigationDestination(
             icon: Icon(Icons.mic),
             label: 'Record',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
+            icon: Icon(Icons.repeat),
+            label: 'Routines',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.chat_bubble_outline),
+            label: 'Chat',
           ),
         ],
       ),

@@ -367,11 +367,15 @@ final recordingControllerProvider =
 All navigation uses GoRouter:
 
 - Routes are defined in `lib/app/router.dart`.
-- The shell uses `StatefulShellRoute.indexedStack` with 3 tabs.
-- Child routes (e.g., `/record/review`) stay within their branch.
+- The shell uses `StatefulShellRoute.indexedStack` with 5 tabs (Agenda, Plan, Record, Routines, Chat).
+- Child routes (e.g., `/record/history`) stay within their branch.
 - Navigation arguments pass via GoRouter `extra` parameter.
-- Feature proposals **replace placeholder screens** in existing routes — they
-  do not add new top-level routes.
+- P020 established the 5-branch route structure. Feature proposals (P021–P024)
+  **replace placeholder screens** in existing routes — they do not add new
+  top-level routes.
+- Infrequently accessed screens (e.g., Settings) are top-level GoRoutes outside
+  the shell. Navigate to them with `context.push()` (not `context.go()`) to
+  preserve shell state.
 
 ### Error Handling
 
@@ -479,17 +483,22 @@ StorageService {
 - `SyncStatus` enum: `{ pending, sending, failed }` (no `sent`).
 - `DisplaySyncStatus` enum (view-level, 007 only): `{ sent, pending, failed }`.
 
-### Route Ownership (008 → 001, 003, 006, 007)
+### Route Ownership (008, 020 → 001, 006, 007, 021–024)
 
-Proposal 008 owns the shell and all top-level routes. Feature proposals
-**replace placeholders**, they do not add routes.
+P020 restructured the shell to 5 branches. Feature proposals replace
+placeholder screens within this structure — they do not add routes.
 
-| Route | Shell owner | Content owner |
-|-------|-------------|---------------|
-| `/record` | 008 | 001 (RecordingScreen) |
-| `/record/review` | 008 | 003 (TranscriptReviewScreen) |
-| `/history` | 008 | 007 (HistoryScreen) |
-| `/settings` | 008 | 006 (SettingsScreen) |
+| Route | Owner | Content owner |
+|-------|-------|---------------|
+| `/agenda` | 020 (shell branch 0) | 021 (AgendaPlaceholderScreen → real screen) |
+| `/plan` | 020 (shell branch 1) | 023 (PlanPlaceholderScreen → real screen) |
+| `/record` | 020 (shell branch 2) | 001 (RecordingScreen) |
+| `/record/history` | 020 (child of /record) | 007 (HistoryScreen) |
+| `/record/history/:id` | 020 (child of /record/history) | 007 (TranscriptDetailScreen) |
+| `/routines` | 020 (shell branch 3) | 022 (RoutinesPlaceholderScreen → real screen) |
+| `/chat` | 020 (shell branch 4) | 024 (ChatPlaceholderScreen → real screen) |
+| `/settings` | 020 (outside shell) | 006 (SettingsScreen) |
+| `/settings/advanced` | 020 (child of /settings) | 013 (AdvancedSettingsScreen) |
 
 ### Stub Provider Pattern (005, 008 → 006)
 
