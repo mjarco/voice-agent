@@ -16,6 +16,7 @@ class _MockRepository implements RoutinesRepository {
   RoutineStatus? lastFetchStatus;
   String? lastTriggerId;
   String? lastTriggerDate;
+  String? lastActivateId;
   String? lastPauseId;
   String? lastApproveId;
   String? lastRejectId;
@@ -44,8 +45,10 @@ class _MockRepository implements RoutinesRepository {
       throw UnimplementedError();
 
   @override
-  Future<void> activateRoutine(String id) async =>
-      throw UnimplementedError();
+  Future<void> activateRoutine(String id) async {
+    lastActivateId = id;
+    if (actionError != null) throw actionError!;
+  }
 
   @override
   Future<void> pauseRoutine(String id) async {
@@ -262,6 +265,27 @@ void main() {
 
       expect(result, isFalse);
       expect(notifier.lastActionError, 'Cannot pause');
+    });
+
+    test('activateRoutine returns true on success', () async {
+      final notifier = RoutinesNotifier(repo);
+      await Future<void>.delayed(Duration.zero);
+
+      final result = await notifier.activateRoutine('rtn-1');
+
+      expect(result, isTrue);
+      expect(repo.lastActivateId, 'rtn-1');
+    });
+
+    test('activateRoutine returns false on failure', () async {
+      final notifier = RoutinesNotifier(repo);
+      await Future<void>.delayed(Duration.zero);
+
+      repo.actionError = RoutinesGeneralException('Cannot activate');
+      final result = await notifier.activateRoutine('rtn-1');
+
+      expect(result, isFalse);
+      expect(notifier.lastActionError, 'Cannot activate');
     });
 
     test('approveProposal returns true and reloads on success', () async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,14 +41,21 @@ class _StubRepository implements RoutinesRepository {
   @override
   Future<void> activateRoutine(String id) async {}
 
+  Completer<void>? pauseCompleter;
+  Completer<void>? triggerCompleter;
+
   @override
-  Future<void> pauseRoutine(String id) async {}
+  Future<void> pauseRoutine(String id) async {
+    if (pauseCompleter != null) await pauseCompleter!.future;
+  }
 
   @override
   Future<void> archiveRoutine(String id) async {}
 
   @override
-  Future<void> triggerRoutine(String id, String scheduledFor) async {}
+  Future<void> triggerRoutine(String id, String scheduledFor) async {
+    if (triggerCompleter != null) await triggerCompleter!.future;
+  }
 
   @override
   Future<void> updateOccurrenceStatus(
@@ -325,6 +334,26 @@ void main() {
 
       expect(find.byKey(const Key('detail-retry-button')), findsOneWidget);
       expect(find.text('Not found'), findsOneWidget);
+    });
+
+    testWidgets('action buttons are enabled before any action',
+        (tester) async {
+      await _pumpScreen(tester);
+
+      final triggerButton = tester.widget<FilledButton>(
+        find.byKey(const Key('detail-trigger-button')),
+      );
+      expect(triggerButton.onPressed, isNotNull);
+
+      final pauseButton = tester.widget<OutlinedButton>(
+        find.byKey(const Key('detail-pause-button')),
+      );
+      expect(pauseButton.onPressed, isNotNull);
+
+      final archiveButton = tester.widget<OutlinedButton>(
+        find.byKey(const Key('detail-archive-button')),
+      );
+      expect(archiveButton.onPressed, isNotNull);
     });
   });
 }

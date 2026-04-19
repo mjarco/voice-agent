@@ -67,6 +67,18 @@ class RoutinesNotifier extends StateNotifier<RoutinesState> {
     }
   }
 
+  Future<bool> activateRoutine(String id) async {
+    lastActionError = null;
+    try {
+      await _repository.activateRoutine(id);
+      await _reloadCurrentTab();
+      return true;
+    } on RoutinesException catch (e) {
+      lastActionError = e.message;
+      return false;
+    }
+  }
+
   Future<bool> pauseRoutine(String id) async {
     lastActionError = null;
     try {
