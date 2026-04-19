@@ -157,6 +157,15 @@ void main() {
       );
     });
 
+    testWidgets('add icon navigates to /chat/new', (tester) async {
+      await _pumpScreen(tester);
+
+      await tester.tap(find.byKey(const Key('conversations-new-icon')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Thread new'), findsOneWidget);
+    });
+
     testWidgets('shows empty state when no conversations', (tester) async {
       await _pumpScreen(tester);
 
