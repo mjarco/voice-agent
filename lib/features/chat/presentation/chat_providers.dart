@@ -18,8 +18,10 @@ final conversationsNotifierProvider =
   return ConversationsNotifier(ref.watch(chatRepositoryProvider));
 });
 
-// Stub provider — replaced by T3 with full ThreadNotifier implementation.
 final threadNotifierProvider =
     StateNotifierProvider.family<ThreadNotifier, ThreadState, String>(
-  (ref, conversationId) => ThreadNotifier(),
+  (ref, conversationId) => ThreadNotifier(
+    conversationId: conversationId,
+    repository: ref.watch(chatRepositoryProvider),
+  ),
 );
