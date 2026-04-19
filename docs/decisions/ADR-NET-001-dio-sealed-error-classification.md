@@ -89,3 +89,29 @@ message must be:
 If a feature needs backend-provided error detail in its SnackBar, the `ApiClient`
 must first be extended to preserve 4xx response bodies — that is a separate,
 scoped change requiring its own proposal task.
+
+## Amendment: SSE stream error mapping in feature notifiers (P024)
+
+`SseClient` emits raw `ApiResult` subtypes as stream errors — not domain exceptions. Feature
+notifiers that subscribe to `SseClient` streams must map these to user-readable messages in a
+private helper (e.g., `_streamErrorMessage(Object error)`):
+
+```dart
+String _streamErrorMessage(Object error) => switch (error) {
+  ApiNotConfigured() => 'API not configured',
+  ApiPermanentFailure(message: final m) => m,
+  ApiTransientFailure(reason: final r) => r,
+  _ => error.toString(),
+};
+```
+
+This helper is a private method on the notifier, not a shared utility — each feature's notifier
+defines its own. The `onError` callback passed to `Stream.listen()` calls this helper and emits
+the appropriate error state.
+
+This keeps the `ApiResult` abstraction boundary: HTTP and SSE error types stay below the
+presentation layer. The notifier's error state carries only a `String` message.
+
+Note: `SseClient.post()` emits errors as `ApiResult` subtypes (not `ChatException` or similar
+domain exceptions). The stream error handler in the notifier is where translation occurs — not in
+`SseClient` itself (which is a shared core component unaware of feature domains).

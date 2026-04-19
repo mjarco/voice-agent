@@ -33,3 +33,20 @@ GoRouter is the officially recommended routing package for Flutter. `StatefulShe
 - Adding a new tab requires modifying the shell route definition.
 - `IndexedStack` keeps all tab subtrees in memory — acceptable for up to 5 tabs. Beyond 5, consider lazy-loaded branches.
 - Using `context.go()` to an outside-shell route destroys shell state (all tab branches are reset). Always use `context.push()` for outside-shell navigation.
+
+## Amendment: Post-navigation list refresh pattern (P024)
+
+When navigating from a list screen to a detail or new-item screen (child route), the list may
+be stale after the user returns. For backend-fetched lists with no local reactive store, the
+canonical refresh pattern is to await `context.push()` and then call the list notifier's
+`refresh()` method:
+
+```dart
+await context.push('/chat/${conv.conversationId}');
+ref.read(listNotifierProvider.notifier).refresh();
+```
+
+`context.push()` returns a `Future` that completes when the pushed route pops. Awaiting it
+triggers the refresh exactly once on return, with no polling or inter-screen event bus.
+
+See ADR-ARCH-011 for the full rationale and consequences of this pattern.
