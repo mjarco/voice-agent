@@ -1,6 +1,6 @@
 # Proposal 022 — Routines Screen
 
-## Status: Approved
+## Status: Implemented
 
 ## Prerequisites
 - P020 (Navigation Restructure) — provides `/routines` route and shell branch 3
