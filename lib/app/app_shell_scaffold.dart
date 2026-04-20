@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -66,9 +68,20 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
       bottomNavigationBar: NavigationBar(
         selectedIndex: widget.navigationShell.currentIndex,
         onDestinationSelected: (index) {
+          const recordTabIndex = 2;
+          final currentIndex = widget.navigationShell.currentIndex;
+          if (currentIndex == recordTabIndex && index != recordTabIndex) {
+            unawaited(
+              ref.read(handsFreeControllerProvider.notifier).stopSession(),
+            );
+          } else if (index == recordTabIndex && currentIndex != recordTabIndex) {
+            unawaited(
+              ref.read(handsFreeControllerProvider.notifier).startSession(),
+            );
+          }
           widget.navigationShell.goBranch(
             index,
-            initialLocation: index == widget.navigationShell.currentIndex,
+            initialLocation: index == currentIndex,
           );
         },
         destinations: const [
