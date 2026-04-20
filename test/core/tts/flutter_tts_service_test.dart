@@ -102,7 +102,7 @@ void main() {
 
   group('FlutterTtsService voice selection (iOS)', () {
     // Helper: build a service with isIOS=true so _bestVoice() is exercised.
-    FlutterTtsService _svc(_MockFlutterTts mock) =>
+    FlutterTtsService makeSvc(_MockFlutterTts mock) =>
         FlutterTtsService(tts: mock, isIOS: true);
 
     test('picks premium voice over enhanced and normal', () async {
@@ -112,7 +112,7 @@ void main() {
           {'name': 'com.apple.voice.enhanced.pl-PL.Ewa', 'locale': 'pl-PL'},
           {'name': 'com.apple.voice.premium.pl-PL.Zosia', 'locale': 'pl-PL'},
         ];
-      final svc = _svc(mock);
+      final svc = makeSvc(mock);
 
       await svc.speak('Cześć', languageCode: 'pl');
 
@@ -127,7 +127,7 @@ void main() {
           {'name': 'com.apple.voice.normal.pl-PL.Ewa', 'locale': 'pl-PL'},
           {'name': 'com.apple.voice.enhanced.pl-PL.Zosia', 'locale': 'pl-PL'},
         ];
-      final svc = _svc(mock);
+      final svc = makeSvc(mock);
 
       await svc.speak('Cześć', languageCode: 'pl');
 
@@ -139,7 +139,7 @@ void main() {
         ..voiceList = [
           {'name': 'com.apple.ttsbundle.pl-PL-Zosia', 'locale': 'pl-PL'},
         ];
-      final svc = _svc(mock);
+      final svc = makeSvc(mock);
 
       await svc.speak('Cześć', languageCode: 'pl');
 
@@ -152,7 +152,7 @@ void main() {
         ..voiceList = [
           {'name': 'com.apple.voice.premium.en-US.Zoe', 'locale': 'en-US'},
         ];
-      final svc = _svc(mock);
+      final svc = makeSvc(mock);
 
       await svc.speak('Cześć', languageCode: 'pl');
 
@@ -161,7 +161,7 @@ void main() {
 
     test('does not call setVoice when voice list is empty', () async {
       final mock = _MockFlutterTts()..voiceList = [];
-      final svc = _svc(mock);
+      final svc = makeSvc(mock);
 
       await svc.speak('Hello', languageCode: 'en');
 
@@ -175,7 +175,7 @@ void main() {
         ];
       // Wrap getVoices call tracking via voiceList side-effect isn't possible,
       // so we verify via a second speak() not throwing and setVoice being called twice.
-      final svc = _svc(mock);
+      final svc = makeSvc(mock);
 
       await svc.speak('First', languageCode: 'en');
       // Clear setVoiceCalls to distinguish second call.
@@ -194,7 +194,7 @@ void main() {
     test('falls back silently when getVoices throws', () async {
       final mock = _MockFlutterTts()
         ..getVoicesError = Exception('platform error');
-      final svc = _svc(mock);
+      final svc = makeSvc(mock);
 
       // Should not throw — speak() completes normally without setVoice.
       await expectLater(
@@ -210,7 +210,7 @@ void main() {
         ..voiceList = [
           {'name': 'com.apple.voice.premium.pl-PL.Zosia', 'locale': 'pl-PL'},
         ];
-      final svc = _svc(mock);
+      final svc = makeSvc(mock);
 
       // "pl_PL" (underscore) should still match "pl-PL" locale.
       await svc.speak('Cześć', languageCode: 'pl_PL');

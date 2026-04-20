@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +23,9 @@ class AppShellScaffold extends ConsumerStatefulWidget {
 
 class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
     with WidgetsBindingObserver {
+  // Matches Branch 2 in router.dart's StatefulShellRoute.
+  static const _recordTabIndex = 2;
+
   @override
   void initState() {
     super.initState();
@@ -66,9 +71,31 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
       bottomNavigationBar: NavigationBar(
         selectedIndex: widget.navigationShell.currentIndex,
         onDestinationSelected: (index) {
+          final currentIndex = widget.navigationShell.currentIndex;
+          if (currentIndex == _recordTabIndex && index != _recordTabIndex) {
+            final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
+            unawaited(
+              hfCtrl.stopSession().then((_) {
+                // If the user returned to the Record tab while the session was
+                // draining, startSession() called during the tab switch was
+                // blocked by the guard (state wasn't idle yet). Restart now.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted &&
+                      widget.navigationShell.currentIndex == _recordTabIndex) {
+                    unawaited(hfCtrl.startSession());
+                  }
+                });
+              }),
+            );
+          } else if (index == _recordTabIndex &&
+              currentIndex != _recordTabIndex) {
+            unawaited(
+              ref.read(handsFreeControllerProvider.notifier).startSession(),
+            );
+          }
           widget.navigationShell.goBranch(
             index,
-            initialLocation: index == widget.navigationShell.currentIndex,
+            initialLocation: index == currentIndex,
           );
         },
         destinations: const [
