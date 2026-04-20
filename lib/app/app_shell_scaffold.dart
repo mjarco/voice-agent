@@ -23,6 +23,9 @@ class AppShellScaffold extends ConsumerStatefulWidget {
 
 class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
     with WidgetsBindingObserver {
+  // Matches Branch 2 in router.dart's StatefulShellRoute.
+  static const _recordTabIndex = 2;
+
   @override
   void initState() {
     super.initState();
@@ -68,13 +71,24 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
       bottomNavigationBar: NavigationBar(
         selectedIndex: widget.navigationShell.currentIndex,
         onDestinationSelected: (index) {
-          const recordTabIndex = 2;
           final currentIndex = widget.navigationShell.currentIndex;
-          if (currentIndex == recordTabIndex && index != recordTabIndex) {
+          if (currentIndex == _recordTabIndex && index != _recordTabIndex) {
+            final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
             unawaited(
-              ref.read(handsFreeControllerProvider.notifier).stopSession(),
+              hfCtrl.stopSession().then((_) {
+                // If the user returned to the Record tab while the session was
+                // draining, startSession() called during the tab switch was
+                // blocked by the guard (state wasn't idle yet). Restart now.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted &&
+                      widget.navigationShell.currentIndex == _recordTabIndex) {
+                    unawaited(hfCtrl.startSession());
+                  }
+                });
+              }),
             );
-          } else if (index == recordTabIndex && currentIndex != recordTabIndex) {
+          } else if (index == _recordTabIndex &&
+              currentIndex != _recordTabIndex) {
             unawaited(
               ref.read(handsFreeControllerProvider.notifier).startSession(),
             );
