@@ -25,7 +25,6 @@ dependencies:
   flutter_tts: ^4.2.5
   audioplayers: ^6.0.0
   flutter_foreground_task: ^9.2.2
-  porcupine_flutter: ^3.0.3
 
 dev_dependencies:
   flutter_test:
@@ -42,4 +41,3 @@ flutter:
   assets:
     - assets/models/silero_vad_v5.onnx
     - assets/audio/
-    - assets/wake_words/

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
-import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
@@ -48,7 +47,6 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
   Widget build(BuildContext context) {
     ref.watch(syncWorkerProvider);
     ref.watch(handsFreeControllerProvider);
-    ref.watch(activationControllerProvider);
 
     ref.listen<AsyncValue<ConnectivityStatus>>(
       connectivityStatusProvider,
