@@ -249,33 +249,6 @@ void main() {
       });
     });
 
-    group('playWakeWordAcknowledgment', () {
-      test('plays wake_word_ack.mp3 in release mode when enabled', () async {
-        final player = FakeAudioPlayer();
-        final svc = AudioplayersAudioFeedbackService(
-          player: player,
-          getEnabled: () => true,
-        );
-
-        await svc.playWakeWordAcknowledgment();
-
-        expect(player.playedPaths, ['audio/wake_word_ack.mp3']);
-        expect(player.currentReleaseMode, ReleaseMode.release);
-      });
-
-      test('does not play when disabled', () async {
-        final player = FakeAudioPlayer();
-        final svc = AudioplayersAudioFeedbackService(
-          player: player,
-          getEnabled: () => false,
-        );
-
-        await svc.playWakeWordAcknowledgment();
-
-        expect(player.playedPaths, isEmpty);
-      });
-    });
-
     group('dispose', () {
       test('calls player.dispose()', () async {
         final player = FakeAudioPlayer();

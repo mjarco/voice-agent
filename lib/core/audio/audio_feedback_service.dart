@@ -12,9 +12,5 @@ abstract class AudioFeedbackService {
   /// Stops the loop then plays the error jingle (if enabled).
   Future<void> playError();
 
-  /// Plays a short acknowledgment tone when a wake word is detected.
-  /// No-op when audio feedback is disabled.
-  Future<void> playWakeWordAcknowledgment();
-
   void dispose();
 }

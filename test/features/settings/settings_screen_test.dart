@@ -76,7 +76,6 @@ class _StubAudioFeedbackService implements AudioFeedbackService {
   @override Future<void> stopLoop() async {}
   @override Future<void> playSuccess() async {}
   @override Future<void> playError() async {}
-  @override Future<void> playWakeWordAcknowledgment() async {}
   @override void dispose() {}
 }
 
