@@ -68,13 +68,6 @@ class AudioplayersAudioFeedbackService implements AudioFeedbackService {
   }
 
   @override
-  Future<void> playWakeWordAcknowledgment() async {
-    if (!_getEnabled()) return;
-    await _player.setReleaseMode(ReleaseMode.release);
-    await _player.play(AssetSource('audio/wake_word_ack.mp3'));
-  }
-
-  @override
   void dispose() {
     ++_generation;
     _player.dispose();
