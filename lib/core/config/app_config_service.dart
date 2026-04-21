@@ -26,17 +26,32 @@ class AppConfigService {
   static const _ttsEnabledKey = 'tts_enabled';
   static const _audioFeedbackEnabledKey = 'audio_feedback_enabled';
 
-  static const _backgroundListeningEnabledKey = 'background_listening_enabled';
-  static const _wakeWordEnabledKey = 'wake_word_enabled';
-  static const _picovoiceAccessKeyKey = 'picovoice_access_key';
-  static const _wakeWordKeywordKey = 'wake_word_keyword';
-  static const _wakeWordSensitivityKey = 'wake_word_sensitivity';
-
   static const _vadPositiveThresholdKey = 'vad_positive_threshold';
   static const _vadNegativeThresholdKey = 'vad_negative_threshold';
   static const _vadHangoverMsKey = 'vad_hangover_ms';
   static const _vadMinSpeechMsKey = 'vad_min_speech_ms';
   static const _vadPreRollMsKey = 'vad_pre_roll_ms';
+
+  // ── P026 removal migration ──────────────────────────────────────────────
+  // Keys retired by P026 (wake word feature + Porcupine). Cleaned up on first
+  // launch of the new version, gated by [_wakeWordRemovalMigrationDoneKey].
+  // See ADR-DATA-009.
+  static const _wakeWordRemovalMigrationDoneKey =
+      'wake_word_removal_migration_done';
+  static const _retiredPrefsKeys = <String>[
+    'background_listening_enabled',
+    'wake_word_enabled',
+    'wake_word_keyword',
+    'wake_word_sensitivity',
+    // Legacy IPC keys from the deleted PlatformChannelBridge.
+    'activation_state',
+    'activation_toggle_requested',
+    'activation_stop_requested',
+    'foreground_service_running',
+  ];
+  static const _retiredSecureStorageKeys = <String>[
+    'picovoice_access_key',
+  ];
 
   Future<SharedPreferences> get _preferences async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -45,6 +60,11 @@ class AppConfigService {
 
   Future<AppConfig> load() async {
     final prefs = await _preferences;
+
+    // Run the P026 removal migration before constructing the config so that
+    // consumers never observe the deleted fields in transient states.
+    await _runRemovalMigration(prefs);
+
     String? token;
     try {
       token = await _secureStorage.read(key: _apiTokenKey);
@@ -54,13 +74,6 @@ class AppConfigService {
     String? groqApiKey;
     try {
       groqApiKey = await _secureStorage.read(key: _groqApiKeyKey);
-    } catch (_) {
-      // Secure storage may fail on some devices — treat as absent
-    }
-    String? picovoiceAccessKey;
-    try {
-      picovoiceAccessKey =
-          await _secureStorage.read(key: _picovoiceAccessKeyKey);
     } catch (_) {
       // Secure storage may fail on some devices — treat as absent
     }
@@ -88,14 +101,22 @@ class AppConfigService {
       vadConfig: vadConfig,
       ttsEnabled: prefs.getBool(_ttsEnabledKey) ?? true,
       audioFeedbackEnabled: prefs.getBool(_audioFeedbackEnabledKey) ?? true,
-      backgroundListeningEnabled:
-          prefs.getBool(_backgroundListeningEnabledKey) ?? false,
-      wakeWordEnabled: prefs.getBool(_wakeWordEnabledKey) ?? false,
-      picovoiceAccessKey: picovoiceAccessKey,
-      wakeWordKeyword: prefs.getString(_wakeWordKeywordKey) ?? 'jarvis',
-      wakeWordSensitivity:
-          prefs.getDouble(_wakeWordSensitivityKey) ?? 0.5,
     );
+  }
+
+  Future<void> _runRemovalMigration(SharedPreferences prefs) async {
+    if (prefs.getBool(_wakeWordRemovalMigrationDoneKey) == true) return;
+    for (final key in _retiredPrefsKeys) {
+      await prefs.remove(key);
+    }
+    for (final key in _retiredSecureStorageKeys) {
+      try {
+        await _secureStorage.delete(key: key);
+      } catch (_) {
+        // Best-effort — log-only; do not block migration on Keychain failure.
+      }
+    }
+    await prefs.setBool(_wakeWordRemovalMigrationDoneKey, true);
   }
 
   Future<void> saveVadConfig(VadConfig config) async {
@@ -145,29 +166,5 @@ class AppConfigService {
   Future<void> saveAudioFeedbackEnabled(bool value) async {
     final prefs = await _preferences;
     await prefs.setBool(_audioFeedbackEnabledKey, value);
-  }
-
-  Future<void> saveBackgroundListeningEnabled(bool value) async {
-    final prefs = await _preferences;
-    await prefs.setBool(_backgroundListeningEnabledKey, value);
-  }
-
-  Future<void> saveWakeWordEnabled(bool value) async {
-    final prefs = await _preferences;
-    await prefs.setBool(_wakeWordEnabledKey, value);
-  }
-
-  Future<void> savePicovoiceAccessKey(String key) async {
-    await _secureStorage.write(key: _picovoiceAccessKeyKey, value: key);
-  }
-
-  Future<void> saveWakeWordKeyword(String keyword) async {
-    final prefs = await _preferences;
-    await prefs.setString(_wakeWordKeywordKey, keyword);
-  }
-
-  Future<void> saveWakeWordSensitivity(double value) async {
-    final prefs = await _preferences;
-    await prefs.setDouble(_wakeWordSensitivityKey, value);
   }
 }
