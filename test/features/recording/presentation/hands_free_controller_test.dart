@@ -4,6 +4,8 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/background/background_service.dart';
+import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
@@ -28,9 +30,45 @@ import 'package:voice_agent/features/recording/presentation/hands_free_controlle
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
-import 'package:voice_agent/core/providers/activation_providers.dart';
-import 'package:voice_agent/core/providers/hands_free_session_status.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
+
+import '../../../helpers/stub_background_service.dart';
+
+// ── TrackingBackgroundService ────────────────────────────────────────────────
+
+/// Records `startService`/`stopService` call timestamps so tests can verify
+/// ordering relative to engine lifecycle events.
+class _TrackingBackgroundService implements BackgroundService {
+  final List<String> calls = [];
+  DateTime? lastStartCompleted;
+  DateTime? lastStopCompleted;
+  bool _running = false;
+
+  @override
+  bool get isRunning => _running;
+
+  @override
+  Future<void> startService() async {
+    calls.add('startService');
+    _running = true;
+    lastStartCompleted = DateTime.now();
+  }
+
+  @override
+  Future<void> stopService() async {
+    calls.add('stopService');
+    _running = false;
+    lastStopCompleted = DateTime.now();
+  }
+
+  @override
+  Future<void> updateNotification({
+    required String title,
+    required String body,
+  }) async {
+    calls.add('updateNotification($title/$body)');
+  }
+}
 
 // ── FakeHandsFreeEngine ──────────────────────────────────────────────────────
 
@@ -306,6 +344,7 @@ ProviderContainer makeContainer({
   StorageService? storageService,
   TtsService? ttsService,
   AudioFeedbackService? audioFeedbackService,
+  BackgroundService? backgroundService,
 }) {
   final container = ProviderContainer(overrides: [
     handsFreeEngineProvider.overrideWithValue(engine),
@@ -324,6 +363,9 @@ ProviderContainer makeContainer({
     ttsServiceProvider.overrideWithValue(ttsService ?? _StubTtsService()),
     audioFeedbackServiceProvider.overrideWithValue(
       audioFeedbackService ?? _StubAudioFeedbackService(),
+    ),
+    backgroundServiceProvider.overrideWithValue(
+      backgroundService ?? StubBackgroundService(),
     ),
   ]);
   addTearDown(container.dispose);
@@ -500,10 +542,83 @@ void main() {
     });
   });
 
-  // ── Background interruption ───────────────────────────────────────────────
+  // ── FG service lifecycle (P026: explicit start/stop in controller) ────────
 
-  group('background interruption', () {
-    test('app paused during session → SessionError containing "backgrounded"',
+  group('foreground service lifecycle', () {
+    test('startSession calls startService BEFORE _startEngine', () async {
+      final engine = FakeHandsFreeEngine();
+      final bg = _TrackingBackgroundService();
+      final c = makeContainer(engine: engine, backgroundService: bg);
+
+      await ctrl(c).startSession();
+
+      // startService must appear before engine.start marker in the call list.
+      // We assert via two observations: engine.started is true AFTER startService
+      // completed (bg.lastStartCompleted is not null at this point), and
+      // startService is the first call recorded on the stub.
+      expect(bg.calls.first, 'startService');
+      expect(bg.lastStartCompleted, isNotNull);
+      expect(engine.started, isTrue);
+      expect(bg.calls, contains('updateNotification(Voice Agent/Recording session active)'));
+    });
+
+    test('stopSession calls stopService before transitioning to idle',
+        () async {
+      final engine = FakeHandsFreeEngine();
+      final bg = _TrackingBackgroundService();
+      final c = makeContainer(engine: engine, backgroundService: bg);
+      await ctrl(c).startSession();
+      engine.emit(const EngineListening());
+      await Future.delayed(Duration.zero);
+
+      await ctrl(c).stopSession();
+
+      expect(bg.calls.last, 'stopService');
+      expect(stateOf(c), isA<HandsFreeIdle>());
+    });
+
+    test('permission denied → NO startService call', () async {
+      final engine = FakeHandsFreeEngine()..permissionGranted = false;
+      final bg = _TrackingBackgroundService();
+      final c = makeContainer(engine: engine, backgroundService: bg);
+
+      await ctrl(c).startSession();
+
+      expect(bg.calls, isEmpty);
+      expect(stateOf(c), isA<HandsFreeSessionError>());
+    });
+
+    test('missing Groq key → NO startService call', () async {
+      final engine = FakeHandsFreeEngine();
+      final bg = _TrackingBackgroundService();
+      final c = makeContainer(
+          engine: engine, backgroundService: bg, groqApiKey: null);
+
+      await ctrl(c).startSession();
+
+      expect(bg.calls, isEmpty);
+      expect(stateOf(c), isA<HandsFreeSessionError>());
+    });
+
+    test('engine error → stopService called via _terminateWithError', () async {
+      final engine = FakeHandsFreeEngine();
+      final bg = _TrackingBackgroundService();
+      final c = makeContainer(engine: engine, backgroundService: bg);
+      await ctrl(c).startSession();
+      await Future.delayed(Duration.zero);
+
+      engine.emit(const EngineError('VAD crashed'));
+      await Future.delayed(Duration.zero);
+
+      expect(bg.calls, contains('stopService'));
+      expect(stateOf(c), isA<HandsFreeSessionError>());
+    });
+  });
+
+  // ── Background lifecycle (P026: session continues across pause) ───────────
+
+  group('background lifecycle', () {
+    test('app paused during session → session continues (no state change)',
         () async {
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine);
@@ -514,8 +629,8 @@ void main() {
       ctrl(c).didChangeAppLifecycleState(AppLifecycleState.paused);
       await Future.delayed(Duration.zero);
 
-      final s = stateOf(c) as HandsFreeSessionError;
-      expect(s.message, contains('backgrounded'));
+      // Session must still be alive — FG service keeps the process alive.
+      expect(stateOf(c), isA<HandsFreeListening>());
     });
 
     test('app paused when idle → no effect', () async {
@@ -526,125 +641,6 @@ void main() {
       await Future.delayed(Duration.zero);
 
       expect(stateOf(c), isA<HandsFreeIdle>());
-    });
-  });
-
-  // ── Activation-triggered background immunity ───────────────────────────────
-
-  group('triggeredByActivation', () {
-    test('app paused with triggeredByActivation: true → session NOT cancelled',
-        () async {
-      final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine);
-      await ctrl(c).startSession(triggeredByActivation: true);
-      engine.emit(const EngineListening());
-      await Future.delayed(Duration.zero);
-
-      ctrl(c).didChangeAppLifecycleState(AppLifecycleState.paused);
-      await Future.delayed(Duration.zero);
-
-      // Session must still be alive — not in error or idle.
-      expect(stateOf(c), isA<HandsFreeListening>());
-    });
-
-    test(
-        'app paused with triggeredByActivation: false → session cancelled '
-        '(control test)', () async {
-      final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine);
-      await ctrl(c).startSession(triggeredByActivation: false);
-      engine.emit(const EngineListening());
-      await Future.delayed(Duration.zero);
-
-      ctrl(c).didChangeAppLifecycleState(AppLifecycleState.paused);
-      await Future.delayed(Duration.zero);
-
-      expect(stateOf(c), isA<HandsFreeSessionError>());
-    });
-
-    test('stopSession clears triggeredByActivation', () async {
-      final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine);
-      await ctrl(c).startSession(triggeredByActivation: true);
-      engine.emit(const EngineListening());
-      await Future.delayed(Duration.zero);
-
-      await ctrl(c).stopSession();
-
-      // Start a new session WITHOUT activation trigger.
-      await ctrl(c).startSession();
-      engine.emit(const EngineListening());
-      await Future.delayed(Duration.zero);
-
-      // App paused should now cancel (flag was cleared by previous stopSession).
-      ctrl(c).didChangeAppLifecycleState(AppLifecycleState.paused);
-      await Future.delayed(Duration.zero);
-      expect(stateOf(c), isA<HandsFreeSessionError>());
-    });
-  });
-
-  // ── Session status provider signals ─────────────────────────────────────────
-
-  group('session status signals', () {
-    test('successful start → HandsFreeSessionRunning', () async {
-      final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine);
-
-      await ctrl(c).startSession();
-
-      final status = c.read(handsFreeSessionStatusProvider);
-      expect(status, isA<HandsFreeSessionRunning>());
-    });
-
-    test('stopSession → HandsFreeSessionCompletedOk', () async {
-      final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine);
-      await ctrl(c).startSession();
-      engine.emit(const EngineListening());
-      await Future.delayed(Duration.zero);
-
-      await ctrl(c).stopSession();
-
-      final status = c.read(handsFreeSessionStatusProvider);
-      expect(status, isA<HandsFreeSessionCompletedOk>());
-    });
-
-    test('permission denied → HandsFreeSessionFailed(requiresSettings: true)',
-        () async {
-      final engine = FakeHandsFreeEngine()..permissionGranted = false;
-      final c = makeContainer(engine: engine);
-
-      await ctrl(c).startSession();
-
-      final status =
-          c.read(handsFreeSessionStatusProvider) as HandsFreeSessionFailed;
-      expect(status.requiresSettings, isTrue);
-      expect(status.message, contains('permission'));
-    });
-
-    test('missing Groq key → HandsFreeSessionFailed(requiresSettings: true)',
-        () async {
-      final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine, groqApiKey: null);
-
-      await ctrl(c).startSession();
-
-      final status =
-          c.read(handsFreeSessionStatusProvider) as HandsFreeSessionFailed;
-      expect(status.requiresSettings, isTrue);
-    });
-
-    test('engine error → HandsFreeSessionFailed', () async {
-      final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine);
-      await ctrl(c).startSession();
-
-      engine.emit(const EngineError('VAD crashed'));
-      await Future.delayed(Duration.zero);
-
-      final status =
-          c.read(handsFreeSessionStatusProvider) as HandsFreeSessionFailed;
-      expect(status.message, contains('VAD crashed'));
     });
   });
 

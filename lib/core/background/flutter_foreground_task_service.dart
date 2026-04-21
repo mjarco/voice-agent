@@ -7,8 +7,9 @@ import 'package:voice_agent/core/background/background_service.dart';
 /// [BackgroundService] implementation using `flutter_foreground_task` (Android)
 /// and AVAudioSession category switching (iOS) via platform channel.
 ///
-/// The foreground service is purely a keepalive — no [TaskHandler] or send-port
-/// communication is used (see ADR-PLATFORM-005).
+/// The foreground service is purely a keepalive — no `TaskHandler` or send-port
+/// communication is used (see ADR-PLATFORM-005). Start/stop is driven by
+/// `HandsFreeController` at session boundaries (see ADR-PLATFORM-006).
 class FlutterForegroundTaskService implements BackgroundService {
   FlutterForegroundTaskService({MethodChannel? audioSessionChannel})
       : _audioSessionChannel = audioSessionChannel ??
@@ -26,7 +27,7 @@ class FlutterForegroundTaskService implements BackgroundService {
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'voice_agent_background',
         channelName: 'Voice Agent Background',
-        channelDescription: 'Background listening for wake word detection',
+        channelDescription: 'Keeps recording active when the app is in the background',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
       ),
@@ -49,7 +50,7 @@ class FlutterForegroundTaskService implements BackgroundService {
       await FlutterForegroundTask.startService(
         serviceId: 1,
         notificationTitle: 'Voice Agent',
-        notificationText: 'Listening for wake word...',
+        notificationText: 'Starting...',
         serviceTypes: [ForegroundServiceTypes.microphone],
       );
     }

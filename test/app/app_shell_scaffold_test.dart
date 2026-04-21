@@ -23,7 +23,6 @@ import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
-import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
@@ -31,7 +30,6 @@ import 'package:voice_agent/features/recording/domain/hands_free_session_state.d
 import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
-import '../helpers/in_memory_bridge_store.dart';
 import '../helpers/stub_background_service.dart';
 
 // ── Stub dependencies ─────────────────────────────────────────────────────────
@@ -111,7 +109,6 @@ List<Override> get _baseOverrides => [
   ),
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedback()),
-  bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
   agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
 ];

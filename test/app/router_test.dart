@@ -7,14 +7,12 @@ import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
-import 'package:voice_agent/features/activation/presentation/activation_provider.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 
-import '../helpers/in_memory_bridge_store.dart';
 import '../helpers/stub_background_service.dart';
 
 class _StubStorageService implements StorageService {
@@ -80,7 +78,6 @@ class _StubAgendaRepository implements AgendaRepository {
 void main() {
   final overrides = [
     storageServiceProvider.overrideWithValue(_StubStorageService()),
-    bridgeStoreProvider.overrideWithValue(InMemoryBridgeStore()),
     backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
     agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
   ];

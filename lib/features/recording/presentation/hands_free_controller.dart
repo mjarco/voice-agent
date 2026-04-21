@@ -5,11 +5,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
+import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/transcript.dart';
-import 'package:voice_agent/core/providers/activation_providers.dart';
-import 'package:voice_agent/core/providers/hands_free_session_status.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
@@ -40,7 +39,6 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   HandsFreeEngine? _engine;
   StreamSubscription<HandsFreeEngineEvent>? _engineSub;
-  bool _triggeredByActivation = false;
 
   // ── Job list ─────────────────────────────────────────────────────────────
   // Mutable list kept in controller; copied into each emitted state.
@@ -158,23 +156,16 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused &&
-        this.state is! HandsFreeIdle &&
-        !_triggeredByActivation &&
-        !_ref.read(appConfigProvider).backgroundListeningEnabled) {
-      _terminateWithError(
-        'Interrupted: app backgrounded',
-        requiresSettings: false,
-      );
-    }
+    // No-op: hands-free session continues across background transitions.
+    // The foreground service (started explicitly by startSession() and
+    // stopped by stopSession() / _terminateWithError()) keeps the process alive.
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
 
-  Future<void> startSession({bool triggeredByActivation = false}) async {
+  Future<void> startSession() async {
     if (state is! HandsFreeIdle && state is! HandsFreeSessionError) return;
 
-    _triggeredByActivation = triggeredByActivation;
     final engine = _ref.read(handsFreeEngineProvider);
 
     // Guard 1 — microphone permission.
@@ -184,10 +175,6 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         message: 'Microphone permission denied.',
         requiresSettings: true,
         jobs: [],
-      );
-      _signalSessionFailed(
-        'Microphone permission denied.',
-        requiresSettings: true,
       );
       return;
     }
@@ -201,18 +188,21 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         requiresAppSettings: true,
         jobs: [],
       );
-      _signalSessionFailed(
-        'Groq API key not set.',
-        requiresSettings: true,
-      );
       return;
     }
 
-    // All guards passed — start engine.
+    // All guards passed — start foreground service BEFORE engine so the iOS
+    // playAndRecord audio session is set before mic capture begins
+    // (ADR-AUDIO-009 + ADR-PLATFORM-006).
+    final bg = _ref.read(backgroundServiceProvider);
+    await bg.startService();
+    unawaited(bg.updateNotification(
+      title: 'Voice Agent',
+      body: 'Recording session active',
+    ));
+
     _jobs.clear();
     _jobCounter = 0;
-    _ref.read(handsFreeSessionStatusProvider.notifier).state =
-        const HandsFreeSessionRunning();
     _startEngine(_ref.read(appConfigProvider).vadConfig);
   }
 
@@ -233,6 +223,11 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   Future<void> stopSession() async {
     if (state is HandsFreeIdle) return;
 
+    // Stop foreground service before engine teardown; on iOS this reverts the
+    // audio session category from playAndRecord back to ambient before the
+    // next (possibly unrelated) capture begins.
+    await _ref.read(backgroundServiceProvider).stopService();
+
     await _engineSub?.cancel();
     _engineSub = null;
     await _engine?.stop();
@@ -250,9 +245,6 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // Drain: wait until no job is in Transcribing or Persisting state.
     await _drainInFlightJobs();
 
-    _triggeredByActivation = false;
-    _ref.read(handsFreeSessionStatusProvider.notifier).state =
-        const HandsFreeSessionCompletedOk();
     state = const HandsFreeIdle();
     _jobs.clear();
     _jobCounter = 0;
@@ -450,29 +442,16 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     String message, {
     bool requiresSettings = false,
   }) {
+    unawaited(_ref.read(backgroundServiceProvider).stopService());
     unawaited(_engineSub?.cancel());
     _engineSub = null;
     unawaited(_engine?.stop());
     _engine = null;
-    _triggeredByActivation = false;
-
-    _signalSessionFailed(message, requiresSettings: requiresSettings);
 
     state = HandsFreeSessionError(
       message: message,
       requiresSettings: requiresSettings,
       jobs: List<SegmentJob>.unmodifiable(_jobs),
-    );
-  }
-
-  void _signalSessionFailed(
-    String message, {
-    bool requiresSettings = false,
-  }) {
-    _ref.read(handsFreeSessionStatusProvider.notifier).state =
-        HandsFreeSessionFailed(
-      message: message,
-      requiresSettings: requiresSettings,
     );
   }
 

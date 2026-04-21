@@ -21,7 +21,6 @@ import 'package:voice_agent/features/recording/domain/stt_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
-import 'package:voice_agent/core/providers/activation_providers.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -400,52 +399,6 @@ void main() {
     expect(ctrl.state, isA<RecordingError>());
     final error = ctrl.state as RecordingError;
     expect(error.requiresAppSettings, isTrue);
-  });
-
-  group('wake word pause request', () {
-    test('cancelRecording clears wakeWordPauseRequestProvider', () async {
-      // Simulate a pause request being active (set during startRecording)
-      container.read(wakeWordPauseRequestProvider.notifier).state =
-          Completer<void>();
-
-      await controller.cancelRecording();
-
-      expect(
-        container.read(wakeWordPauseRequestProvider),
-        isNull,
-      );
-    });
-
-    test('stopAndTranscribe clears wakeWordPauseRequestProvider', () async {
-      fakeService.lastPath = '/tmp/test.wav';
-      // Simulate a pause request being active
-      container.read(wakeWordPauseRequestProvider.notifier).state =
-          Completer<void>();
-
-      await controller.stopAndTranscribe();
-
-      expect(
-        container.read(wakeWordPauseRequestProvider),
-        isNull,
-      );
-    });
-
-    test('startRecording failure clears wakeWordPauseRequestProvider',
-        () async {
-      // Make startRecording fail after the completer is set
-      // (permission denied doesn't reach completer, so use a model
-      // loading failure instead by making stt throw)
-      fakeService.permissionGranted = false;
-
-      await controller.startRecording();
-
-      // Permission denied returns before completer is created, so
-      // the provider should still be null
-      expect(
-        container.read(wakeWordPauseRequestProvider),
-        isNull,
-      );
-    });
   });
 
   test('RecordingState sealed class exhaustiveness', () {
