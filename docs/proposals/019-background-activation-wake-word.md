@@ -1,6 +1,6 @@
 # Proposal 019 — Background Activation & Wake Word Detection
 
-## Status: Implemented
+## Status: Reverted by P026 — wake word feature dropped (Siri Shortcuts as alternative); foreground service rewired to session lifecycle
 
 ## Prerequisites
 - P012 (Hands-Free Local VAD) — `HandsFreeController`, `HandsFreeOrchestrator`, VAD pipeline must exist; merged

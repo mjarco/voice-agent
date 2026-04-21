@@ -1,36 +1,32 @@
-# ADR-PLATFORM-004: Conditional cancel-on-background for activation-triggered sessions
+# ADR-PLATFORM-004: Conditional cancel-on-background — hands-free continues, manual cancels
 
-Status: Proposed
+Status: Accepted
 Proposed in: P019
+Amended in: P026
 
 ## Context
 
-ADR-PLATFORM-002 established an unconditional cancel-on-background policy: all recording and hands-free sessions terminate when the app is backgrounded. P019 introduces background wake word detection and activation-triggered hands-free sessions that must continue operating in the background to fulfill their core purpose (hands-free voice capture without touching the screen).
+ADR-PLATFORM-002 established an unconditional cancel-on-background policy: all recording and hands-free sessions terminate when the app is backgrounded. P019 introduced background wake word detection and activation-triggered hands-free sessions that need to continue operating in the background. P026 removes the wake word feature but keeps background continuity for any active hands-free session (the user explicitly starts a session by navigating to the Record tab and expects it to continue when the screen is locked).
 
-The unconditional policy must become conditional to support this use case while preserving the safety guarantees of PLATFORM-002 for manual interactions.
+## Decision (P026 amendment)
 
-## Decision
+Cancel-on-background policy splits by recording mode:
 
-The cancel-on-background policy (ADR-PLATFORM-002) is refined with a trigger-source distinction:
+- **Manual recording** (`RecordingController`): cancels on background per ADR-PLATFORM-002 (unchanged).
+- **Hands-free session** (`HandsFreeController`): continues across background transitions. The foreground service (Android) and `playAndRecord` audio session (iOS) keep the process alive for the duration of the session.
 
-- **Manual recording** (tap-to-record): still cancels on background (unchanged).
-- **Manually-started hands-free session** (user navigates to record tab, session starts on screen mount): still terminates on background (unchanged).
-- **Activation-triggered hands-free session** (wake word detection or system shortcut): continues in background. The foreground service (Android) or background audio session (iOS) keeps the process alive.
-- **Wake word listening**: continues in background by design — this is the primary purpose of the background service.
-
-The distinction is encoded in a `triggeredByActivation` boolean flag on `HandsFreeController`, set at session start time and cleared at session end. `didChangeAppLifecycleState(paused)` checks this flag before deciding whether to cancel.
-
-All background execution requires explicit user opt-in in Settings (background listening toggle). When background listening is disabled, ADR-PLATFORM-002 applies unconditionally.
+There is now a single hands-free session type. The previous trigger-source distinction (activation-triggered vs manually-started) and the `backgroundListeningEnabled` opt-in are removed by P026. Background continuity is unconditional for any active hands-free session and is controlled solely by session state, not by user setting or trigger source.
 
 ## Rationale
 
 The original rationale for PLATFORM-002 (simplicity, no background entitlements, no state recovery) still holds for manual interactions where the user was looking at the screen. Backgrounding during a manual interaction is likely intentional or accidental — either way, canceling is safe.
 
-For activation-triggered sessions, backgrounding is the *expected* state — the user said a wake word while the phone was in a pocket. Canceling would defeat the purpose of the feature.
+P019's wake-word-vs-manual distinction was tied to the assumption that activation-triggered sessions were the primary background use case. P026 establishes that the user's intent is "lock-screen-keeps-listening" for any session they explicitly started — making the trigger-source distinction noise. Removing it eliminates the `_triggeredByActivation` flag, the `backgroundListeningEnabled` gate, and the `wakeWordPauseRequestProvider` coordination, simplifying `HandsFreeController`.
 
 ## Consequences
 
-- `HandsFreeController.didChangeAppLifecycleState()` has two behavioral branches — must be tested for both paths.
+- `HandsFreeController.didChangeAppLifecycleState(paused)` is a no-op.
+- The foreground service start/stop is driven by `HandsFreeController.startSession()` and `stopSession()` / `_terminateWithError()` via explicit calls (see ADR-PLATFORM-006).
 - Android requires a foreground service with `microphone` type; iOS requires `UIBackgroundModes: audio` entitlement plus `playAndRecord` audio session (see ADR-AUDIO-009).
-- The `triggeredByActivation` flag should be promoted to an enum or passed as the `ActivationEvent` type if additional trigger sources are added in the future.
+- Manual recording behavior is unchanged — ADR-PLATFORM-002 applies.
 - ADR-PLATFORM-002 remains in effect for its original scope (manual starts). This ADR extends, not replaces, PLATFORM-002.

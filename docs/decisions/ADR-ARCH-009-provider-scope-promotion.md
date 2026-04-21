@@ -1,11 +1,12 @@
-# ADR-ARCH-009: Provider scope promotion for background-active controllers
+# ADR-ARCH-009: Provider scope promotion for cross-screen controllers
 
-Status: Proposed
+Status: Accepted
 Proposed in: P019
+Amended in: P026
 
 ## Context
 
-Riverpod providers in this project are typically observed at screen scope — a screen widget calls `ref.watch()` or `ref.read()`, and the provider is alive only while that screen is mounted. P019 needs `HandsFreeController` to be alive at app scope (not just when `RecordingScreen` is mounted) so that activation-triggered sessions can start and run even when the user is not on the recording tab.
+Riverpod providers in this project are typically observed at screen scope — a screen widget calls `ref.watch()` or `ref.read()`, and the provider is alive only while that screen is mounted. P019 needed `HandsFreeController` to be alive at app scope (not just when `RecordingScreen` is mounted) so that activation-triggered sessions could start and run even when the user was not on the recording tab. P026 removes wake word activation, but `handsFreeControllerProvider` remains app-scoped because `AppShellScaffold.onDestinationSelected` calls `stopSession()`/`startSession()` during tab navigation — disposing the controller on tab switch would sever in-flight sessions mid-operation.
 
 This requires promoting the provider observation from `RecordingScreen.initState()` to `AppShellScaffold`, changing the controller's lifecycle from screen-scoped to app-scoped.
 
@@ -19,9 +20,11 @@ When a feature controller must be reactive across the full app lifecycle (not ju
 
 Controllers that are screen-scoped by default (the common case) should NOT be promoted preemptively. Promotion happens only when a concrete cross-screen or background use case requires it.
 
-## Rationale
+## Rationale (P026 amendment)
 
-The alternative — instantiating the controller in a background service or separate isolate — conflicts with the keepalive-only isolate model (P019) where all Riverpod state lives in the main Dart isolate. Promoting the provider to `AppShellScaffold` is the simplest way to ensure the controller is alive when needed without introducing a parallel state management system.
+`handsFreeControllerProvider` remains app-scoped because `AppShellScaffold.onDestinationSelected` calls `stopSession()` when the user navigates away from the Record tab and `startSession()` when they return. Screen-scoping would dispose the controller on tab switch, severing the in-flight session and deleting the WAV-cleanup / job-drain machinery mid-operation.
+
+Note: P019's secondary justification (cross-feature activation events forwarded via core providers) is gone — activation has been removed in P026. The single remaining justification (tab-switch lifecycle) still meets the three criteria in this ADR's Decision section.
 
 ## Consequences
 
