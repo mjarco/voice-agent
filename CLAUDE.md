@@ -2,8 +2,9 @@
 
 ## Project Overview
 
-Voice Agent is an offline-first mobile app that records voice, transcribes it
-on-device using Whisper, and sends the transcript to the user's own API endpoint.
+Voice Agent is a mobile app that records voice, transcribes it via the Groq
+cloud STT API (`whisper-large-v3-turbo`), and sends the transcript to the
+user's own API endpoint.
 
 **Platforms**: iOS 16+, Android SDK 24+ (Android 7.0).
 **Architecture**: Layered (features / core / app).
@@ -59,7 +60,7 @@ lib/
     app_shell_scaffold.dart # Bottom navigation shell
   features/
     recording/              # Audio capture + STT
-      data/                 # Service implementations (RecordingServiceImpl, WhisperSttService)
+      data/                 # Service implementations (RecordingServiceImpl, GroqSttService)
       domain/               # Interfaces + models (RecordingService, SttService, RecordingState)
       presentation/         # UI + controllers (RecordingScreen, RecordingController)
     transcript/             # Review, edit, approve/cancel
@@ -79,7 +80,7 @@ lib/
 - **Domain types** (in `features/*/domain/`) are abstract interfaces and sealed
   state classes. No platform imports, no persistence logic.
 - **Data implementations** (in `features/*/data/`) implement domain interfaces.
-  This is the only place that imports platform packages (`record`, `whisper_flutter_new`).
+  This is the only place that imports platform packages (`record`, `dio`, Groq REST client).
 - **Presentation** (in `features/*/presentation/`) contains screens, controllers
   (StateNotifier), and Riverpod providers. Controllers depend on domain interfaces,
   never on data implementations directly.
@@ -101,80 +102,111 @@ Architectural decisions are tracked in `docs/decisions/` as ADR files. The `/pro
 
 ## Development Workflow
 
-### Feature Lifecycle (mandatory for new features and behavior changes)
+Use proposals as the default tracking and research artifact for feature work,
+behavior changes, and substantial refactors. Keep the process proportional to
+risk: design before code, but do not spend full review budget on local or
+behavior-preserving work.
 
-Every feature or behavior change follows this pipeline **in order**:
+### Proposal Usage
 
-#### Phase A — Proposal (design before code)
+- Lightweight proposal: problem, research notes, scope, approach, tasks, acceptance criteria, verification.
+- Full proposal: use `/create-proposal` when the change affects architecture, routing, storage, sync contracts, platform/audio behavior, API integration, or multiple feature areas.
+- No proposal: truly tiny docs/test/formatting fixes where the PR itself is sufficient history.
 
-```
-A1. /create-proposal           — write proposal in docs/proposals/{NNN}-{name}.md
-A2. /proposal-review           — review proposal
-A3. Fix review issues           — address all P0/P1 issues found by the reviewer
-A4. Repeat A2–A3               — re-review until verdict: Ready
-A5. /codex-review              — ask Codex to review the proposal (round 1)
-A6. Fix Codex issues           — address issues raised by Codex
-A7. /codex-review (re-read)    — ask Codex to re-read the proposal and review again;
-                                 explicitly instruct Codex to read the proposal file
-                                 again before reviewing (it retains session context
-                                 but must be told to re-read for the latest version)
-A8. Fix Codex issues           — address remaining issues from round 2
-A9. /proposal-architectural-review — ADR compliance + new ADR drafts for undocumented
-                                     decisions introduced by the proposal
-A10. Fix architectural findings — fix all ADR violations before proceeding
-A11. User approval             — wait for explicit user approval of proposal + ADRs
-A12. /proposal-review          — post-architecture review to catch inconsistencies
-                                 introduced by architectural fixes
-```
+### Review Stop Rule
 
-#### Phase B — Proposal and ADRs land on main
+Proposal review is a gate, not a loop.
 
-```
-B1. Create a branch for the proposal document (e.g. docs/p{NNN}-proposal)
-B2. Commit the proposal file + all new/updated ADR files (docs/decisions/)
-B3. Push and create a PR
-B4. Merge the PR
-```
+- If the latest proposal review has no P0, P1, or P2 findings, stop proposal review. Do not run another reviewer just for confidence.
+- P3/nits may be fixed opportunistically or left to implementer judgment without re-review.
+- If P0/P1 findings are fixed, re-review only the changed proposal sections or run one fresh review if the design changed materially.
+- If P2 findings are fixed or explicitly accepted as known trade-offs, re-review only when the fix changes contracts, tasks, acceptance criteria, or architectural decisions.
+- Do not run both `/proposal-review` and `/claude-review` for the same purpose; `/claude-review` is the Claude-backed way to run proposal review.
 
-#### Phase C — Create tracked issues
+### Risk Tiers
 
-```
-C1. /create-github-issues     — create one GitHub issue per task from the proposal
-```
+**Tier 0: mechanical, docs, tests, and behavior-preserving refactors**
 
-#### Phase D — Implement tasks (repeat for each task or batch of tasks)
+- Use a lightweight proposal when the work is worth tracking or researching; otherwise use a short PR description or local note.
+- Run targeted tests plus `make verify` when feasible.
+- Request `/review-pr` only when the diff is non-trivial, production-facing, platform-sensitive, or easy to misread.
+- Do not run ADR or implementation reviews.
+- Run proposal review only when the proposal records a non-obvious design/research decision.
 
-```
-D1. Create a feature branch from main (e.g. feat/p{NNN}-t{N}-short-name)
-D2. Implement the changes
-D3. Run `flutter test && flutter analyze` — all checks must pass
-D4. Commit and push, create a PR referencing the GitHub issue
-D5. /review-pr <N> — self-review using code review skills
-D6. Implement fixes from the review
-D7. Repeat D5–D6 until quality is sufficient (max 3 review iterations)
-D8. Approve and merge the PR to main
-```
+**Tier 1: small local behavior change**
 
-**Rules:**
-- Never skip phases. Never start implementation before proposal is approved.
-- Never create GitHub issues for an unapproved proposal.
-- **Autonomous execution.** The entire pipeline from Phase B through Phase D
-  runs without waiting for user reaction at intermediate steps. Do not stop
-  to ask for confirmation between tasks, between iterations, or before
-  merging. The user delegates execution and expects finished results.
-- **Avoid generating commands that require human interaction.** Use non-interactive
-  flags, write multiline content to temp files, and prefer `gh pr merge --auto`
-  or direct merge over workflows that block on manual approval.
-- Phase A (proposal) requires user approval at step A11 — this is the only
-  mandatory human checkpoint. Everything after A11 is autonomous.
+Examples: UI-only change, single-feature behavior tweak, small settings/storage
+extension following an existing pattern.
 
-#### Phase E — Close out
+- Write a lightweight proposal for tracking and research.
+- Run one primary proposal review (`/proposal-review` or `/claude-review`).
+- Run `/codex-review` only when an independent second opinion is likely to change the design.
+- Follow the Review Stop Rule: no P0/P1/P2 means no further proposal review.
+- No architectural review unless the change triggers the criteria below.
 
-After all tasks are merged, update proposal status to `Implemented`.
+**Tier 2: normal feature, API integration, storage, navigation, or platform behavior change**
 
-**Not needed for:** bug fixes that don't change intended behavior, refactoring
-with no behavioral impact, test-only changes, documentation fixes. For these,
-skip directly to Phase D.
+- Create a full proposal in `docs/proposals/` using `/create-proposal`.
+- Run one primary proposal review and fix all P0/P1 findings before implementation.
+- Fix P2 findings or document them as accepted trade-offs before implementation.
+- Run one independent second-opinion review (`/codex-review` or `/claude-review`) when the change touches multiple features/layers, storage schema, API sync contracts, navigation structure, platform audio behavior, permissions, or production integration.
+- Follow the Review Stop Rule; re-run reviewers only after substantial proposal rewrites, not after minor wording fixes.
+- Run `/proposal-architectural-review` only when the change affects layered architecture, feature boundaries, storage ownership, cross-feature state, routing structure, platform integration patterns, or introduces/amends an ADR.
+- If architectural review creates or updates ADRs, wait for explicit user approval before implementing.
+
+**Tier 3: high-risk mobile architecture, data, or platform change**
+
+Examples: sync queue semantics, transcript durability, database migration with
+data-loss risk, microphone/session ownership, background behavior, navigation
+shell restructure, permission model, or personal-agent API contract changes.
+
+- Use the full Tier 2 flow.
+- Require both a primary proposal review and an independent second-opinion review.
+- Run `/proposal-architectural-review`.
+- Re-review after architectural fixes if they changed proposal contracts, tasks, or acceptance criteria.
+- Run `/proposal-implementation-review <proposal-path>` before marking the proposal implemented.
+
+### Proposal and ADR Commit
+
+For Tier 2/3 work, commit approved proposal and ADR changes before implementation:
+
+- The proposal document (`docs/proposals/`)
+- All new ADR files (`docs/decisions/`)
+- All updates to existing ADR files (`docs/decisions/`)
+
+### Implementation
+
+Every change still goes through a branch and PR; see Git Conventions below.
+Proposal tasks may be grouped into one PR when the grouped diff is coherent,
+behavior-preserving, and keeps `make verify` green.
+
+1. Create a branch from `main` before editing.
+2. Implement the changes.
+3. Run `make verify`; all checks must pass unless the change is docs-only.
+4. Commit and push, then create a PR. Reference the proposal or issue when one exists.
+5. Run `/review-pr` for Tier 2/3 work, non-trivial Tier 1 work, and any production hotfix after the immediate fix is safe.
+6. Fix all blocker findings before merge.
+7. Merge the PR to `main`.
+
+Implement approved proposals end-to-end autonomously. Avoid commands that require
+human interaction: use non-interactive flags, temp files for multiline content,
+and `gh pr merge --auto` or direct merge when appropriate.
+
+### Hotfix Lane
+
+For production or device-blocking incidents, prioritize the smallest safe fix:
+
+1. Diagnose and patch the immediate failure.
+2. Run the narrowest reliable verification plus broader checks when time allows.
+3. Ship or merge if needed.
+4. After stable, add proposal/ADR/review follow-up only if the fix introduced new intended behavior or an architectural decision.
+
+### Close Out
+
+After Tier 2/3 proposal work is merged, run `/proposal-implementation-review`
+only when the proposal had multiple PRs, changed contracts/invariants, or carried
+high data/architecture/platform risk. Update proposal status to `Implemented`
+after required review gates pass.
 
 ### Before Writing Code
 
@@ -192,11 +224,11 @@ skip directly to Phase D.
 ### After Writing Code — Mandatory Checks
 
 ```bash
-flutter analyze    # Static analysis — zero issues required
-flutter test       # All tests must pass
+make verify        # Runs analyze + test
 ```
 
-Both must pass before any commit or PR.
+`make verify` must pass before any commit or PR. Use `make analyze` or
+`make test` only when you need a narrower diagnostic command.
 
 ---
 
@@ -232,7 +264,7 @@ test/
 ### What to Test
 
 - **Domain**: All state transitions, sealed class exhaustiveness, interface contracts.
-- **Data**: Service implementations with mocked platform packages (AudioRecorder, Whisper FFI).
+- **Data**: Service implementations with mocked platform packages (AudioRecorder, Groq HTTP client).
 - **Controllers**: State machine transitions with mocked services.
 - **Widgets**: Button states, navigation triggers, conditional rendering, error states.
 - **Storage**: CRUD operations, sync queue state machine, pagination, cascade deletes.
@@ -280,7 +312,7 @@ documentation fixes, config changes, one-line edits, and wiring changes.**
 # Before starting any work — always:
 git checkout -b feat/my-feature   # or fix/, docs/, chore/, refactor/
 
-# After flutter test && flutter analyze pass:
+# After make verify passes:
 git push -u origin feat/my-feature
 gh pr create --title "..." --body "..."
 ```
@@ -326,8 +358,7 @@ Scope: feature or layer name (e.g., `recording`, `core/storage`, `app`)
 
 Before requesting review, verify:
 
-- [ ] `flutter analyze` passes with zero issues
-- [ ] `flutter test` passes with all tests green
+- [ ] `make verify` passes
 - [ ] Architecture dependency rule is respected (no cross-feature imports)
 - [ ] New code has tests
 - [ ] No hardcoded secrets, tokens, or credentials
@@ -402,7 +433,7 @@ class SttException implements Exception {
 | Element | Convention | Example |
 |---------|-----------|---------|
 | Services (abstract) | domain concept | `RecordingService`, `SttService`, `StorageService` |
-| Services (impl) | abstract name + Impl | `RecordingServiceImpl`, `WhisperSttService` |
+| Services (impl) | abstract name + Impl | `RecordingServiceImpl`, `GroqSttService` |
 | Controllers | feature + Controller | `RecordingController`, `HistoryNotifier` |
 | Providers | camelCase + Provider | `recordingServiceProvider`, `appSettingsProvider` |
 | Screens | feature + Screen | `RecordingScreen`, `TranscriptReviewScreen` |
@@ -515,9 +546,9 @@ Two proposals define stub providers that 006 replaces:
 
 ```bash
 # Makefile targets (preferred)
-make setup                   # Full setup: flutter pub get + download Whisper model
+make setup                   # Full setup: flutter pub get + download Silero VAD model
 make deps                    # Flutter pub get only
-make model                   # Download Whisper base model (~140 MB)
+make vad-model               # Download Silero VAD v5 ONNX model (~2 MB)
 make verify                  # Run analyze + test
 make analyze                 # Static analysis only
 make test                    # Run tests only
