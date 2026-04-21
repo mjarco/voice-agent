@@ -11,10 +11,6 @@ PODS:
     - Flutter
   - flutter_tts (0.0.1):
     - Flutter
-  - flutter_voice_processor (1.1.2):
-    - Flutter
-    - ios-voice-processor (~> 1.2.0)
-  - ios-voice-processor (1.2.0)
   - onnxruntime-c (1.22.0)
   - onnxruntime-objc (1.22.0):
     - onnxruntime-objc/Core (= 1.22.0)
@@ -22,11 +18,6 @@ PODS:
     - onnxruntime-c (= 1.22.0)
   - permission_handler_apple (9.3.0):
     - Flutter
-  - Porcupine-iOS (3.0.4):
-    - ios-voice-processor (~> 1.2.0)
-  - porcupine_flutter (3.0.6):
-    - Flutter
-    - Porcupine-iOS (~> 3.0.4)
   - record_ios (1.2.0):
     - Flutter
   - shared_preferences_foundation (0.0.1):
@@ -46,9 +37,7 @@ DEPENDENCIES:
   - flutter_foreground_task (from `.symlinks/plugins/flutter_foreground_task/ios`)
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
   - flutter_tts (from `.symlinks/plugins/flutter_tts/ios`)
-  - flutter_voice_processor (from `.symlinks/plugins/flutter_voice_processor/ios`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
-  - porcupine_flutter (from `.symlinks/plugins/porcupine_flutter/ios`)
   - record_ios (from `.symlinks/plugins/record_ios/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
@@ -56,10 +45,8 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
-    - ios-voice-processor
     - onnxruntime-c
     - onnxruntime-objc
-    - Porcupine-iOS
 
 EXTERNAL SOURCES:
   audioplayers_darwin:
@@ -74,12 +61,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_secure_storage/ios"
   flutter_tts:
     :path: ".symlinks/plugins/flutter_tts/ios"
-  flutter_voice_processor:
-    :path: ".symlinks/plugins/flutter_voice_processor/ios"
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
-  porcupine_flutter:
-    :path: ".symlinks/plugins/porcupine_flutter/ios"
   record_ios:
     :path: ".symlinks/plugins/record_ios/ios"
   shared_preferences_foundation:
@@ -96,13 +79,9 @@ SPEC CHECKSUMS:
   flutter_foreground_task: a159d2c2173b33699ddb3e6c2a067045d7cebb89
   flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
   flutter_tts: 35ac3c7d42412733e795ea96ad2d7e05d0a75113
-  flutter_voice_processor: f60363f959515eaebc35bcaaf26017596c953fc6
-  ios-voice-processor: 6b5ca08962f39e434fe39dca0f483d923a3b1b97
   onnxruntime-c: 7f778680e96145956c0a31945f260321eed2611a
   onnxruntime-objc: 83d28b87525bd971259a66e153ea32b5d023de19
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
-  Porcupine-iOS: da103a8848ce6b36acd4a5e42bb811d4532dd515
-  porcupine_flutter: c74b9b5861bbe4a3a8976f7da2d98559ef6157d2
   record_ios: 412daca2350b228e698fffcd08f1f94ceb1e3844
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0

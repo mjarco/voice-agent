@@ -71,6 +71,6 @@
 		<string>audio</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Voice Agent needs microphone access to record audio for transcription and to listen for your wake word in the background.</string>
+	<string>Voice Agent needs microphone access to record audio for transcription and to continue recording when the app is in the background.</string>
 </dict>
 </plist>
