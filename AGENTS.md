@@ -2,11 +2,12 @@
 
 ## Project Context
 
-Voice Agent is an offline-first Flutter mobile app (iOS + Android) that records voice,
-transcribes on-device using Whisper, and sends transcripts to the user's API.
+Voice Agent is a Flutter mobile app (iOS + Android) that records voice,
+transcribes via the Groq cloud STT API (`whisper-large-v3-turbo`), and sends
+transcripts to the user's API.
 
 Architecture: layered (features/ core/ app/). Stack: Flutter 3.22+, Dart 3.4+,
-Riverpod, GoRouter, sqflite, Whisper (whisper_flutter_new).
+Riverpod, GoRouter, sqflite, Silero VAD (local), Groq Whisper (cloud STT).
 
 See CLAUDE.md for architecture rules, coding conventions, and cross-proposal contracts.
 See docs/proposals/ for feature proposals and implementation plans.
