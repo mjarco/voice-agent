@@ -1,6 +1,6 @@
 # Proposal 026 — Remove Wake Word, Rewire Foreground Service to Session Lifecycle, Clean Up Whisper Traces
 
-## Status: Draft
+## Status: Implemented (PRs #229, #230, #231, #232, #233)
 
 ## Prerequisites
 - None — this proposal removes existing code and rewires one provider listener
