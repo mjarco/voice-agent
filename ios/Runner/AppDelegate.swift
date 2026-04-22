@@ -12,8 +12,10 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    if let controller = window?.rootViewController as? FlutterViewController {
-      AudioSessionBridge.shared.configure(with: controller.binaryMessenger)
+    // In UIScene-based apps window?.rootViewController is nil here, so go via
+    // the plugin registry to get a reliable binary messenger.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AudioSessionBridge") {
+      AudioSessionBridge.shared.configure(with: registrar.messenger())
     }
   }
 }

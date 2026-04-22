@@ -61,6 +61,10 @@ class FlutterForegroundTaskService implements BackgroundService {
       } on PlatformException {
         // Audio session switch failed — continue anyway, background may
         // not persist but foreground still works
+      } on MissingPluginException {
+        // AudioSessionBridge not registered (e.g. iOS plugin wiring changed).
+        // Proceed so foreground VAD still works; background recording may not
+        // survive screen lock until the bridge is re-registered.
       }
     }
 
@@ -80,6 +84,8 @@ class FlutterForegroundTaskService implements BackgroundService {
         await _audioSessionChannel.invokeMethod('setAmbient');
       } on PlatformException {
         // Audio session revert failed — non-critical
+      } on MissingPluginException {
+        // Bridge not registered — nothing to revert.
       }
     }
 
