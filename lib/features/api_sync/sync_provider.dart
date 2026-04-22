@@ -5,6 +5,7 @@ import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
+import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
@@ -27,6 +28,12 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     ttsService: ref.watch(ttsServiceProvider),
     getTtsEnabled: () => ref.read(appConfigProvider).ttsEnabled,
     audioFeedbackService: ref.watch(audioFeedbackServiceProvider),
+    // P027 / ADR-NET-002: drain while foregrounded OR while a hands-free
+    // session is active.
+    shouldProcessQueue: () =>
+        ref.read(appForegroundedProvider) || ref.read(sessionActiveProvider),
+    // P027: TTS playback is foreground-gated until P028 adds Android
+    // FOREGROUND_SERVICE_MEDIA_PLAYBACK.
     isAppForegrounded: () => ref.read(appForegroundedProvider),
     onAgentReply: (reply) {
       ref.read(latestAgentReplyProvider.notifier).state = reply;
@@ -34,6 +41,15 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
   );
 
   worker.start();
+
+  // P027: on idle→active session transition, kick an immediate drain so the
+  // first utterance does not wait for the next 5 s poll tick.
+  ref.listen<bool>(sessionActiveProvider, (prev, next) {
+    if (next == true && prev != true) {
+      worker.kickDrain();
+    }
+  });
+
   ref.onDispose(() => worker.stop());
 
   return worker;
