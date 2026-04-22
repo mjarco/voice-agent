@@ -1,6 +1,6 @@
 # Proposal 027 — Background Sync While Hands-Free Session Active
 
-## Status: Draft
+## Status: Implemented (PRs #236, #240, #241)
 
 ## Prerequisites
 
