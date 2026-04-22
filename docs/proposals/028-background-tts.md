@@ -1,6 +1,6 @@
 # Proposal 028 — Background TTS Playback for Hands-Free Sessions
 
-## Status: Draft
+## Status: Implemented (PRs #236, #242)
 
 ## Prerequisites
 
