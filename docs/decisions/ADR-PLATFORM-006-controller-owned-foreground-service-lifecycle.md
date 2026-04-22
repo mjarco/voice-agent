@@ -2,6 +2,7 @@
 
 Status: Proposed
 Proposed in: P026
+Amended in: P027
 
 ## Context
 
@@ -74,3 +75,10 @@ capture, but not for audio-session category switching.
   that requires preconditions (audio session, background service, sensor).
   For controllers that only need to react to state transitions without
   preconditions, the listener pattern in ADR-ARCH-009 is still valid.
+- **P027 reuses this explicit-boundary pattern for non-platform consumers.**
+  `HandsFreeController` writes a core `StateProvider<bool>`
+  (`sessionActiveProvider`) at the same three call sites (`startSession`,
+  `stopSession`, `_terminateWithError`) so `SyncWorker` can gate on an
+  active session without depending on `features/recording`. Future
+  features that need a session-active signal should use the same provider
+  rather than reaching into `handsFreeControllerProvider`.
