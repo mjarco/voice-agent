@@ -51,7 +51,12 @@ class FlutterForegroundTaskService implements BackgroundService {
         serviceId: 1,
         notificationTitle: 'Voice Agent',
         notificationText: 'Starting...',
-        serviceTypes: [ForegroundServiceTypes.microphone],
+        serviceTypes: [
+          ForegroundServiceTypes.microphone,
+          // P028: required so flutter_tts.speak() can play through the
+          // speaker while the service is running on Android 14+.
+          ForegroundServiceTypes.mediaPlayback,
+        ],
       );
     }
 

@@ -228,7 +228,6 @@ void main() {
       getTtsEnabled: () => ttsEnabled,
       audioFeedbackService: _StubAudioFeedbackService(),
       shouldProcessQueue: () => true,
-      isAppForegrounded: () => true,
     );
   });
 
@@ -316,7 +315,6 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
-        isAppForegrounded: () => true,
       );
 
       await storage.saveTranscript(transcript);
@@ -430,7 +428,6 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
-        isAppForegrounded: () => true,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -457,7 +454,6 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
-        isAppForegrounded: () => true,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -484,7 +480,6 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
-        isAppForegrounded: () => true,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -510,7 +505,6 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
-        isAppForegrounded: () => true,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -659,7 +653,6 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: predicate,
-        isAppForegrounded: predicate,
       );
     }
 
@@ -732,7 +725,6 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => canProcess,
-        isAppForegrounded: () => canProcess,
       );
 
       await storage.saveTranscript(transcript);
@@ -808,8 +800,8 @@ void main() {
     });
   });
 
-  group('TTS foreground gating (P027 temporary; P028 lifts)', () {
-    test('foreground=true → ttsService.speak() called', () async {
+  group('TTS (P028: always speaks regardless of foreground state)', () {
+    test('ttsEnabled=true → ttsService.speak() called', () async {
       await storage.saveTranscript(transcript);
       await storage.enqueue('tx-1');
       apiClient.nextResult = const ApiSuccess();
@@ -824,8 +816,9 @@ void main() {
       worker.stop();
     });
 
-    test('foreground=false → ttsService.speak() NOT called, reply stored',
+    test('ttsEnabled=false → ttsService.speak() NOT called, reply stored',
         () async {
+      ttsEnabled = false;
       String? capturedReply;
       worker = SyncWorker(
         storageService: storage,
@@ -836,8 +829,7 @@ void main() {
         ttsService: tts,
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
-        shouldProcessQueue: () => true, // backgrounded session active
-        isAppForegrounded: () => false, // backgrounded
+        shouldProcessQueue: () => true,
         onAgentReply: (reply) => capturedReply = reply,
       );
 

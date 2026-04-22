@@ -29,12 +29,11 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     getTtsEnabled: () => ref.read(appConfigProvider).ttsEnabled,
     audioFeedbackService: ref.watch(audioFeedbackServiceProvider),
     // P027 / ADR-NET-002: drain while foregrounded OR while a hands-free
-    // session is active.
+    // session is active. P028: TTS no longer needs a separate foreground
+    // gate — Android mediaPlayback FG service type + iOS playAndRecord
+    // cover background TTS.
     shouldProcessQueue: () =>
         ref.read(appForegroundedProvider) || ref.read(sessionActiveProvider),
-    // P027: TTS playback is foreground-gated until P028 adds Android
-    // FOREGROUND_SERVICE_MEDIA_PLAYBACK.
-    isAppForegrounded: () => ref.read(appForegroundedProvider),
     onAgentReply: (reply) {
       ref.read(latestAgentReplyProvider.notifier).state = reply;
     },
