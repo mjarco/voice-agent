@@ -19,6 +19,7 @@ class SyncWorker {
     required this.ttsService,
     required this.getTtsEnabled,
     required this.audioFeedbackService,
+    required this.shouldProcessQueue,
     required this.isAppForegrounded,
     this.onAgentReply,
   });
@@ -30,7 +31,15 @@ class SyncWorker {
   final TtsService ttsService;
   final bool Function() getTtsEnabled;
   final AudioFeedbackService audioFeedbackService;
+
+  /// Returns true when the queue should be drained. After P027 this is
+  /// `foreground OR hands-free session active`. See ADR-NET-002.
+  final bool Function() shouldProcessQueue;
+
+  /// Returns true when the app is foregrounded. Used to gate TTS playback
+  /// in `_handleReply()` until P028 adds Android `FOREGROUND_SERVICE_MEDIA_PLAYBACK`.
   final bool Function() isAppForegrounded;
+
   final void Function(String reply)? onAgentReply;
 
   SyncWorkerState _state = SyncWorkerState.idle;
@@ -38,6 +47,9 @@ class SyncWorker {
 
   StreamSubscription<ConnectivityStatus>? _connectivitySub;
   Timer? _pollTimer;
+
+  /// Reentrancy guard for `_drain()`. Also makes `kickDrain()` idempotent.
+  bool _draining = false;
 
   static const _pollInterval = Duration(seconds: 5);
   static const _maxRetries = 10;
@@ -95,64 +107,82 @@ class SyncWorker {
     _drain();
   }
 
+  /// Immediately drain the queue if not already draining.
+  ///
+  /// Idempotent: concurrent or back-to-back calls short-circuit via the
+  /// `_draining` reentrancy flag. Canonical event-triggered drain entry
+  /// point per ADR-NET-002 (amended in P027). Future event triggers
+  /// (connectivity-up, schema migration, etc.) should call this rather
+  /// than invent parallel mechanisms.
+  Future<void> kickDrain() async {
+    if (_draining) return;
+    await _drain();
+  }
+
   Future<void> _drain() async {
+    if (_draining) return;
     if (_state != SyncWorkerState.running) return;
-    if (!isAppForegrounded()) return;
+    if (!shouldProcessQueue()) return;
 
-    // Check if API URL is configured
-    final url = apiConfig.url;
-    if (url == null || url.isEmpty) return;
+    _draining = true;
+    try {
+      // Check if API URL is configured
+      final url = apiConfig.url;
+      if (url == null || url.isEmpty) return;
 
-    // Promote eligible retries
-    await _promoteEligibleRetries();
+      // Promote eligible retries
+      await _promoteEligibleRetries();
 
-    // Get pending items
-    final items = await storageService.getPendingItems();
-    if (items.isEmpty) return;
+      // Get pending items
+      final items = await storageService.getPendingItems();
+      if (items.isEmpty) return;
 
-    // Process first item (FIFO)
-    final item = items.first;
+      // Process first item (FIFO)
+      final item = items.first;
 
-    await storageService.markSending(item.id);
+      await storageService.markSending(item.id);
 
-    final transcript = await storageService.getTranscript(item.transcriptId);
-    if (transcript == null) {
-      // Orphaned queue item — remove it
-      await storageService.markSent(item.id);
-      unawaited(audioFeedbackService.playError());
-      return;
-    }
-
-    final result = await apiClient.post(
-      transcript,
-      url: url,
-      token: apiConfig.token,
-    );
-
-    switch (result) {
-      case ApiSuccess(:final body):
+      final transcript = await storageService.getTranscript(item.transcriptId);
+      if (transcript == null) {
+        // Orphaned queue item — remove it
         await storageService.markSent(item.id);
-        unawaited(audioFeedbackService.playSuccess());
-        _handleReply(body);
-      case ApiPermanentFailure(:final message):
-        // Exhaust retry budget — permanent failures should never be auto-retried
-        await storageService.markFailed(
-          item.id, message, overrideAttempts: _maxRetries,
-        );
         unawaited(audioFeedbackService.playError());
-      case ApiTransientFailure(:final reason):
-        final attempts = item.attempts + 1; // markSending already incremented
-        if (attempts >= _maxRetries) {
+        return;
+      }
+
+      final result = await apiClient.post(
+        transcript,
+        url: url,
+        token: apiConfig.token,
+      );
+
+      switch (result) {
+        case ApiSuccess(:final body):
+          await storageService.markSent(item.id);
+          unawaited(audioFeedbackService.playSuccess());
+          _handleReply(body);
+        case ApiPermanentFailure(:final message):
+          // Exhaust retry budget — permanent failures should never be auto-retried
           await storageService.markFailed(
-            item.id,
-            'Max retries exceeded ($attempts attempts). Last error: $reason',
+            item.id, message, overrideAttempts: _maxRetries,
           );
-        } else {
-          await storageService.markFailed(item.id, reason);
-        }
-        unawaited(audioFeedbackService.playError());
-      case ApiNotConfigured():
-        break;
+          unawaited(audioFeedbackService.playError());
+        case ApiTransientFailure(:final reason):
+          final attempts = item.attempts + 1; // markSending already incremented
+          if (attempts >= _maxRetries) {
+            await storageService.markFailed(
+              item.id,
+              'Max retries exceeded ($attempts attempts). Last error: $reason',
+            );
+          } else {
+            await storageService.markFailed(item.id, reason);
+          }
+          unawaited(audioFeedbackService.playError());
+        case ApiNotConfigured():
+          break;
+      }
+    } finally {
+      _draining = false;
     }
   }
 
@@ -163,7 +193,10 @@ class SyncWorker {
       final message = json['message'] as String?;
       if (message == null || message.isEmpty) return;
       final language = json['language'] as String?;
-      if (getTtsEnabled()) {
+      // P027: TTS is temporarily foreground-gated. P028 lifts this after
+      // adding Android FOREGROUND_SERVICE_MEDIA_PLAYBACK. Reply text is
+      // always stored via onAgentReply so the user sees it on return.
+      if (getTtsEnabled() && isAppForegrounded()) {
         unawaited(ttsService.stop().then((_) => ttsService.speak(message, languageCode: language)));
       }
       onAgentReply?.call(message);
