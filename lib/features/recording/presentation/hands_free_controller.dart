@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
@@ -191,9 +192,14 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       return;
     }
 
-    // All guards passed — start foreground service BEFORE engine so the iOS
-    // playAndRecord audio session is set before mic capture begins
-    // (ADR-AUDIO-009 + ADR-PLATFORM-006).
+    // All guards passed — mark the session active BEFORE starting the engine
+    // so SyncWorker (P027, ADR-NET-002) can drain in the background from the
+    // very first tick.
+    _ref.read(sessionActiveProvider.notifier).state = true;
+
+    // Start foreground service BEFORE engine so the iOS playAndRecord audio
+    // session is set before mic capture begins (ADR-AUDIO-009 +
+    // ADR-PLATFORM-006).
     final bg = _ref.read(backgroundServiceProvider);
     await bg.startService();
     unawaited(bg.updateNotification(
@@ -222,6 +228,10 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   Future<void> stopSession() async {
     if (state is HandsFreeIdle) return;
+
+    // Flip the session-active flag early so SyncWorker stops draining in the
+    // background while we tear down (P027, ADR-NET-002).
+    _ref.read(sessionActiveProvider.notifier).state = false;
 
     // Stop foreground service before engine teardown; on iOS this reverts the
     // audio session category from playAndRecord back to ambient before the
@@ -442,6 +452,9 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     String message, {
     bool requiresSettings = false,
   }) {
+    // Flip the session-active flag so SyncWorker stops background draining
+    // immediately (P027, ADR-NET-002).
+    _ref.read(sessionActiveProvider.notifier).state = false;
     unawaited(_ref.read(backgroundServiceProvider).stopService());
     unawaited(_engineSub?.cancel());
     _engineSub = null;

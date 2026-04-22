@@ -13,6 +13,7 @@ import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
+import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
@@ -611,6 +612,81 @@ void main() {
 
       expect(bg.calls, contains('stopService'));
       expect(stateOf(c), isA<HandsFreeSessionError>());
+    });
+  });
+
+  // ── sessionActiveProvider writes (P027) ───────────────────────────────────
+
+  group('sessionActiveProvider lifecycle', () {
+    test('startSession success → sessionActive = true', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+
+      expect(c.read(sessionActiveProvider), isFalse);
+
+      await ctrl(c).startSession();
+
+      expect(c.read(sessionActiveProvider), isTrue);
+    });
+
+    test('stopSession → sessionActive = false', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession();
+      engine.emit(const EngineListening());
+      await Future.delayed(Duration.zero);
+
+      await ctrl(c).stopSession();
+
+      expect(c.read(sessionActiveProvider), isFalse);
+    });
+
+    test('_terminateWithError via engine error → sessionActive = false',
+        () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+      await ctrl(c).startSession();
+      await Future.delayed(Duration.zero);
+
+      engine.emit(const EngineError('VAD crashed'));
+      await Future.delayed(Duration.zero);
+
+      expect(c.read(sessionActiveProvider), isFalse);
+    });
+
+    test('permission denied guard → sessionActive stays false', () async {
+      final engine = FakeHandsFreeEngine()..permissionGranted = false;
+      final c = makeContainer(engine: engine);
+
+      await ctrl(c).startSession();
+
+      expect(c.read(sessionActiveProvider), isFalse);
+    });
+
+    test('missing Groq key guard → sessionActive stays false', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine, groqApiKey: null);
+
+      await ctrl(c).startSession();
+
+      expect(c.read(sessionActiveProvider), isFalse);
+    });
+
+    test('already-idle stopSession → no write (provider stays whatever it was)',
+        () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine);
+
+      // Simulate an inconsistent state: provider is true but controller is
+      // idle (shouldn't happen in practice, but verifies the early-return
+      // guard doesn't clobber the flag).
+      c.read(sessionActiveProvider.notifier).state = true;
+
+      await ctrl(c).stopSession();
+
+      // Because state was already HandsFreeIdle, stopSession returns before
+      // writing the provider.
+      expect(c.read(sessionActiveProvider), isTrue);
     });
   });
 
