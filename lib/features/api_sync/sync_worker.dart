@@ -20,7 +20,6 @@ class SyncWorker {
     required this.getTtsEnabled,
     required this.audioFeedbackService,
     required this.shouldProcessQueue,
-    required this.isAppForegrounded,
     this.onAgentReply,
   });
 
@@ -35,10 +34,6 @@ class SyncWorker {
   /// Returns true when the queue should be drained. After P027 this is
   /// `foreground OR hands-free session active`. See ADR-NET-002.
   final bool Function() shouldProcessQueue;
-
-  /// Returns true when the app is foregrounded. Used to gate TTS playback
-  /// in `_handleReply()` until P028 adds Android `FOREGROUND_SERVICE_MEDIA_PLAYBACK`.
-  final bool Function() isAppForegrounded;
 
   final void Function(String reply)? onAgentReply;
 
@@ -193,10 +188,11 @@ class SyncWorker {
       final message = json['message'] as String?;
       if (message == null || message.isEmpty) return;
       final language = json['language'] as String?;
-      // P027: TTS is temporarily foreground-gated. P028 lifts this after
-      // adding Android FOREGROUND_SERVICE_MEDIA_PLAYBACK. Reply text is
-      // always stored via onAgentReply so the user sees it on return.
-      if (getTtsEnabled() && isAppForegrounded()) {
+      // P028 lifted the P027 foreground gate — TTS plays in both foreground
+      // and background. iOS: covered by UIBackgroundModes:audio + playAndRecord.
+      // Android: covered by FOREGROUND_SERVICE_MEDIA_PLAYBACK + mediaPlayback
+      // service type on the active FG service.
+      if (getTtsEnabled()) {
         unawaited(ttsService.stop().then((_) => ttsService.speak(message, languageCode: language)));
       }
       onAgentReply?.call(message);
