@@ -168,11 +168,25 @@ shell restructure, permission model, or personal-agent API contract changes.
 
 ### Proposal and ADR Commit
 
-For Tier 2/3 work, commit approved proposal and ADR changes before implementation:
+When a proposal exists, it must be merged to `main` before any implementation
+begins. For Tier 2/3 work, ADR changes follow the same flow:
 
 - The proposal document (`docs/proposals/`)
 - All new ADR files (`docs/decisions/`)
 - All updates to existing ADR files (`docs/decisions/`)
+
+Workflow:
+
+1. Create a branch (e.g. `<NNN>/proposal`).
+2. Commit the proposal + ADR changes on that branch.
+3. Push and open a PR.
+4. Merge to `main` after approval.
+5. Only then create a new branch from `main` for implementation
+   (`feat/<short-description>` or similar — see Branch Naming).
+
+The proposal is the contract: it must be on `main` before implementation
+references it. Implementation PRs reference a stable, merged proposal — not one
+in flight on a feature branch.
 
 ### Implementation
 
