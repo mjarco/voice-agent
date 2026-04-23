@@ -567,8 +567,10 @@ shape for verification.
 - `lib/core/session_control/session_control_signal.dart` — value object
   and `fromBody` constructor (see code above).
 - `lib/core/session_control/hands_free_control_port.dart` — `HandsFreeControlPort`
-  interface with three methods: `stopSession`, `isSessionActive`,
-  `isSuspendedForManualRecording`.
+  interface with two methods: `Future<void> stopSession()` and
+  `bool get isSuspendedForManualRecording`. (`isSessionActive` is tracked
+  in a separate Riverpod provider, not on the controller — omitted from
+  the port to keep it minimal.)
 - `lib/core/session_control/session_id_coordinator.dart` — holds
   `currentConversationId`; exposes `resetSession()` and a getter.
 - `lib/core/session_control/toaster.dart` — wraps
@@ -871,6 +873,28 @@ rationale.
    every feature directory.
 9. Manual smoke on iPhone 12 Pro and an Android 14+ device reproduces
    each scenario in Test Impact.
+
+## Review Notes (2026-04-23)
+
+Reviewed as Tier 2. Verdict: Ready with caveats. P1 fixed (port method
+list). P2 findings accepted as implementation notes:
+
+- **`_handleReply` async + drain interaction:** `_drain()` should `await`
+  `_handleReply` up to and including `speak()` (fast — platform ack only),
+  then `unawaited(dispatcher.dispatch(signal))` for the TTS-wait stage.
+- **`speak()` does not guarantee `isSpeaking == true` on return:** The
+  `setStartHandler` fires asynchronously after `_tts.speak()` resolves.
+  Mitigated by the 3-second timeout ceiling — if the dispatcher observes
+  `isSpeaking == false` and the start handler fires within that window,
+  the dispatcher catches it. Worst case: signal applies immediately
+  (farewell cut short) — still safe (mic released).
+- **ProviderScope override:** `handsFreeControlPortProvider` override must
+  live in `main.dart` where `ProviderScope` is created, not in `app.dart`.
+- **`reset_session` client-side behavior in v1:** Beyond the toast, the
+  only observable effect is clearing `SessionIdCoordinator.currentConversationId`.
+  This has no wire effect — the backend manages conversation boundaries
+  via device-id stitching. The coordinator is a future extensibility point
+  and a log/telemetry tag.
 
 ## Related
 
