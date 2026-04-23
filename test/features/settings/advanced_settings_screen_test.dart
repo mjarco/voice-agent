@@ -26,6 +26,7 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../helpers/stub_background_service.dart';
+import '../../helpers/stub_session_control.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 
 // ── Stubs ─────────────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ List<Override> _baseOverrides({AppConfigService? configService}) => [
   if (configService != null)
     appConfigServiceProvider.overrideWithValue(configService),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+  ...sessionControlTestOverrides,
 ];
 
 /// Pumps [AdvancedSettingsScreen] directly inside a minimal scaffold+router

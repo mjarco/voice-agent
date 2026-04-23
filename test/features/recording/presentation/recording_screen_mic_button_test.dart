@@ -33,6 +33,7 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../../helpers/stub_background_service.dart';
+import '../../../helpers/stub_session_control.dart';
 
 // ── Stubs ────────────────────────────────────────────────────────────────────
 
@@ -156,6 +157,7 @@ List<Override> get _baseOverrides => [
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+  ...sessionControlTestOverrides,
 ];
 
 Future<void> pumpApp(WidgetTester tester) async {
@@ -190,6 +192,7 @@ Future<_SpyTtsService> _pumpAppWithSpyTts(WidgetTester tester) async {
         ttsServiceProvider.overrideWithValue(spy),
         audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
         backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+        ...sessionControlTestOverrides,
       ],
       child: const App(),
     ),

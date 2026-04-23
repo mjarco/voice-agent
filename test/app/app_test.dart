@@ -16,6 +16,7 @@ import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 
 import '../helpers/stub_background_service.dart';
+import '../helpers/stub_session_control.dart';
 
 class _StubStorageService implements StorageService {
   @override
@@ -87,6 +88,7 @@ List<Override> get _testOverrides => [
       connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
       backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
       agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
+      ...sessionControlTestOverrides,
     ];
 
 void main() {

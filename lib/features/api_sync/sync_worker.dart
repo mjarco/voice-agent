@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/session_control/session_control_dispatcher.dart';
+import 'package:voice_agent/core/session_control/session_control_signal.dart';
+import 'package:voice_agent/core/session_control/session_id_coordinator.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
@@ -20,6 +23,8 @@ class SyncWorker {
     required this.getTtsEnabled,
     required this.audioFeedbackService,
     required this.shouldProcessQueue,
+    required this.sessionControlDispatcher,
+    required this.sessionIdCoordinator,
     this.onAgentReply,
   });
 
@@ -34,6 +39,9 @@ class SyncWorker {
   /// Returns true when the queue should be drained. After P027 this is
   /// `foreground OR hands-free session active`. See ADR-NET-002.
   final bool Function() shouldProcessQueue;
+
+  final SessionControlDispatcher sessionControlDispatcher;
+  final SessionIdCoordinator sessionIdCoordinator;
 
   final void Function(String reply)? onAgentReply;
 
@@ -155,7 +163,7 @@ class SyncWorker {
         case ApiSuccess(:final body):
           await storageService.markSent(item.id);
           unawaited(audioFeedbackService.playSuccess());
-          _handleReply(body);
+          await _handleReply(body);
         case ApiPermanentFailure(:final message):
           // Exhaust retry budget — permanent failures should never be auto-retried
           await storageService.markFailed(
@@ -181,7 +189,7 @@ class SyncWorker {
     }
   }
 
-  void _handleReply(String? body) {
+  Future<void> _handleReply(String? body) async {
     if (body == null) return;
     try {
       final json = jsonDecode(body) as Map<String, dynamic>;
@@ -192,10 +200,28 @@ class SyncWorker {
       // and background. iOS: covered by UIBackgroundModes:audio + playAndRecord.
       // Android: covered by FOREGROUND_SERVICE_MEDIA_PLAYBACK + mediaPlayback
       // service type on the active FG service.
+      //
+      // P029: sequenced stop+speak so that by the time the next line runs,
+      // ttsService.isSpeaking has deterministically flipped to true (or
+      // stayed false if TTS is disabled / threw). See P029 Failure modes
+      // "Order-of-signal-arrival edge".
       if (getTtsEnabled()) {
-        unawaited(ttsService.stop().then((_) => ttsService.speak(message, languageCode: language)));
+        await ttsService.stop();
+        await ttsService.speak(message, languageCode: language);
       }
       onAgentReply?.call(message);
+
+      // P029: adopt conversation_id for client-side correlation.
+      final conversationId = json['conversation_id'] as String?;
+      if (conversationId != null && conversationId.isNotEmpty) {
+        sessionIdCoordinator.adoptConversationId(conversationId);
+      }
+
+      // P029: parse and dispatch session control signal.
+      final signal = SessionControlSignal.fromBody(json);
+      if (signal != null) {
+        unawaited(sessionControlDispatcher.dispatch(signal));
+      }
     } catch (_) {
       // Non-JSON or unexpected shape — stay silent.
     }

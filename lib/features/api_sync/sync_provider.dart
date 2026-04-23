@@ -6,6 +6,7 @@ import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
+import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
@@ -34,6 +35,8 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     // cover background TTS.
     shouldProcessQueue: () =>
         ref.read(appForegroundedProvider) || ref.read(sessionActiveProvider),
+    sessionControlDispatcher: ref.watch(sessionControlDispatcherProvider),
+    sessionIdCoordinator: ref.watch(sessionIdCoordinatorProvider),
     onAgentReply: (reply) {
       ref.read(latestAgentReplyProvider.notifier).state = reply;
     },
