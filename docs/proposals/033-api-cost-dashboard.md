@@ -1,6 +1,6 @@
 # Proposal 033 — API Cost Dashboard
 
-## Status: Draft (seed)
+## Status: Implemented (voice-agent side; blocked by backend aggregation endpoint)
 
 ## Origin
 

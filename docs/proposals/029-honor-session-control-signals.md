@@ -1,6 +1,6 @@
 # Proposal 029 — Honor Session-Control Signals from Backend Metadata
 
-## Status: Draft (seed)
+## Status: Implemented
 
 ## Origin
 

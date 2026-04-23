@@ -1,6 +1,6 @@
 # Proposal 030 — TTS Mixed-Language Support via SSML `<lang>` Tags
 
-## Status: Draft (seed)
+## Status: Implemented
 
 ## Origin
 

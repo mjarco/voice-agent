@@ -1,6 +1,6 @@
 # Proposal 032 — New Conversation Button
 
-## Status: Draft (seed)
+## Status: Implemented
 
 ## Origin
 
