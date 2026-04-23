@@ -273,6 +273,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/advanced'),
           ),
+          _buildSectionHeader('Usage'),
+          ListTile(
+            key: const Key('usage-costs-tile'),
+            title: const Text('Usage & Costs'),
+            subtitle: const Text('API cost dashboard'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/usage'),
+          ),
           _buildSectionHeader('About'),
           ListTile(
             title: const Text('Version'),
