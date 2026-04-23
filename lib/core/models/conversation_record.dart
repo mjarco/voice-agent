@@ -101,7 +101,7 @@ class ConversationRecord {
       originRole: OriginRole.fromString(map['origin_role'] as String),
       assertionMode: map['assertion_mode'] as String,
       userEndorsed: map['user_endorsed'] as bool,
-      sourceEventRefs: (map['source_event_refs'] as List<dynamic>)
+      sourceEventRefs: (map['source_event_refs'] as List<dynamic>? ?? [])
           .cast<String>(),
     );
   }
