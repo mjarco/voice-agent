@@ -496,8 +496,8 @@ Two defensive behaviours must hold even on unexpected input:
 
 `test/core/tts/ssml_lang_splitter_test.dart`:
 
-- Empty input → one empty default segment (or zero segments — pick one
-  and document in the class doc).
+- Empty input → zero segments (consistent with the splitter contract;
+  `speak()` early-returns without touching `_tts`).
 - Untagged text → one default segment with exact input text.
 - Single `<lang xml:lang="en-US">X</lang>` → three segments: leading
   default, tagged en-US, trailing default (empty segments elided).
@@ -700,6 +700,28 @@ Each task is a mergeable PR with tests unless marked as a follow-up.
    no cross-feature imports).
 9. Device smoke (T3) is recorded in this proposal before status flips
    to Implemented.
+
+## Review Notes (2026-04-23)
+
+Reviewed as Tier 2. Verdict: Ready with caveats. No P0/P1. P2 findings
+accepted as implementation notes:
+
+- **`_runQueue` pseudocode:** `await _tts.speak(...)` returns on platform
+  acknowledgement, not playback end. `doneCompleter.future` is the actual
+  "wait for all segments" signal. Implementer must not confuse the two.
+- **Mock rework for T2 tests:** `_MockFlutterTts` must be extended to
+  capture `setStartHandler`/`setCompletionHandler`/`setCancelHandler`/
+  `setErrorHandler` registrations and expose methods to fire them on
+  demand. This is a T2 prerequisite, not optional.
+- **Empty input contract:** Committed to zero segments (fixed in test
+  plan). `speak()` early-returns without touching `_tts`.
+- **`speak()` completion semantics change:** With queuing, `speak()`
+  returns after all segments complete (via `doneCompleter`), not after
+  platform ack. No caller currently awaits it, so no functional impact.
+  Documented as conscious change.
+- **Per-language cache miss cost:** `_bestVoice()` incurs one platform
+  channel call per new language per session. First tagged reply pays
+  ~20ms (PL + EN). Acceptable for v1.
 
 ## Related
 
