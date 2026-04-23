@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
+import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
@@ -71,10 +72,27 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final isApiConfigured = ref.watch(apiUrlConfiguredProvider);
     final agentReply = ref.watch(latestAgentReplyProvider);
 
+    final isNewConversationDisabled = recState is RecordingActive ||
+        recState is RecordingTranscribing ||
+        hfState is HandsFreeCapturing ||
+        hfState is HandsFreeStopping;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Record'),
         actions: [
+          IconButton(
+            key: const Key('new-conversation-button'),
+            icon: const Icon(Icons.add_comment_outlined),
+            tooltip: 'New conversation',
+            onPressed: isNewConversationDisabled
+                ? null
+                : () {
+                    ref.read(sessionIdCoordinatorProvider).resetSession();
+                    ref.read(toasterProvider).show('New conversation');
+                    ref.read(hapticServiceProvider).lightImpact();
+                  },
+          ),
           IconButton(
             icon: const Icon(Icons.history),
             onPressed: () => context.push('/record/history'),
