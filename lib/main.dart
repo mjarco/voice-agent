@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/core/background/flutter_foreground_task_service.dart';
+import 'package:voice_agent/core/session_control/session_control_provider.dart';
+import 'package:voice_agent/core/session_control/toaster.dart';
 import 'package:voice_agent/core/storage/sqlite_storage_service.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,12 +21,18 @@ void main() async {
     debugPrint('Recovered $recovered stale sending items');
   }
 
+  final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
   runApp(
     ProviderScope(
       overrides: [
         storageServiceProvider.overrideWithValue(storage),
+        toasterProvider.overrideWithValue(Toaster(scaffoldMessengerKey)),
+        handsFreeControlPortProvider.overrideWith(
+          (ref) => ref.watch(handsFreeControllerProvider.notifier),
+        ),
       ],
-      child: const App(),
+      child: App(scaffoldMessengerKey: scaffoldMessengerKey),
     ),
   );
 }

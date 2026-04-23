@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,12 @@ import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/session_control/hands_free_control_port.dart';
+import 'package:voice_agent/core/session_control/haptic_service.dart';
+import 'package:voice_agent/core/session_control/session_control_dispatcher.dart';
+import 'package:voice_agent/core/session_control/session_control_signal.dart';
+import 'package:voice_agent/core/session_control/session_id_coordinator.dart';
+import 'package:voice_agent/core/session_control/toaster.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
@@ -182,6 +189,70 @@ class _StubAudioFeedbackService implements AudioFeedbackService {
   @override void dispose() {}
 }
 
+class _FakeHandsFreeControlPort implements HandsFreeControlPort {
+  @override
+  bool isSuspendedForManualRecording = false;
+
+  int stopSessionCalls = 0;
+
+  @override
+  Future<void> stopSession() async {
+    stopSessionCalls++;
+  }
+}
+
+class _FakeToaster extends Toaster {
+  _FakeToaster() : super(GlobalKey<ScaffoldMessengerState>());
+  final List<String> messages = [];
+
+  @override
+  void show(String message, {Duration duration = const Duration(seconds: 2)}) {
+    messages.add(message);
+  }
+}
+
+class _FakeHapticService extends HapticService {
+  int calls = 0;
+
+  @override
+  Future<void> lightImpact() async {
+    calls++;
+  }
+}
+
+class _RecordingDispatcher extends SessionControlDispatcher {
+  _RecordingDispatcher()
+      : super(
+          ttsService: _NoopTtsService(),
+          handsFreeControlPort: _FakeHandsFreeControlPort(),
+          sessionIdCoordinator: SessionIdCoordinator(),
+          toaster: _FakeToaster(),
+          hapticService: _FakeHapticService(),
+          ttsTimeout: Duration.zero,
+        );
+
+  final List<SessionControlSignal> dispatched = [];
+
+  @override
+  Future<void> dispatch(SessionControlSignal signal) async {
+    dispatched.add(signal);
+  }
+}
+
+class _NoopTtsService implements TtsService {
+  @override
+  ValueListenable<bool> get isSpeaking => ValueNotifier(false);
+
+  @override
+  Future<void> speak(String text, {String? languageCode}) async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  void dispose() {}
+}
+
 class FakeConnectivityService extends ConnectivityService {
   final _controller = StreamController<ConnectivityStatus>.broadcast();
 
@@ -203,6 +274,8 @@ void main() {
   late FakeConnectivityService connectivity;
   late _SpyTtsService tts;
   late bool ttsEnabled;
+  late _RecordingDispatcher dispatcher;
+  late SessionIdCoordinator sessionIdCoordinator;
   late SyncWorker worker;
 
   final transcript = Transcript(
@@ -219,6 +292,8 @@ void main() {
     connectivity = FakeConnectivityService();
     tts = _SpyTtsService();
     ttsEnabled = true;
+    dispatcher = _RecordingDispatcher();
+    sessionIdCoordinator = SessionIdCoordinator();
     worker = SyncWorker(
       storageService: storage,
       apiClient: apiClient,
@@ -228,6 +303,8 @@ void main() {
       getTtsEnabled: () => ttsEnabled,
       audioFeedbackService: _StubAudioFeedbackService(),
       shouldProcessQueue: () => true,
+      sessionControlDispatcher: dispatcher,
+      sessionIdCoordinator: sessionIdCoordinator,
     );
   });
 
@@ -315,6 +392,8 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
       );
 
       await storage.saveTranscript(transcript);
@@ -428,6 +507,8 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -454,6 +535,8 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -480,6 +563,8 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -505,6 +590,8 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -653,6 +740,8 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: predicate,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
       );
     }
 
@@ -725,6 +814,8 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => canProcess,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
       );
 
       await storage.saveTranscript(transcript);
@@ -830,6 +921,8 @@ void main() {
         getTtsEnabled: () => ttsEnabled,
         audioFeedbackService: _StubAudioFeedbackService(),
         shouldProcessQueue: () => true,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
         onAgentReply: (reply) => capturedReply = reply,
       );
 
@@ -864,6 +957,135 @@ void main() {
 
     test('attempt 10 returns 1 hour (capped)', () {
       expect(SyncWorker.backoffForAttempt(10), const Duration(hours: 1));
+    });
+  });
+
+  group('session control dispatch (P029-T2)', () {
+    test('body with stop_recording=true dispatches signal', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody =
+          '{"message":"Goodbye","language":"en","session_control":{"stop_recording":true,"reset_session":false}}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(dispatcher.dispatched, hasLength(1));
+      expect(dispatcher.dispatched.first.stopRecording, isTrue);
+      expect(dispatcher.dispatched.first.resetSession, isFalse);
+    });
+
+    test('body with only message does NOT dispatch', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"message":"Hello","language":"en"}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(dispatcher.dispatched, isEmpty);
+    });
+
+    test('malformed JSON body does NOT dispatch and does not throw', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = 'not valid json {{';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(dispatcher.dispatched, isEmpty);
+    });
+
+    test('body with reset_session=true dispatches signal', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody =
+          '{"message":"New session","language":"en","session_control":{"reset_session":true}}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(dispatcher.dispatched, hasLength(1));
+      expect(dispatcher.dispatched.first.resetSession, isTrue);
+      expect(dispatcher.dispatched.first.stopRecording, isFalse);
+    });
+
+    test('body with both signals dispatches signal with both flags', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody =
+          '{"message":"Bye","language":"en","session_control":{"reset_session":true,"stop_recording":true}}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(dispatcher.dispatched, hasLength(1));
+      expect(dispatcher.dispatched.first.resetSession, isTrue);
+      expect(dispatcher.dispatched.first.stopRecording, isTrue);
+    });
+
+    test('conversation_id in reply is adopted by coordinator', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody =
+          '{"message":"ok","language":"en","conversation_id":"conv-42"}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(sessionIdCoordinator.currentConversationId, 'conv-42');
+    });
+
+    test('empty conversation_id is NOT adopted', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody =
+          '{"message":"ok","language":"en","conversation_id":""}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(sessionIdCoordinator.currentConversationId, isNull);
+    });
+
+    test('TTS stop and speak are awaited before dispatch', () async {
+      final orderTts = _SpyTtsService();
+      final orderDispatcher = _RecordingDispatcher();
+
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+        connectivityService: connectivity,
+        ttsService: orderTts,
+        getTtsEnabled: () => true,
+        audioFeedbackService: _StubAudioFeedbackService(),
+        shouldProcessQueue: () => true,
+        sessionControlDispatcher: orderDispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody =
+          '{"message":"bye","language":"en","session_control":{"stop_recording":true}}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      // TTS must have been called (stop then speak)
+      expect(orderTts.log, ['stop', 'speak:bye:en']);
+      // Dispatcher must have been called
+      expect(orderDispatcher.dispatched, hasLength(1));
     });
   });
 }

@@ -20,6 +20,7 @@ import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../helpers/stub_background_service.dart';
+import '../../helpers/stub_session_control.dart';
 
 class _StubStorage implements StorageService {
   @override Future<String> getDeviceId() async => 'test';
@@ -85,6 +86,7 @@ List<Override> _baseOverrides() => [
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+  ...sessionControlTestOverrides,
 ];
 
 Future<void> _navigateToSettings(WidgetTester tester) async {

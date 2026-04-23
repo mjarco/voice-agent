@@ -10,6 +10,7 @@ import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/session_control/hands_free_control_port.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
@@ -31,7 +32,8 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 ///   • [StorageService.saveTranscript] + [enqueue] with rollback on enqueue failure
 ///   • WAV cleanup for rejections and session stop
 class HandsFreeController extends StateNotifier<HandsFreeSessionState>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver
+    implements HandsFreeControlPort {
   HandsFreeController(this._ref) : super(const HandsFreeIdle()) {
     WidgetsBinding.instance.addObserver(this);
   }
@@ -62,6 +64,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   bool _suspendedForManualRecording = false;
   bool _suspendedForTts = false;
 
+  @override
   bool get isSuspendedForManualRecording => _suspendedForManualRecording;
 
   /// Interrupts the active VAD segment and releases the microphone so that
@@ -226,6 +229,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     );
   }
 
+  @override
   Future<void> stopSession() async {
     if (state is HandsFreeIdle) return;
 

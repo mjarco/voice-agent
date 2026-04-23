@@ -31,6 +31,7 @@ import 'package:voice_agent/features/recording/presentation/hands_free_controlle
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 import '../helpers/stub_background_service.dart';
+import '../helpers/stub_session_control.dart';
 
 // ── Stub dependencies ─────────────────────────────────────────────────────────
 
@@ -110,6 +111,7 @@ List<Override> get _baseOverrides => [
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedback()),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
   agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
+  ...sessionControlTestOverrides,
 ];
 
 // ── Tracking HandsFreeController stubs ───────────────────────────────────────
