@@ -87,5 +87,19 @@ void main() {
         expect(record.recordType, type);
       }
     });
+
+    test('fromMap handles null source_event_refs', () {
+      final map = Map<String, dynamic>.from(sampleMap);
+      map['source_event_refs'] = null;
+      final record = ConversationRecord.fromMap(map);
+      expect(record.sourceEventRefs, isEmpty);
+    });
+
+    test('fromMap handles missing source_event_refs', () {
+      final map = Map<String, dynamic>.from(sampleMap);
+      map.remove('source_event_refs');
+      final record = ConversationRecord.fromMap(map);
+      expect(record.sourceEventRefs, isEmpty);
+    });
   });
 }
