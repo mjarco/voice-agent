@@ -9,6 +9,12 @@ abstract class RecordingService {
   Future<RecordingResult> stop();
   Future<void> cancel();
 
+  /// Pauses an active recording. The recorder keeps its file handle open.
+  Future<void> pause();
+
+  /// Resumes a paused recording.
+  Future<void> resume();
+
   /// Broadcast stream that emits every ~200ms while recording.
   /// Completes on stop/cancel/error.
   Stream<Duration> get elapsed;

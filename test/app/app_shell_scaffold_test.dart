@@ -25,12 +25,14 @@ import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
+import 'package:voice_agent/core/media_button/media_button_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 import '../helpers/stub_background_service.dart';
+import '../helpers/stub_media_button.dart';
 import '../helpers/stub_session_control.dart';
 
 // ── Stub dependencies ─────────────────────────────────────────────────────────
@@ -110,6 +112,7 @@ List<Override> get _baseOverrides => [
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedback()),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+  mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
   agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
   ...sessionControlTestOverrides,
 ];

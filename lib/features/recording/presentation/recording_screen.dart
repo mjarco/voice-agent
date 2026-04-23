@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/media_button/media_button_port.dart';
+import 'package:voice_agent/core/media_button/media_button_provider.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
@@ -23,14 +25,59 @@ class RecordingScreen extends ConsumerStatefulWidget {
 }
 
 class _RecordingScreenState extends ConsumerState<RecordingScreen> {
+  StreamSubscription<MediaButtonEvent>? _mediaButtonSub;
+  MediaButtonPort? _mediaButtonPort;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref.read(handsFreeControllerProvider.notifier).startSession();
+        _activateMediaButton();
       }
     });
+  }
+
+  void _activateMediaButton() {
+    _mediaButtonPort = ref.read(mediaButtonProvider);
+    unawaited(_mediaButtonPort!.activate());
+    _mediaButtonSub = _mediaButtonPort!.events.listen(_onMediaButtonEvent);
+  }
+
+  void _onMediaButtonEvent(MediaButtonEvent event) {
+    if (event != MediaButtonEvent.togglePlayPause) return;
+
+    final recState = ref.read(recordingControllerProvider);
+    final hfState = ref.read(handsFreeControllerProvider);
+    final recCtrl = ref.read(recordingControllerProvider.notifier);
+    final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
+
+    if (recState is RecordingActive) {
+      unawaited(recCtrl.pauseRecording());
+    } else if (recState is RecordingPaused) {
+      unawaited(recCtrl.resumeRecording());
+    } else if (hfState is HandsFreeListening ||
+        hfState is HandsFreeWithBacklog ||
+        hfState is HandsFreeCapturing) {
+      unawaited(hfCtrl.toggleUserSuspend().then((_) {
+        ref.read(toasterProvider).show('Paused');
+        ref.read(hapticServiceProvider).lightImpact();
+      }));
+    } else if (hfState is HandsFreeSuspendedByUser) {
+      unawaited(hfCtrl.toggleUserSuspend().then((_) {
+        ref.read(toasterProvider).show('Resumed');
+        ref.read(hapticServiceProvider).lightImpact();
+      }));
+    }
+    // All other states: no-op
+  }
+
+  @override
+  void dispose() {
+    _mediaButtonSub?.cancel();
+    unawaited(_mediaButtonPort?.deactivate());
+    super.dispose();
   }
 
   @override
@@ -73,6 +120,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final agentReply = ref.watch(latestAgentReplyProvider);
 
     final isNewConversationDisabled = recState is RecordingActive ||
+        recState is RecordingPaused ||
         recState is RecordingTranscribing ||
         hfState is HandsFreeCapturing ||
         hfState is HandsFreeStopping;
@@ -146,7 +194,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     RecordingController controller,
   ) {
     return switch (state) {
-      RecordingIdle() || RecordingActive() || RecordingTranscribing() =>
+      RecordingIdle() ||
+      RecordingActive() ||
+      RecordingPaused() ||
+      RecordingTranscribing() =>
         const _MicButton(),
       RecordingError(
         :final message,
@@ -282,6 +333,7 @@ class _HandsFreeSection extends StatelessWidget {
         HandsFreeWithBacklog(:final jobs) => jobs,
         HandsFreeCapturing(:final jobs) => jobs,
         HandsFreeStopping(:final jobs) => jobs,
+        HandsFreeSuspendedByUser(:final jobs) => jobs,
         HandsFreeSessionError(:final jobs) => jobs,
         HandsFreeIdle() => const [],
       };
@@ -311,6 +363,7 @@ class _HfStatusStrip extends StatelessWidget {
       HandsFreeCapturing() => const _StatusText('Capturing...'),
       HandsFreeStopping() => const _StatusText('Processing segment...'),
       HandsFreeWithBacklog() => const _StatusText('Listening (jobs pending)...'),
+      HandsFreeSuspendedByUser() => const _StatusText('Listening paused'),
       HandsFreeIdle() => const SizedBox.shrink(),
     };
   }
@@ -424,6 +477,8 @@ class _MicButtonState extends ConsumerState<_MicButton> {
       await recCtrl.startRecording();
     } else if (recState is RecordingActive) {
       await recCtrl.stopAndTranscribe();
+    } else if (recState is RecordingPaused) {
+      await recCtrl.resumeRecording();
     }
     // RecordingTranscribing → no-op
     // RecordingError → handled by error view in _buildRecordingArea
@@ -464,6 +519,7 @@ class _MicButtonState extends ConsumerState<_MicButton> {
     final recState = ref.watch(recordingControllerProvider);
     final hfState = ref.watch(handsFreeControllerProvider);
     final isRecording = recState is RecordingActive;
+    final isPaused = recState is RecordingPaused;
     final isTranscribing = recState is RecordingTranscribing;
     final isHfCapturing = hfState is HandsFreeCapturing;
 
@@ -476,17 +532,21 @@ class _MicButtonState extends ConsumerState<_MicButton> {
 
     final color = isTranscribing
         ? Colors.grey
-        : isRecording && _isPressAndHold
+        : isPaused
             ? Colors.orange
-            : (isRecording || isHfCapturing)
-                ? Colors.red
-                : Colors.green;
+            : isRecording && _isPressAndHold
+                ? Colors.orange
+                : (isRecording || isHfCapturing)
+                    ? Colors.red
+                    : Colors.green;
 
-    final label = isRecording
-        ? (_isPressAndHold ? 'Release to stop' : 'Tap to stop')
-        : isTranscribing
-            ? 'Transcribing...'
-            : 'Tap to record';
+    final label = isPaused
+        ? 'Paused — tap to resume'
+        : isRecording
+            ? (_isPressAndHold ? 'Release to stop' : 'Tap to stop')
+            : isTranscribing
+                ? 'Transcribing...'
+                : 'Tap to record';
 
     return GestureDetector(
       onTap: _onTap,
@@ -512,7 +572,9 @@ class _MicButtonState extends ConsumerState<_MicButton> {
                       strokeWidth: 3,
                     ),
                   )
-                : const Icon(Icons.mic, color: Colors.white, size: 48),
+                : isPaused
+                    ? const Icon(Icons.pause, color: Colors.white, size: 48)
+                    : const Icon(Icons.mic, color: Colors.white, size: 48),
           ),
           const SizedBox(height: 16),
           Text(

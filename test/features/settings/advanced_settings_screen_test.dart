@@ -24,8 +24,10 @@ import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
+import 'package:voice_agent/core/media_button/media_button_provider.dart';
 
 import '../../helpers/stub_background_service.dart';
+import '../../helpers/stub_media_button.dart';
 import '../../helpers/stub_session_control.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 
@@ -68,6 +70,8 @@ class _NoOpRecordingService implements RecordingService {
   @override Future<void> start({required String outputPath}) async {}
   @override Future<RecordingResult> stop() async =>
       RecordingResult(filePath: '/tmp/x.wav', duration: Duration.zero, sampleRate: 16000);
+  @override Future<void> pause() async {}
+  @override Future<void> resume() async {}
   @override Future<void> cancel() async {}
   @override Stream<Duration> get elapsed => const Stream.empty();
   @override bool get isRecording => false;
@@ -107,6 +111,7 @@ List<Override> _baseOverrides({AppConfigService? configService}) => [
   if (configService != null)
     appConfigServiceProvider.overrideWithValue(configService),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+  mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
   ...sessionControlTestOverrides,
 ];
 

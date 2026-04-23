@@ -29,11 +29,13 @@ import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
+import 'package:voice_agent/core/media_button/media_button_provider.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 import '../../../helpers/stub_background_service.dart';
+import '../../../helpers/stub_media_button.dart';
 
 // ── Stubs ────────────────────────────────────────────────────────────────────
 
@@ -154,6 +156,10 @@ class _NoOpRecordingService implements RecordingService {
   Future<RecordingResult> stop() async => RecordingResult(
       filePath: '/tmp/x.wav', duration: Duration.zero, sampleRate: 16000);
   @override
+  Future<void> pause() async {}
+  @override
+  Future<void> resume() async {}
+  @override
   Future<void> cancel() async {}
   @override
   Stream<Duration> get elapsed => const Stream.empty();
@@ -226,6 +232,7 @@ List<Override> _baseOverrides({
       audioFeedbackServiceProvider
           .overrideWithValue(_StubAudioFeedbackService()),
       backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+      mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
       sessionIdCoordinatorProvider
           .overrideWithValue(coordinator ?? SessionIdCoordinator()),
       toasterProvider.overrideWithValue(

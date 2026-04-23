@@ -266,6 +266,10 @@ class _NullRecordingService implements RecordingService {
   Future<RecordingResult> stop() async =>
       RecordingResult(filePath: '/tmp/t.wav', duration: Duration.zero, sampleRate: 16000);
   @override
+  Future<void> pause() async {}
+  @override
+  Future<void> resume() async {}
+  @override
   Future<void> cancel() async {}
   @override
   bool get isRecording => false;
@@ -384,6 +388,7 @@ List<SegmentJob> jobsOf(HandsFreeSessionState s) => switch (s) {
       HandsFreeWithBacklog(:final jobs) => jobs,
       HandsFreeCapturing(:final jobs) => jobs,
       HandsFreeStopping(:final jobs) => jobs,
+      HandsFreeSuspendedByUser(:final jobs) => jobs,
       HandsFreeSessionError(:final jobs) => jobs,
       HandsFreeIdle() => [],
     };

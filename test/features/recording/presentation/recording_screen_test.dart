@@ -28,11 +28,13 @@ import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
+import 'package:voice_agent/core/media_button/media_button_provider.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../../helpers/stub_background_service.dart';
+import '../../../helpers/stub_media_button.dart';
 import '../../../helpers/stub_session_control.dart';
 
 class _StubStorage implements StorageService {
@@ -99,6 +101,7 @@ List<Override> get _baseOverrides => [
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+  mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
   ...sessionControlTestOverrides,
 ];
 
@@ -309,6 +312,10 @@ class _NoOpRecordingService implements RecordingService {
         duration: Duration.zero,
         sampleRate: 16000,
       );
+  @override
+  Future<void> pause() async {}
+  @override
+  Future<void> resume() async {}
   @override
   Future<void> cancel() async {}
   @override

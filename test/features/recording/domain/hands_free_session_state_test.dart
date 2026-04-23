@@ -11,6 +11,7 @@ void main() {
       const HandsFreeCapturing([]),
       const HandsFreeStopping([]),
       const HandsFreeWithBacklog([]),
+      const HandsFreeSuspendedByUser([]),
       const HandsFreeSessionError(message: 'oops'),
     ];
 
@@ -27,11 +28,13 @@ void main() {
             break;
           case HandsFreeWithBacklog():
             break;
+          case HandsFreeSuspendedByUser():
+            break;
           case HandsFreeSessionError():
             break;
         }
       }
-      expect(states.length, 6);
+      expect(states.length, 7);
     });
   });
 

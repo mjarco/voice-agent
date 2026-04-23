@@ -43,6 +43,13 @@ class HandsFreeWithBacklog extends HandsFreeSessionState {
   final List<SegmentJob> jobs;
 }
 
+/// User-initiated pause via media button. Engine stopped, backlog preserved.
+class HandsFreeSuspendedByUser extends HandsFreeSessionState {
+  const HandsFreeSuspendedByUser(this.jobs);
+
+  final List<SegmentJob> jobs;
+}
+
 /// Unrecoverable error. Microphone released.
 ///
 /// At most one of [requiresSettings] or [requiresAppSettings] may be true.
