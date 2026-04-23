@@ -11,6 +11,7 @@ import 'package:voice_agent/features/history/transcript_detail_screen.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
+import 'package:voice_agent/features/usage/presentation/usage_screen.dart';
 
 GoRouter createRouter() => GoRouter(
   initialLocation: '/record',
@@ -108,6 +109,10 @@ GoRouter createRouter() => GoRouter(
         GoRoute(
           path: 'advanced',
           builder: (context, state) => const AdvancedSettingsScreen(),
+        ),
+        GoRoute(
+          path: 'usage',
+          builder: (context, state) => const UsageScreen(),
         ),
       ],
     ),
