@@ -3,6 +3,7 @@ sealed class RecordingState {
 
   const factory RecordingState.idle() = RecordingIdle;
   const factory RecordingState.recording() = RecordingActive;
+  const factory RecordingState.paused() = RecordingPaused;
   const factory RecordingState.transcribing() = RecordingTranscribing;
   const factory RecordingState.error(
     String message, {
@@ -17,6 +18,10 @@ class RecordingIdle extends RecordingState {
 
 class RecordingActive extends RecordingState {
   const RecordingActive();
+}
+
+class RecordingPaused extends RecordingState {
+  const RecordingPaused();
 }
 
 class RecordingTranscribing extends RecordingState {

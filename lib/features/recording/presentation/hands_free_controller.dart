@@ -63,6 +63,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   // ignore: prefer_final_fields — T3 mutates this field
   bool _suspendedForManualRecording = false;
   bool _suspendedForTts = false;
+  bool _suspendedByUser = false;
 
   @override
   bool get isSuspendedForManualRecording => _suspendedForManualRecording;
@@ -92,6 +93,54 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     state = _listeningOrBacklog();
   }
 
+  // ── User-initiated suspension (P034 T2) ─────────────────────────────────
+
+  /// Toggles user-initiated suspension. Called by media button dispatch.
+  /// Returns true if the session is now suspended, false if resumed.
+  Future<bool> toggleUserSuspend() async {
+    if (_suspendedByUser) {
+      await resumeByUser();
+      return false;
+    } else {
+      await suspendByUser();
+      return true;
+    }
+  }
+
+  Future<void> suspendByUser() async {
+    if (_suspendedByUser) return;
+    if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
+
+    // Fast path: engine already stopped by TTS or manual recording.
+    if (_suspendedForTts || _suspendedForManualRecording) {
+      _suspendedByUser = true;
+      state = HandsFreeSuspendedByUser(List<SegmentJob>.unmodifiable(_jobs));
+      return;
+    }
+
+    if (state is HandsFreeCapturing) {
+      await _engine?.interruptCapture();
+    } else {
+      await _engineSub?.cancel();
+      await _engine?.stop();
+    }
+    _engineSub = null;
+    _engine = null;
+    _suspendedByUser = true;
+    state = HandsFreeSuspendedByUser(List<SegmentJob>.unmodifiable(_jobs));
+  }
+
+  Future<void> resumeByUser() async {
+    if (!_suspendedByUser) return;
+    _suspendedByUser = false;
+    if (_suspendedForManualRecording || _suspendedForTts) {
+      state = _listeningOrBacklog();
+      return;
+    }
+    _startEngine(_ref.read(appConfigProvider).vadConfig);
+    state = _listeningOrBacklog();
+  }
+
   /// Restarts the VAD engine with the current [appConfigProvider] VAD config.
   ///
   /// Called when the user changes VAD parameters in Advanced Settings.
@@ -100,6 +149,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   Future<void> reloadVadConfig() async {
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
     if (_suspendedForManualRecording) return;
+    if (_suspendedByUser) return;
 
     if (state is HandsFreeCapturing) {
       await _engine?.interruptCapture();
@@ -122,6 +172,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   Future<void> resumeAfterManualRecording() async {
     if (!_suspendedForManualRecording) return;
     _suspendedForManualRecording = false;
+    if (_suspendedByUser) return;
     _startEngine(_ref.read(appConfigProvider).vadConfig);
     state = _listeningOrBacklog();
   }
@@ -151,7 +202,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   Future<void> resumeAfterTts() async {
     if (!_suspendedForTts) return;
     _suspendedForTts = false;
-    if (_suspendedForManualRecording) return;
+    if (_suspendedForManualRecording || _suspendedByUser) return;
     _startEngine(_ref.read(appConfigProvider).vadConfig);
     state = _listeningOrBacklog();
   }
@@ -262,6 +313,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     state = const HandsFreeIdle();
     _jobs.clear();
     _jobCounter = 0;
+    _suspendedByUser = false;
   }
 
   @override

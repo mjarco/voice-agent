@@ -29,6 +29,7 @@ class RecordingServiceImpl implements RecordingService {
   String? _currentPath;
   Timer? _elapsedTimer;
   DateTime? _startTime;
+  Duration _pausedElapsed = Duration.zero;
   final _elapsedController = StreamController<Duration>.broadcast();
 
   @override
@@ -41,6 +42,7 @@ class RecordingServiceImpl implements RecordingService {
   Future<void> start({required String outputPath}) async {
     _currentPath = outputPath;
     _startTime = DateTime.now();
+    _pausedElapsed = Duration.zero;
 
     await _recorder.start(_config, path: outputPath);
 
@@ -48,7 +50,33 @@ class RecordingServiceImpl implements RecordingService {
       const Duration(milliseconds: 200),
       (_) {
         if (_startTime != null) {
-          _elapsedController.add(DateTime.now().difference(_startTime!));
+          _elapsedController
+              .add(_pausedElapsed + DateTime.now().difference(_startTime!));
+        }
+      },
+    );
+  }
+
+  @override
+  Future<void> pause() async {
+    await _recorder.pause();
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
+    if (_startTime != null) {
+      _pausedElapsed += DateTime.now().difference(_startTime!);
+    }
+  }
+
+  @override
+  Future<void> resume() async {
+    await _recorder.resume();
+    _startTime = DateTime.now();
+    _elapsedTimer = Timer.periodic(
+      const Duration(milliseconds: 200),
+      (_) {
+        if (_startTime != null) {
+          _elapsedController
+              .add(_pausedElapsed + DateTime.now().difference(_startTime!));
         }
       },
     );
@@ -57,8 +85,9 @@ class RecordingServiceImpl implements RecordingService {
   @override
   Future<RecordingResult> stop() async {
     final path = await _recorder.stop();
-    final duration =
-        _startTime != null ? DateTime.now().difference(_startTime!) : Duration.zero;
+    final duration = _startTime != null
+        ? _pausedElapsed + DateTime.now().difference(_startTime!)
+        : _pausedElapsed;
 
     _cleanup();
 
@@ -93,6 +122,7 @@ class RecordingServiceImpl implements RecordingService {
     _elapsedTimer = null;
     _startTime = null;
     _currentPath = null;
+    _pausedElapsed = Duration.zero;
     // Do NOT close _elapsedController — it's an app-lifetime singleton.
     // Subscribers stay connected across recording sessions.
     // The stream goes quiet until the next start().

@@ -55,6 +55,12 @@ class FakeRecordingService implements RecordingService {
   }
 
   @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
+
+  @override
   Future<void> cancel() async {
     _isRecording = false;
   }
@@ -404,6 +410,7 @@ void main() {
     const states = <RecordingState>[
       RecordingIdle(),
       RecordingActive(),
+      RecordingPaused(),
       RecordingTranscribing(),
       RecordingError('test error'),
     ];
@@ -414,12 +421,14 @@ void main() {
           break;
         case RecordingActive():
           break;
+        case RecordingPaused():
+          break;
         case RecordingTranscribing():
           break;
         case RecordingError():
           break;
       }
     }
-    expect(states.length, 4);
+    expect(states.length, 5);
   });
 }

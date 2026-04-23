@@ -30,7 +30,8 @@ class RecordingController extends StateNotifier<RecordingState>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused && this.state is RecordingActive) {
+    if (state == AppLifecycleState.paused &&
+        (this.state is RecordingActive || this.state is RecordingPaused)) {
       cancelRecording();
     }
   }
@@ -143,6 +144,18 @@ class RecordingController extends StateNotifier<RecordingState>
         state = RecordingState.error('Transcription failed: $e');
       }
     }
+  }
+
+  Future<void> pauseRecording() async {
+    if (state is! RecordingActive) return;
+    await _service.pause();
+    state = const RecordingState.paused();
+  }
+
+  Future<void> resumeRecording() async {
+    if (state is! RecordingPaused) return;
+    await _service.resume();
+    state = const RecordingState.recording();
   }
 
   Future<void> cancelRecording() async {
