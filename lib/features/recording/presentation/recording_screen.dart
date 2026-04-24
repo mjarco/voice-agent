@@ -48,6 +48,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   void _onMediaButtonEvent(MediaButtonEvent event) {
     if (event != MediaButtonEvent.togglePlayPause) return;
 
+    if (ref.read(ttsPlayingProvider)) {
+      unawaited(ref.read(ttsServiceProvider).stop());
+      return;
+    }
+
     final recState = ref.read(recordingControllerProvider);
     final hfState = ref.read(handsFreeControllerProvider);
     final recCtrl = ref.read(recordingControllerProvider.notifier);
