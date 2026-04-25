@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,6 +26,7 @@ class RecordingController extends StateNotifier<RecordingState>
   final Ref _ref;
   StreamSubscription<Duration>? _elapsedSub;
   Duration _currentElapsed = Duration.zero;
+  bool _transcriptionCancelled = false;
 
   Duration get currentElapsed => _currentElapsed;
 
@@ -79,6 +81,13 @@ class RecordingController extends StateNotifier<RecordingState>
     }
   }
 
+  Future<void> cancelTranscription() async {
+    if (state is! RecordingTranscribing) return;
+    _transcriptionCancelled = true;
+    unawaited(_ref.read(audioFeedbackServiceProvider).stopLoop());
+    state = const RecordingState.idle();
+  }
+
   /// Stop recording, transcribe, save to storage, enqueue for sync, emit idle.
   /// If [silentOnEmpty] is true and the transcription result is empty,
   /// emits [RecordingIdle] without an error (used for press-and-hold).
@@ -88,12 +97,18 @@ class RecordingController extends StateNotifier<RecordingState>
       _cleanupSubscription();
 
       state = const RecordingState.transcribing();
+      _transcriptionCancelled = false;
       unawaited(_ref.read(audioFeedbackServiceProvider).startProcessingFeedback());
 
       final transcriptResult = await _sttService.transcribe(
         recordingResult.filePath,
       );
 
+      if (_transcriptionCancelled) {
+        _transcriptionCancelled = false;
+        try { await File(recordingResult.filePath).delete(); } catch (_) {}
+        return;
+      }
       if (!mounted) return;
 
       if (transcriptResult.text.trim().isEmpty) {

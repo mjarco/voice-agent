@@ -20,6 +20,7 @@ import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
+import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
@@ -171,6 +172,28 @@ void main() {
       await pumpRecordScreen(tester, engine: engine);
 
       expect(engine.started, isTrue);
+    });
+
+    testWidgets('session reaches Listening state after engine emits EngineListening',
+        (tester) async {
+      final engine = FakeHfEngine();
+      late ProviderContainer container;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: baseOverrides(engine),
+          child: Builder(builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return const App();
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      engine.emit(const EngineListening());
+      await tester.pumpAndSettle();
+
+      final state = container.read(handsFreeControllerProvider);
+      expect(state, isA<HandsFreeListening>());
     });
   });
 

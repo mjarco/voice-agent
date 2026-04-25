@@ -58,13 +58,16 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final recCtrl = ref.read(recordingControllerProvider.notifier);
     final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
 
-    if (recState is RecordingActive) {
+    if (recState is RecordingTranscribing) {
+      unawaited(recCtrl.cancelTranscription());
+    } else if (recState is RecordingActive) {
       unawaited(recCtrl.pauseRecording());
     } else if (recState is RecordingPaused) {
       unawaited(recCtrl.resumeRecording());
     } else if (hfState is HandsFreeListening ||
         hfState is HandsFreeWithBacklog ||
-        hfState is HandsFreeCapturing) {
+        hfState is HandsFreeCapturing ||
+        hfState is HandsFreeStopping) {
       unawaited(hfCtrl.toggleUserSuspend().then((_) {
         ref.read(toasterProvider).show('Paused');
         ref.read(hapticServiceProvider).lightImpact();
