@@ -20,14 +20,25 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.voiceagent.voice_agent"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 24
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        create("stable") {
+            dimension = "environment"
+            applicationId = "com.voiceagent.voice_agent"
+            resValue("string", "app_name", "Voice Agent")
+        }
+        create("dev") {
+            dimension = "environment"
+            applicationId = "com.voiceagent.voice_agent.dev"
+            resValue("string", "app_name", "Voice Agent DEV")
+        }
     }
 
     buildTypes {

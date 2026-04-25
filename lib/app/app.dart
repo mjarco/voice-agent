@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:voice_agent/app/router.dart';
 
 class App extends StatefulWidget {
@@ -21,14 +22,23 @@ class _AppState extends State<App> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Voice Agent',
+    final isDev = appFlavor == 'dev';
+    Widget app = MaterialApp.router(
+      title: isDev ? 'Voice Agent DEV' : 'Voice Agent',
       scaffoldMessengerKey: widget.scaffoldMessengerKey,
       theme: ThemeData(
-        colorSchemeSeed: Colors.blue,
+        colorSchemeSeed: isDev ? Colors.orange : Colors.blue,
         useMaterial3: true,
       ),
       routerConfig: _router,
     );
+    if (isDev) {
+      app = Banner(
+        message: 'DEV',
+        location: BannerLocation.topEnd,
+        child: app,
+      );
+    }
+    return app;
   }
 }
