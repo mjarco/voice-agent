@@ -77,6 +77,7 @@ class FakeSttService implements SttService {
   TranscriptResult? nextResult;
   bool shouldThrow = false;
   SttException? throwSttException;
+  Completer<TranscriptResult>? pendingTranscribe;
 
   @override
   Future<bool> isModelLoaded() async => _loaded;
@@ -91,6 +92,7 @@ class FakeSttService implements SttService {
     String audioFilePath, {
     String? languageCode,
   }) async {
+    if (pendingTranscribe != null) return pendingTranscribe!.future;
     if (throwSttException != null) throw throwSttException!;
     if (shouldThrow) throw Exception('transcription failed');
     return nextResult ??
@@ -404,6 +406,40 @@ void main() {
     expect(ctrl.state, isA<RecordingError>());
     final error = ctrl.state as RecordingError;
     expect(error.requiresAppSettings, isTrue);
+  });
+
+  test('cancelTranscription transitions from transcribing to idle', () async {
+    fakeService.lastPath = '/tmp/test.wav';
+    fakeStt.pendingTranscribe = Completer<TranscriptResult>();
+
+    // Start transcription — it will block on the completer.
+    final transcribeFuture = controller.stopAndTranscribe();
+
+    // Wait a tick for state to reach Transcribing.
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.state, isA<RecordingTranscribing>());
+
+    await controller.cancelTranscription();
+    expect(controller.state, isA<RecordingIdle>());
+
+    // Complete the STT so stopAndTranscribe finishes — result is discarded.
+    fakeStt.pendingTranscribe!.complete(const TranscriptResult(
+      text: 'Hello world',
+      segments: [],
+      detectedLanguage: 'en',
+      audioDurationMs: 5000,
+    ));
+    await transcribeFuture;
+
+    // State stays idle — the completed result was discarded.
+    expect(controller.state, isA<RecordingIdle>());
+    expect(fakeStorage.savedTranscripts, isEmpty);
+  });
+
+  test('cancelTranscription is no-op when not transcribing', () async {
+    expect(controller.state, isA<RecordingIdle>());
+    await controller.cancelTranscription();
+    expect(controller.state, isA<RecordingIdle>());
   });
 
   test('RecordingState sealed class exhaustiveness', () {
