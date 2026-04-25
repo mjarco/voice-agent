@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -105,6 +106,7 @@ class RecordingController extends StateNotifier<RecordingState>
 
       if (_transcriptionCancelled) {
         _transcriptionCancelled = false;
+        try { await File(recordingResult.filePath).delete(); } catch (_) {}
         return;
       }
       if (!mounted) return;
