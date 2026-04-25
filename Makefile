@@ -1,4 +1,4 @@
-.PHONY: deps vad-model analyze test verify clean setup doctor env run-web run-ios run-macos simulator install-ios help
+.PHONY: deps vad-model analyze test verify clean setup doctor env run-web run-ios run-ios-dev run-macos simulator install-ios install-ios-dev help
 
 MODEL_DIR := assets/models
 
@@ -81,13 +81,17 @@ env:
 # Run targets
 # ──────────────────────────────────────────────
 
-## run-web: Run the app in Chrome (no native plugins)
+## run-web: Run stable flavor in Chrome (no native plugins)
 run-web:
-	flutter run -d chrome
+	flutter run -d chrome --flavor stable
 
-## run-ios: Run the app on iOS Simulator
+## run-ios: Run stable flavor on iOS Simulator
 run-ios: _ensure-simulator
-	flutter run -d iPhone
+	flutter run -d iPhone --flavor stable
+
+## run-ios-dev: Run dev flavor on iOS Simulator
+run-ios-dev: _ensure-simulator
+	flutter run -d iPhone --flavor dev
 
 ## run-macos: Run the app as macOS desktop
 run-macos:
@@ -97,7 +101,7 @@ run-macos:
 simulator:
 	@open -a Simulator
 
-## install-ios: Build and install on a physical iOS device (USB or wireless)
+## install-ios: Build and install stable on a physical iOS device (USB or wireless)
 install-ios:
 	@DEVICE_ID=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/^[ \t]+|[ \t]+$$/, "", $$2); print $$2}'); \
 	if [ -z "$$DEVICE_ID" ]; then \
@@ -107,8 +111,21 @@ install-ios:
 		exit 1; \
 	fi; \
 	DEVICE_NAME=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/[ \t]+$$/, "", $$1); print $$1}'); \
-	echo "Installing on: $$DEVICE_NAME ($$DEVICE_ID)"; \
-	flutter run -d "$$DEVICE_ID"
+	echo "Installing stable on: $$DEVICE_NAME ($$DEVICE_ID)"; \
+	flutter run -d "$$DEVICE_ID" --flavor stable
+
+## install-ios-dev: Build and install dev on a physical iOS device (USB or wireless)
+install-ios-dev:
+	@DEVICE_ID=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/^[ \t]+|[ \t]+$$/, "", $$2); print $$2}'); \
+	if [ -z "$$DEVICE_ID" ]; then \
+		echo "ERROR: No physical iOS device found."; \
+		echo "Connect your iPhone via USB or enable wireless debugging:"; \
+		echo "  Xcode > Window > Devices and Simulators > pair your device"; \
+		exit 1; \
+	fi; \
+	DEVICE_NAME=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/[ \t]+$$/, "", $$1); print $$1}'); \
+	echo "Installing dev on: $$DEVICE_NAME ($$DEVICE_ID)"; \
+	flutter run -d "$$DEVICE_ID" --flavor dev
 
 ## devices: List available devices
 devices:
