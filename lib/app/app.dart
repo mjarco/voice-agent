@@ -23,7 +23,7 @@ class _AppState extends State<App> {
   @override
   Widget build(BuildContext context) {
     final isDev = appFlavor == 'dev';
-    Widget app = MaterialApp.router(
+    return MaterialApp.router(
       title: isDev ? 'Voice Agent DEV' : 'Voice Agent',
       scaffoldMessengerKey: widget.scaffoldMessengerKey,
       theme: ThemeData(
@@ -32,13 +32,5 @@ class _AppState extends State<App> {
       ),
       routerConfig: _router,
     );
-    if (isDev) {
-      app = Banner(
-        message: 'DEV',
-        location: BannerLocation.topEnd,
-        child: app,
-      );
-    }
-    return app;
   }
 }
