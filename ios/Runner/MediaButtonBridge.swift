@@ -1,5 +1,11 @@
+import AVFoundation
 import Flutter
 import MediaPlayer
+
+private func logAudioSession(_ tag: String) {
+    let s = AVAudioSession.sharedInstance()
+    NSLog("[MediaButtonDbg] \(tag) category=\(s.category.rawValue) options=\(s.categoryOptions.rawValue) mode=\(s.mode.rawValue) otherAudioPlaying=\(s.isOtherAudioPlaying)")
+}
 
 /// Bridges iOS media remote-command events (e.g. AirPods play/pause)
 /// to Dart via platform channels.
@@ -58,9 +64,14 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
     // MARK: - Remote command management
 
     private func activateRemoteCommands() {
+        NSLog("[MediaButtonDbg] activateRemoteCommands called")
+        logAudioSession("activate")
         let center = MPRemoteCommandCenter.shared()
         center.togglePlayPauseCommand.isEnabled = true
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
+            let hasSink = (self?.eventSink != nil)
+            NSLog("[MediaButtonDbg] togglePlayPause TARGET FIRED hasEventSink=\(hasSink)")
+            logAudioSession("targetFired")
             self?.eventSink?("togglePlayPause")
             return .success
         }
@@ -70,9 +81,11 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
             MPMediaItemPropertyTitle: "Voice Agent"
         ]
+        NSLog("[MediaButtonDbg] activateRemoteCommands DONE (target registered, nowPlayingInfo set)")
     }
 
     private func deactivateRemoteCommands() {
+        NSLog("[MediaButtonDbg] deactivateRemoteCommands called")
         let center = MPRemoteCommandCenter.shared()
         center.togglePlayPauseCommand.isEnabled = false
         center.togglePlayPauseCommand.removeTarget(nil)
@@ -86,11 +99,13 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
         withArguments arguments: Any?,
         eventSink events: @escaping FlutterEventSink
     ) -> FlutterError? {
+        NSLog("[MediaButtonDbg] onListen — eventSink attached")
         eventSink = events
         return nil
     }
 
     func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        NSLog("[MediaButtonDbg] onCancel — eventSink DETACHED")
         eventSink = nil
         return nil
     }

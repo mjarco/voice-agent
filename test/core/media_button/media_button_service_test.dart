@@ -120,10 +120,10 @@ void main() {
         ),
       );
 
-      // Unknown events default to togglePlayPause.
+      // Unknown events are dropped (no spurious togglePlayPause).
       final events = await service.events.toList();
 
-      expect(events, [MediaButtonEvent.togglePlayPause]);
+      expect(events, isEmpty);
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockStreamHandler(eventChannel, null);
