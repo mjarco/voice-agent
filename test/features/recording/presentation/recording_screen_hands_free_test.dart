@@ -133,7 +133,7 @@ List<Override> baseOverrides(FakeHfEngine engine) => [
       connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
       apiUrlConfiguredProvider.overrideWithValue(true),
       appConfigServiceProvider.overrideWithValue(
-        _FixedConfigService(const AppConfig(groqApiKey: 'gsk_test_key')),
+        _FixedConfigService(const AppConfig(groqApiKey: 'gsk_test_key', apiUrl: 'https://test.example.com/api')),
       ),
       handsFreeEngineProvider.overrideWithValue(engine),
       sttServiceProvider.overrideWithValue(_NoOpSttService()),

@@ -340,9 +340,12 @@ class _StubAudioFeedbackService implements AudioFeedbackService {
 
 // ── Container factory ────────────────────────────────────────────────────────
 
+const _defaultApiUrl = Object();
+
 ProviderContainer makeContainer({
   required HandsFreeEngine engine,
   String? groqApiKey = 'gsk_test_valid',
+  Object? apiUrl = _defaultApiUrl,
   bool recordingActive = false,
   SttService? sttService,
   StorageService? storageService,
@@ -353,7 +356,10 @@ ProviderContainer makeContainer({
   final container = ProviderContainer(overrides: [
     handsFreeEngineProvider.overrideWithValue(engine),
     appConfigServiceProvider.overrideWithValue(
-      _FixedConfigService(AppConfig(groqApiKey: groqApiKey)),
+      _FixedConfigService(AppConfig(
+        groqApiKey: groqApiKey,
+        apiUrl: apiUrl == _defaultApiUrl ? 'https://test.example.com/api' : apiUrl as String?,
+      )),
     ),
     recordingControllerProvider.overrideWith(
       (ref) => recordingActive
@@ -426,6 +432,29 @@ void main() {
     test('empty Groq key → SessionError(requiresAppSettings)', () async {
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine, groqApiKey: '');
+
+      await ctrl(c).startSession();
+
+      final s = stateOf(c) as HandsFreeSessionError;
+      expect(s.requiresAppSettings, isTrue);
+      expect(engine.started, isFalse);
+    });
+
+    test('missing API URL → SessionError(requiresAppSettings)', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine, apiUrl: null);
+
+      await ctrl(c).startSession();
+
+      final s = stateOf(c) as HandsFreeSessionError;
+      expect(s.requiresAppSettings, isTrue);
+      expect(s.message, 'API URL not set.');
+      expect(engine.started, isFalse);
+    });
+
+    test('empty API URL → SessionError(requiresAppSettings)', () async {
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(engine: engine, apiUrl: '');
 
       await ctrl(c).startSession();
 

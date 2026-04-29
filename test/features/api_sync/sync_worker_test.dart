@@ -408,6 +408,56 @@ void main() {
       expect(storage.queueItems.length, 1);
     });
 
+    test('speaks error via TTS on permanent failure', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiPermanentFailure(
+        statusCode: 400,
+        message: 'Invalid transcript format',
+      );
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(tts.log, contains('stop'));
+      expect(
+        tts.log.any((e) => e.startsWith('speak:Invalid transcript format:')),
+        isTrue,
+      );
+    });
+
+    test('speaks error via TTS on transient failure', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextResult = const ApiTransientFailure(reason: 'Connection timeout');
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(
+        tts.log.any((e) => e.startsWith('speak:Connection timeout:')),
+        isTrue,
+      );
+    });
+
+    test('does not speak error when TTS is disabled', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      ttsEnabled = false;
+      apiClient.nextResult = const ApiPermanentFailure(
+        statusCode: 500,
+        message: 'Server error',
+      );
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(tts.log, isEmpty);
+    });
+
     test('pauses on offline connectivity', () async {
       worker.start();
       expect(worker.state, SyncWorkerState.running);

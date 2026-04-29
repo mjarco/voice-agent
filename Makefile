@@ -5,6 +5,10 @@ MODEL_DIR := assets/models
 VAD_MODEL_URL := https://cdn.jsdelivr.net/npm/@keyurmaru/vad@0.0.1/silero_vad_v5.onnx
 VAD_MODEL_PATH := $(MODEL_DIR)/silero_vad_v5.onnx
 
+# Inject compile-time defaults from .env.mobile when the file has content.
+ENV_FILE := .env.mobile
+DART_DEFINE_FLAG := $(shell test -s $(ENV_FILE) && echo "--dart-define-from-file=$(ENV_FILE)")
+
 # ──────────────────────────────────────────────
 # Project setup
 # ──────────────────────────────────────────────
@@ -83,19 +87,19 @@ env:
 
 ## run-web: Run stable flavor in Chrome (no native plugins)
 run-web:
-	flutter run -d chrome --flavor stable
+	flutter run -d chrome --flavor stable $(DART_DEFINE_FLAG)
 
 ## run-ios: Run stable flavor on iOS Simulator
 run-ios: _ensure-simulator
-	flutter run -d iPhone --flavor stable
+	flutter run -d iPhone --flavor stable $(DART_DEFINE_FLAG)
 
 ## run-ios-dev: Run dev flavor on iOS Simulator
 run-ios-dev: _ensure-simulator
-	flutter run -d iPhone --flavor dev
+	flutter run -d iPhone --flavor dev $(DART_DEFINE_FLAG)
 
 ## run-macos: Run the app as macOS desktop
 run-macos:
-	flutter run -d macos
+	flutter run -d macos $(DART_DEFINE_FLAG)
 
 ## simulator: Open iOS Simulator
 simulator:
@@ -112,7 +116,7 @@ install-ios:
 	fi; \
 	DEVICE_NAME=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/[ \t]+$$/, "", $$1); print $$1}'); \
 	echo "Installing stable on: $$DEVICE_NAME ($$DEVICE_ID)"; \
-	flutter run -d "$$DEVICE_ID" --flavor stable
+	flutter run -d "$$DEVICE_ID" --flavor stable $(DART_DEFINE_FLAG)
 
 ## install-ios-dev: Build and install dev on a physical iOS device (USB or wireless)
 install-ios-dev:
@@ -125,7 +129,7 @@ install-ios-dev:
 	fi; \
 	DEVICE_NAME=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/[ \t]+$$/, "", $$1); print $$1}'); \
 	echo "Installing dev on: $$DEVICE_NAME ($$DEVICE_ID)"; \
-	flutter run -d "$$DEVICE_ID" --flavor dev
+	flutter run -d "$$DEVICE_ID" --flavor dev $(DART_DEFINE_FLAG)
 
 ## devices: List available devices
 devices:

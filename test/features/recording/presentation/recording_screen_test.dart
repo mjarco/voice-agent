@@ -96,7 +96,7 @@ List<Override> get _baseOverrides => [
   connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
   handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
   appConfigServiceProvider.overrideWithValue(
-    _FixedConfigService(const AppConfig(groqApiKey: 'test-key')),
+    _FixedConfigService(const AppConfig(groqApiKey: 'test-key', apiUrl: 'https://test.example.com/api')),
   ),
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
@@ -122,19 +122,23 @@ void main() {
     expect(find.text('Tap to record'), findsOneWidget);
   });
 
-  testWidgets('Record screen shows banner when API not configured',
+  testWidgets('Record screen shows error when API URL not configured',
       (tester) async {
     await tester.pumpWidget(
-      ProviderScope(overrides: _baseOverrides, child: const App()),
+      ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          appConfigServiceProvider.overrideWithValue(
+            _FixedConfigService(const AppConfig(groqApiKey: 'test-key', apiUrl: null)),
+          ),
+        ],
+        child: const App(),
+      ),
     );
     await tester.pumpAndSettle();
 
-    expect(
-      find.text(
-        'Set up your API endpoint in Settings to sync your transcripts.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('API URL not set.'), findsOneWidget);
+    expect(find.text('Go to Settings'), findsWidgets);
   });
 
   testWidgets('Record screen hides banner when API configured',

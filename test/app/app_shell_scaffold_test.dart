@@ -107,7 +107,7 @@ List<Override> get _baseOverrides => [
   connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
   handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
   appConfigServiceProvider.overrideWithValue(
-    _FixedConfigService(const AppConfig(groqApiKey: 'test-key')),
+    _FixedConfigService(const AppConfig(groqApiKey: 'test-key', apiUrl: 'https://test.example.com/api')),
   ),
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedback()),

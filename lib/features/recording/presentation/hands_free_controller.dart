@@ -246,6 +246,16 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       return;
     }
 
+    // Guard 3 — API URL.
+    if (config.apiUrl == null || config.apiUrl!.isEmpty) {
+      state = const HandsFreeSessionError(
+        message: 'API URL not set.',
+        requiresAppSettings: true,
+        jobs: [],
+      );
+      return;
+    }
+
     // All guards passed — mark the session active BEFORE starting the engine
     // so SyncWorker (P027, ADR-NET-002) can drain in the background from the
     // very first tick.
