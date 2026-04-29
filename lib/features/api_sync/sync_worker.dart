@@ -165,6 +165,7 @@ class SyncWorker {
           unawaited(audioFeedbackService.playSuccess());
           await _handleReply(body);
         case ApiPermanentFailure(:final message):
+          // Exhaust retry budget — permanent failures should never be auto-retried
           await storageService.markFailed(
             item.id, message, overrideAttempts: _maxRetries,
           );
