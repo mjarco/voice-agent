@@ -170,6 +170,7 @@ class SyncWorker {
             item.id, message, overrideAttempts: _maxRetries,
           );
           unawaited(audioFeedbackService.playError());
+          await _speakError(message);
         case ApiTransientFailure(:final reason):
           final attempts = item.attempts + 1; // markSending already incremented
           if (attempts >= _maxRetries) {
@@ -181,11 +182,22 @@ class SyncWorker {
             await storageService.markFailed(item.id, reason);
           }
           unawaited(audioFeedbackService.playError());
+          await _speakError(reason);
         case ApiNotConfigured():
           break;
       }
     } finally {
       _draining = false;
+    }
+  }
+
+  Future<void> _speakError(String message) async {
+    if (!getTtsEnabled()) return;
+    try {
+      await ttsService.stop();
+      await ttsService.speak(message);
+    } catch (_) {
+      // Best-effort — don't let TTS failure break the sync loop.
     }
   }
 

@@ -49,6 +49,7 @@ assets/models/
 
 # Secrets and credentials
 .env
+.env.mobile
 *.jks
 *.keystore
 .claude/settings.local.json

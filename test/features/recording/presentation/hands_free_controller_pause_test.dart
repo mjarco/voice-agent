@@ -179,7 +179,7 @@ ProviderContainer _makeContainer({
   final container = ProviderContainer(overrides: [
     handsFreeEngineProvider.overrideWithValue(engine),
     appConfigServiceProvider.overrideWithValue(
-      _FixedConfigService(AppConfig(groqApiKey: groqApiKey)),
+      _FixedConfigService(AppConfig(groqApiKey: groqApiKey, apiUrl: 'https://test.example.com/api')),
     ),
     recordingControllerProvider.overrideWith(
       (ref) => _IdleRecordingController(ref),

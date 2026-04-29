@@ -201,7 +201,7 @@ ProviderContainer _makeContainer({
   required FakeRecordingService fakeService,
   required FakeSttService fakeStt,
   FakeStorageService? fakeStorage,
-  AppConfig config = const AppConfig(groqApiKey: 'test-key'),
+  AppConfig config = const AppConfig(groqApiKey: 'test-key', apiUrl: 'https://test.example.com/api'),
 }) {
   return ProviderContainer(
     overrides: [
@@ -398,6 +398,43 @@ void main() {
     );
     addTearDown(noKeyContainer.dispose);
     final ctrl = noKeyContainer.read(recordingControllerProvider.notifier);
+
+    await ctrl.startRecording();
+
+    expect(ctrl.state, isA<RecordingError>());
+    final error = ctrl.state as RecordingError;
+    expect(error.requiresAppSettings, isTrue);
+  });
+
+  test(
+      'startRecording emits RecordingError(requiresAppSettings) when API URL missing',
+      () async {
+    final noUrlContainer = _makeContainer(
+      fakeService: fakeService,
+      fakeStt: fakeStt,
+      config: const AppConfig(groqApiKey: 'test-key', apiUrl: null),
+    );
+    addTearDown(noUrlContainer.dispose);
+    final ctrl = noUrlContainer.read(recordingControllerProvider.notifier);
+
+    await ctrl.startRecording();
+
+    expect(ctrl.state, isA<RecordingError>());
+    final error = ctrl.state as RecordingError;
+    expect(error.requiresAppSettings, isTrue);
+    expect(error.message, 'API URL not set.');
+  });
+
+  test(
+      'startRecording emits RecordingError(requiresAppSettings) when API URL empty',
+      () async {
+    final noUrlContainer = _makeContainer(
+      fakeService: fakeService,
+      fakeStt: fakeStt,
+      config: const AppConfig(groqApiKey: 'test-key', apiUrl: ''),
+    );
+    addTearDown(noUrlContainer.dispose);
+    final ctrl = noUrlContainer.read(recordingControllerProvider.notifier);
 
     await ctrl.startRecording();
 

@@ -168,7 +168,7 @@ ProviderContainer _makeContainer({
   required _FakeRecordingService fakeService,
   required _FakeSttService fakeStt,
   _FakeStorageService? fakeStorage,
-  AppConfig config = const AppConfig(groqApiKey: 'test-key'),
+  AppConfig config = const AppConfig(groqApiKey: 'test-key', apiUrl: 'https://test.example.com/api'),
 }) {
   return ProviderContainer(
     overrides: [

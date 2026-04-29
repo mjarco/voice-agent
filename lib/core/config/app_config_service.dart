@@ -53,6 +53,13 @@ class AppConfigService {
     'picovoice_access_key',
   ];
 
+  static const _defaultApiUrl = String.fromEnvironment('API_URL');
+  static const _defaultApiToken = String.fromEnvironment('API_TOKEN');
+  static const _defaultGroqApiKey = String.fromEnvironment('GROQ_API_KEY',
+      defaultValue: String.fromEnvironment('GROQ_API_TOKEN'));
+
+  static String? _nullIfEmpty(String value) => value.isEmpty ? null : value;
+
   Future<SharedPreferences> get _preferences async {
     _prefs ??= await SharedPreferences.getInstance();
     return _prefs!;
@@ -92,9 +99,9 @@ class AppConfigService {
     ).clamp();
 
     return AppConfig(
-      apiUrl: prefs.getString(_apiUrlKey),
-      apiToken: token,
-      groqApiKey: groqApiKey,
+      apiUrl: prefs.getString(_apiUrlKey) ?? _nullIfEmpty(_defaultApiUrl),
+      apiToken: token ?? _nullIfEmpty(_defaultApiToken),
+      groqApiKey: groqApiKey ?? _nullIfEmpty(_defaultGroqApiKey),
       autoSend: prefs.getBool(_autoSendKey) ?? true,
       language: prefs.getString(_languageKey) ?? 'auto',
       keepHistory: prefs.getBool(_keepHistoryKey) ?? true,

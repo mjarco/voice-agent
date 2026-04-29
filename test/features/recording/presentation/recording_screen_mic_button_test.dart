@@ -148,7 +148,7 @@ List<Override> get _baseOverrides => [
   connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
   apiUrlConfiguredProvider.overrideWithValue(true),
   appConfigServiceProvider.overrideWithValue(
-    _FixedConfigService(const AppConfig(groqApiKey: 'gsk_test_key')),
+    _FixedConfigService(const AppConfig(groqApiKey: 'gsk_test_key', apiUrl: 'https://test.example.com/api')),
   ),
   handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
   recordingServiceProvider.overrideWithValue(_NoOpRecordingService()),
@@ -184,7 +184,7 @@ Future<_SpyTtsService> _pumpAppWithSpyTts(WidgetTester tester) async {
         connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
         apiUrlConfiguredProvider.overrideWithValue(true),
         appConfigServiceProvider.overrideWithValue(
-          _FixedConfigService(const AppConfig(groqApiKey: 'gsk_test_key')),
+          _FixedConfigService(const AppConfig(groqApiKey: 'gsk_test_key', apiUrl: 'https://test.example.com/api')),
         ),
         handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
         recordingServiceProvider.overrideWithValue(_NoOpRecordingService()),

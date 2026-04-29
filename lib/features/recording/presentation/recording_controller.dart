@@ -57,6 +57,14 @@ class RecordingController extends StateNotifier<RecordingState>
       return;
     }
 
+    if (config.apiUrl == null || config.apiUrl!.isEmpty) {
+      state = const RecordingState.error(
+        'API URL not set.',
+        requiresAppSettings: true,
+      );
+      return;
+    }
+
     try {
       if (!await _sttService.isModelLoaded()) {
         await _sttService.loadModel();
