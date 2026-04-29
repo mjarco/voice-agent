@@ -2,12 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
+import 'package:voice_agent/core/local_commands/local_command_matcher.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/session_control/haptic_service.dart';
 import 'package:voice_agent/core/session_control/session_control_dispatcher.dart';
 import 'package:voice_agent/core/session_control/session_control_signal.dart';
 import 'package:voice_agent/core/session_control/session_id_coordinator.dart';
+import 'package:voice_agent/core/session_control/toaster.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/core/tts/tts_reply_buffer.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
 
@@ -25,6 +29,10 @@ class SyncWorker {
     required this.shouldProcessQueue,
     required this.sessionControlDispatcher,
     required this.sessionIdCoordinator,
+    required this.localCommandMatcher,
+    required this.ttsReplyBuffer,
+    required this.toaster,
+    required this.hapticService,
     this.onAgentReply,
   });
 
@@ -42,6 +50,19 @@ class SyncWorker {
 
   final SessionControlDispatcher sessionControlDispatcher;
   final SessionIdCoordinator sessionIdCoordinator;
+
+  /// P036: local-command matcher run before backend dispatch.
+  final LocalCommandMatcher localCommandMatcher;
+
+  /// P036: holds the most recent successful agent reply for replay.
+  final TtsReplyBuffer ttsReplyBuffer;
+
+  /// P036: shows the "Powtarzam ostatnią odpowiedź" /
+  /// "Brak wcześniejszej odpowiedzi" feedback toasts.
+  final Toaster toaster;
+
+  /// P036: light haptic tick on every replay decision.
+  final HapticService hapticService;
 
   final void Function(String reply)? onAgentReply;
 
@@ -153,6 +174,23 @@ class SyncWorker {
         return;
       }
 
+      // P036: pre-flight local-command match. A whitelisted replay-last
+      // utterance with a non-empty buffer skips the backend round-trip and
+      // re-speaks the previous reply locally. Any other case (passthrough or
+      // empty buffer) falls through to the existing backend path.
+      final decision = localCommandMatcher.match(transcript.text);
+      if (decision is LocalCommandReplayLast) {
+        final buffered = ttsReplyBuffer.last();
+        if (buffered != null) {
+          await _replayLast(item.id, buffered);
+          return;
+        }
+        // Empty buffer: surface feedback then fall through to the backend
+        // so the user still gets *some* response.
+        toaster.show('Brak wcześniejszej odpowiedzi');
+        unawaited(hapticService.lightImpact());
+      }
+
       final result = await apiClient.post(
         transcript,
         url: url,
@@ -191,6 +229,32 @@ class SyncWorker {
     }
   }
 
+  /// P036: re-speak the buffered reply and treat the queue item as locally
+  /// consumed (same effect as `markSent` for queue purposes). No backend
+  /// call, no LLM, no `onAgentReply` callback — the reply has already been
+  /// surfaced once, this is a re-speak.
+  Future<void> _replayLast(String queueItemId, TtsReplyEntry buffered) async {
+    toaster.show('Powtarzam ostatnią odpowiedź');
+    unawaited(hapticService.lightImpact());
+
+    // Mirror the stop→speak ordering used in `_handleReply`.
+    if (getTtsEnabled()) {
+      try {
+        await ttsService.stop();
+        await ttsService.speak(
+          buffered.text,
+          languageCode: buffered.languageCode,
+        );
+      } catch (_) {
+        // Best-effort — replay must not poison the queue.
+      }
+    }
+
+    // Treat the local utterance as consumed. Do not POST, do not mark
+    // failed/pending — drop the queue row.
+    await storageService.markSent(queueItemId);
+  }
+
   Future<void> _speakError(String message) async {
     if (!getTtsEnabled()) return;
     try {
@@ -220,6 +284,10 @@ class SyncWorker {
       if (getTtsEnabled()) {
         await ttsService.stop();
         await ttsService.speak(message, languageCode: language);
+        // P036: record successful agent-reply speak into the replay
+        // buffer. Only this code path feeds the buffer — `_speakError`
+        // and any other future speak callsite must NOT.
+        ttsReplyBuffer.record(message, languageCode: language);
       }
       onAgentReply?.call(message);
 

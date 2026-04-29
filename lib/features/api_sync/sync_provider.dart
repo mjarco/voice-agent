@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/local_commands/local_command_provider.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
@@ -37,6 +38,10 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
         ref.read(appForegroundedProvider) || ref.read(sessionActiveProvider),
     sessionControlDispatcher: ref.watch(sessionControlDispatcherProvider),
     sessionIdCoordinator: ref.watch(sessionIdCoordinatorProvider),
+    localCommandMatcher: ref.watch(localCommandMatcherProvider),
+    ttsReplyBuffer: ref.watch(ttsReplyBufferProvider),
+    toaster: ref.watch(toasterProvider),
+    hapticService: ref.watch(hapticServiceProvider),
     onAgentReply: (reply) {
       ref.read(latestAgentReplyProvider.notifier).state = reply;
     },
