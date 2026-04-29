@@ -46,9 +46,19 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   }
 
   void _onMediaButtonEvent(MediaButtonEvent event) {
+    final ttsPlaying = ref.read(ttsPlayingProvider);
+    final ttsIsSpeakingDirect = ref.read(ttsServiceProvider).isSpeaking.value;
+    final recStateSnap = ref.read(recordingControllerProvider);
+    final hfStateSnap = ref.read(handsFreeControllerProvider);
+    debugPrint(
+      '[MediaButtonDbg] _onMediaButtonEvent event=$event '
+      'ttsPlayingProvider=$ttsPlaying ttsIsSpeaking.value=$ttsIsSpeakingDirect '
+      'recState=${recStateSnap.runtimeType} hfState=${hfStateSnap.runtimeType}',
+    );
     if (event != MediaButtonEvent.togglePlayPause) return;
 
-    if (ref.read(ttsPlayingProvider)) {
+    if (ttsPlaying) {
+      debugPrint('[MediaButtonDbg] branch=stopTts');
       unawaited(ref.read(ttsServiceProvider).stop());
       return;
     }
@@ -59,23 +69,28 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
 
     if (recState is RecordingActive) {
+      debugPrint('[MediaButtonDbg] branch=pauseRecording');
       unawaited(recCtrl.pauseRecording());
     } else if (recState is RecordingPaused) {
+      debugPrint('[MediaButtonDbg] branch=resumeRecording');
       unawaited(recCtrl.resumeRecording());
     } else if (hfState is HandsFreeListening ||
         hfState is HandsFreeWithBacklog ||
         hfState is HandsFreeCapturing) {
+      debugPrint('[MediaButtonDbg] branch=hfSuspend');
       unawaited(hfCtrl.toggleUserSuspend().then((_) {
         ref.read(toasterProvider).show('Paused');
         ref.read(hapticServiceProvider).lightImpact();
       }));
     } else if (hfState is HandsFreeSuspendedByUser) {
+      debugPrint('[MediaButtonDbg] branch=hfResume');
       unawaited(hfCtrl.toggleUserSuspend().then((_) {
         ref.read(toasterProvider).show('Resumed');
         ref.read(hapticServiceProvider).lightImpact();
       }));
+    } else {
+      debugPrint('[MediaButtonDbg] branch=noop');
     }
-    // All other states: no-op
   }
 
   @override

@@ -32,14 +32,17 @@ class AudioSessionBridge {
         switch call.method {
         case "setPlayAndRecord":
             do {
+                NSLog("[AudioSessionDbg] setPlayAndRecord requested")
                 try session.setCategory(
                     .playAndRecord,
                     mode: .default,
                     options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
                 )
                 try session.setActive(true)
+                NSLog("[AudioSessionDbg] setPlayAndRecord applied — category=\(session.category.rawValue) options=\(session.categoryOptions.rawValue) active=true")
                 result(nil)
             } catch {
+                NSLog("[AudioSessionDbg] setPlayAndRecord FAILED: \(error.localizedDescription)")
                 result(FlutterError(
                     code: "AUDIO_SESSION_ERROR",
                     message: "Failed to set playAndRecord: \(error.localizedDescription)",
@@ -48,11 +51,13 @@ class AudioSessionBridge {
             }
         case "setAmbient":
             do {
+                NSLog("[AudioSessionDbg] setAmbient requested")
                 try session.setCategory(
                     .ambient,
                     mode: .default,
                     options: [.mixWithOthers]
                 )
+                NSLog("[AudioSessionDbg] setAmbient applied — category=\(session.category.rawValue) options=\(session.categoryOptions.rawValue)")
                 result(nil)
             } catch {
                 result(FlutterError(

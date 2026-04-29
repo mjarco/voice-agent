@@ -95,10 +95,12 @@ class FlutterTtsService implements TtsService {
   // ── Handler callbacks ───────────────────────────────────────────────────
 
   void _onStart() {
+    debugPrint('[TtsDbg] _onStart speakingWas=${_speaking.value}');
     if (!_speaking.value) _speaking.value = true;
   }
 
   void _onCompletion() {
+    debugPrint('[TtsDbg] _onCompletion activeQueue=${_activeQueue != null} speaking=${_speaking.value}');
     final queue = _activeQueue;
     if (queue == null) {
       // No active queue — single-utterance path or already cleared.
@@ -124,6 +126,7 @@ class FlutterTtsService implements TtsService {
   }
 
   void _onCancel() {
+    debugPrint('[TtsDbg] _onCancel speakingWas=${_speaking.value}');
     final queue = _activeQueue;
     _activeQueue = null;
     if (queue != null && !queue.doneCompleter.isCompleted) {
@@ -133,6 +136,7 @@ class FlutterTtsService implements TtsService {
   }
 
   void _onError(dynamic error) {
+    debugPrint('[TtsDbg] _onError error=$error speakingWas=${_speaking.value}');
     final queue = _activeQueue;
     _activeQueue = null;
     if (queue != null && !queue.doneCompleter.isCompleted) {
@@ -143,12 +147,14 @@ class FlutterTtsService implements TtsService {
 
   @override
   Future<void> stop() async {
+    debugPrint('[TtsDbg] stop() called speaking=${_speaking.value} hasActiveQueue=${_activeQueue != null}');
     // (1) Clear the queue so any racing completion handler sees null.
     final queue = _activeQueue;
     _activeQueue = null;
 
     // (2) Wait for the native-side cancel to complete.
     await _tts.stop();
+    debugPrint('[TtsDbg] stop() native _tts.stop() returned');
 
     // (3) Complete any pending doneCompleter.
     if (queue != null && !queue.doneCompleter.isCompleted) {
@@ -157,6 +163,7 @@ class FlutterTtsService implements TtsService {
 
     // (4) Ensure _speaking is false.
     if (_speaking.value) _speaking.value = false;
+    debugPrint('[TtsDbg] stop() done speaking=${_speaking.value}');
   }
 
   @override
