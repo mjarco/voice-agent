@@ -19,6 +19,7 @@ import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
+import 'package:voice_agent/core/session_control/hands_free_control_port.dart';
 import 'package:voice_agent/core/session_control/haptic_service.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/session_control/session_id_coordinator.dart';
@@ -235,11 +236,21 @@ List<Override> _baseOverrides({
       mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
       sessionIdCoordinatorProvider
           .overrideWithValue(coordinator ?? SessionIdCoordinator()),
+      handsFreeControlPortProvider
+          .overrideWithValue(_StubHandsFreeControlPort()),
       toasterProvider.overrideWithValue(
           toaster ?? _SpyToaster()),
       hapticServiceProvider
           .overrideWithValue(hapticService ?? _SpyHapticService()),
     ];
+
+class _StubHandsFreeControlPort implements HandsFreeControlPort {
+  @override
+  bool get isSuspendedForManualRecording => false;
+
+  @override
+  Future<void> stopSession() async {}
+}
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
