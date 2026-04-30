@@ -7,6 +7,7 @@ import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/sync_status.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
+import 'package:voice_agent/core/local_commands/local_command_matcher.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
@@ -17,6 +18,7 @@ import 'package:voice_agent/core/session_control/session_control_signal.dart';
 import 'package:voice_agent/core/session_control/session_id_coordinator.dart';
 import 'package:voice_agent/core/session_control/toaster.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
+import 'package:voice_agent/core/tts/tts_reply_buffer.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
 import 'package:voice_agent/features/api_sync/sync_worker.dart';
@@ -276,6 +278,10 @@ void main() {
   late bool ttsEnabled;
   late _RecordingDispatcher dispatcher;
   late SessionIdCoordinator sessionIdCoordinator;
+  late LocalCommandMatcher localCommandMatcher;
+  late InMemoryTtsReplyBuffer ttsReplyBuffer;
+  late _FakeToaster toaster;
+  late _FakeHapticService hapticService;
   late SyncWorker worker;
 
   final transcript = Transcript(
@@ -294,6 +300,10 @@ void main() {
     ttsEnabled = true;
     dispatcher = _RecordingDispatcher();
     sessionIdCoordinator = SessionIdCoordinator();
+    localCommandMatcher = const LocalCommandMatcher();
+    ttsReplyBuffer = InMemoryTtsReplyBuffer();
+    toaster = _FakeToaster();
+    hapticService = _FakeHapticService();
     worker = SyncWorker(
       storageService: storage,
       apiClient: apiClient,
@@ -305,6 +315,10 @@ void main() {
       shouldProcessQueue: () => true,
       sessionControlDispatcher: dispatcher,
       sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
     );
   });
 
@@ -394,6 +408,10 @@ void main() {
         shouldProcessQueue: () => true,
         sessionControlDispatcher: dispatcher,
         sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
       );
 
       await storage.saveTranscript(transcript);
@@ -559,6 +577,10 @@ void main() {
         shouldProcessQueue: () => true,
         sessionControlDispatcher: dispatcher,
         sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -587,6 +609,10 @@ void main() {
         shouldProcessQueue: () => true,
         sessionControlDispatcher: dispatcher,
         sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -615,6 +641,10 @@ void main() {
         shouldProcessQueue: () => true,
         sessionControlDispatcher: dispatcher,
         sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -642,6 +672,10 @@ void main() {
         shouldProcessQueue: () => true,
         sessionControlDispatcher: dispatcher,
         sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
         onAgentReply: (reply) => receivedReply = reply,
       );
 
@@ -792,6 +826,10 @@ void main() {
         shouldProcessQueue: predicate,
         sessionControlDispatcher: dispatcher,
         sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
       );
     }
 
@@ -866,6 +904,10 @@ void main() {
         shouldProcessQueue: () => canProcess,
         sessionControlDispatcher: dispatcher,
         sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
       );
 
       await storage.saveTranscript(transcript);
@@ -973,6 +1015,10 @@ void main() {
         shouldProcessQueue: () => true,
         sessionControlDispatcher: dispatcher,
         sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
         onAgentReply: (reply) => capturedReply = reply,
       );
 
@@ -1121,6 +1167,10 @@ void main() {
         shouldProcessQueue: () => true,
         sessionControlDispatcher: orderDispatcher,
         sessionIdCoordinator: sessionIdCoordinator,
+      localCommandMatcher: localCommandMatcher,
+      ttsReplyBuffer: ttsReplyBuffer,
+      toaster: toaster,
+      hapticService: hapticService,
       );
 
       await storage.saveTranscript(transcript);
@@ -1138,4 +1188,368 @@ void main() {
       expect(orderDispatcher.dispatched, hasLength(1));
     });
   });
+
+  group('P036 replay-last (LocalCommandMatcher + TtsReplyBuffer)', () {
+    Future<void> seedReplyAndDrain() async {
+      // Seed: a normal agent reply that primes the buffer.
+      final seedTranscript = Transcript(
+        id: 'tx-seed',
+        text: 'What is the weather?',
+        language: 'en',
+        deviceId: 'dev',
+        createdAt: 500,
+      );
+      await storage.saveTranscript(seedTranscript);
+      await storage.enqueue('tx-seed');
+      apiClient.nextBody = '{"message":"It is sunny","language":"en"}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      // Reset apiClient body and tts log between drains.
+      apiClient.nextBody = null;
+      apiClient.nextResult = const ApiSuccess();
+    }
+
+    test(
+      'whitelisted utterance + non-empty buffer → no apiClient.post, '
+      'tts.stop then tts.speak with buffered (text, languageCode), '
+      'queue item dropped, toast + haptic',
+      () async {
+        // Pre-populate buffer directly (simulates a previous successful reply).
+        ttsReplyBuffer.record('It is sunny', languageCode: 'en');
+
+        // Track post-calls via a counting fake.
+        final replayApi = _CountingApiClient();
+        worker = SyncWorker(
+          storageService: storage,
+          apiClient: replayApi,
+          apiConfig:
+              const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+          connectivityService: connectivity,
+          ttsService: tts,
+          getTtsEnabled: () => ttsEnabled,
+          audioFeedbackService: _StubAudioFeedbackService(),
+          shouldProcessQueue: () => true,
+          sessionControlDispatcher: dispatcher,
+          sessionIdCoordinator: sessionIdCoordinator,
+          localCommandMatcher: localCommandMatcher,
+          ttsReplyBuffer: ttsReplyBuffer,
+          toaster: toaster,
+          hapticService: hapticService,
+        );
+
+        // Enqueue the user replay command.
+        final replayTranscript = Transcript(
+          id: 'tx-replay',
+          text: 'powtórz',
+          language: 'pl',
+          deviceId: 'dev',
+          createdAt: 1000,
+        );
+        await storage.saveTranscript(replayTranscript);
+        await storage.enqueue('tx-replay');
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        // No backend call.
+        expect(replayApi.postCalls, 0);
+        // TTS replay produced stop then speak with buffered values.
+        expect(tts.log, contains('stop'));
+        expect(tts.log, contains('speak:It is sunny:en'));
+        // Queue item dropped (treated as consumed via markSent).
+        expect(storage.queueItems.where((i) => i.id == 'q-0'), isEmpty);
+        // Toast + haptic.
+        expect(toaster.messages, contains('Powtarzam ostatnią odpowiedź'));
+        expect(hapticService.calls, greaterThanOrEqualTo(1));
+      },
+    );
+
+    test(
+      'whitelisted utterance + empty buffer → toast shown, falls through to '
+      'apiClient.post (backend round-trip preserved)',
+      () async {
+        expect(ttsReplyBuffer.last(), isNull);
+
+        final replayApi = _CountingApiClient();
+        replayApi.nextBody = '{"message":"ok","language":"en"}';
+        worker = SyncWorker(
+          storageService: storage,
+          apiClient: replayApi,
+          apiConfig:
+              const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+          connectivityService: connectivity,
+          ttsService: tts,
+          getTtsEnabled: () => ttsEnabled,
+          audioFeedbackService: _StubAudioFeedbackService(),
+          shouldProcessQueue: () => true,
+          sessionControlDispatcher: dispatcher,
+          sessionIdCoordinator: sessionIdCoordinator,
+          localCommandMatcher: localCommandMatcher,
+          ttsReplyBuffer: ttsReplyBuffer,
+          toaster: toaster,
+          hapticService: hapticService,
+        );
+
+        final replayTranscript = Transcript(
+          id: 'tx-empty-replay',
+          text: 'powtórz',
+          language: 'pl',
+          deviceId: 'dev',
+          createdAt: 1000,
+        );
+        await storage.saveTranscript(replayTranscript);
+        await storage.enqueue('tx-empty-replay');
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        expect(toaster.messages, contains('Brak wcześniejszej odpowiedzi'));
+        // Backend WAS called (passthrough on empty buffer).
+        expect(replayApi.postCalls, 1);
+      },
+    );
+
+    test(
+      'non-whitelisted utterance → matcher passes through, _handleReply runs '
+      'unchanged and feeds the buffer with the new reply',
+      () async {
+        await seedReplyAndDrain();
+        // After seed drain, buffer should hold the seed reply.
+        expect(
+          ttsReplyBuffer.last(),
+          const TtsReplyEntry(text: 'It is sunny', languageCode: 'en'),
+        );
+      },
+    );
+
+    test(
+      '"Powtórz, żeby coś przerwało." (origin phrase) does NOT trigger replay '
+      '— full backend round-trip',
+      () async {
+        ttsReplyBuffer.record('previous reply', languageCode: 'pl');
+        final replayApi = _CountingApiClient();
+        replayApi.nextBody = '{"message":"backend","language":"pl"}';
+        worker = SyncWorker(
+          storageService: storage,
+          apiClient: replayApi,
+          apiConfig:
+              const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+          connectivityService: connectivity,
+          ttsService: tts,
+          getTtsEnabled: () => ttsEnabled,
+          audioFeedbackService: _StubAudioFeedbackService(),
+          shouldProcessQueue: () => true,
+          sessionControlDispatcher: dispatcher,
+          sessionIdCoordinator: sessionIdCoordinator,
+          localCommandMatcher: localCommandMatcher,
+          ttsReplyBuffer: ttsReplyBuffer,
+          toaster: toaster,
+          hapticService: hapticService,
+        );
+
+        final originTranscript = Transcript(
+          id: 'tx-origin',
+          text: 'Powtórz, żeby coś przerwało.',
+          language: 'pl',
+          deviceId: 'dev',
+          createdAt: 1000,
+        );
+        await storage.saveTranscript(originTranscript);
+        await storage.enqueue('tx-origin');
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        // Backend WAS called — origin phrase must not trigger local replay.
+        expect(replayApi.postCalls, 1);
+        // No replay toast.
+        expect(
+          toaster.messages,
+          isNot(contains('Powtarzam ostatnią odpowiedź')),
+        );
+      },
+    );
+  });
+
+  group('P036 _speakError does NOT feed buffer', () {
+    test(
+      'permanent failure speaks error but buffer remains empty',
+      () async {
+        await storage.saveTranscript(transcript);
+        await storage.enqueue('tx-1');
+        apiClient.nextResult = const ApiPermanentFailure(
+          statusCode: 400,
+          message: 'Bad request',
+        );
+
+        expect(ttsReplyBuffer.last(), isNull);
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        // _speakError ran (TTS fired with the error message).
+        expect(
+          tts.log.any((e) => e.startsWith('speak:Bad request:')),
+          isTrue,
+        );
+        // CRITICAL: buffer must NOT be populated by error speak.
+        expect(ttsReplyBuffer.last(), isNull);
+      },
+    );
+
+    test(
+      'transient failure speaks error but buffer remains empty',
+      () async {
+        await storage.saveTranscript(transcript);
+        await storage.enqueue('tx-1');
+        apiClient.nextResult =
+            const ApiTransientFailure(reason: 'Connection timeout');
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        expect(
+          tts.log.any((e) => e.startsWith('speak:Connection timeout:')),
+          isTrue,
+        );
+        expect(ttsReplyBuffer.last(), isNull);
+      },
+    );
+
+    test(
+      'after a successful reply primes the buffer, a subsequent error speak '
+      'does NOT overwrite the buffer',
+      () async {
+        // Prime the buffer via an actual successful reply path.
+        ttsReplyBuffer.record('first reply', languageCode: 'en');
+        await storage.saveTranscript(transcript);
+        await storage.enqueue('tx-1');
+        apiClient.nextResult =
+            const ApiTransientFailure(reason: 'oops');
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        // Buffer untouched by error path.
+        expect(
+          ttsReplyBuffer.last(),
+          const TtsReplyEntry(text: 'first reply', languageCode: 'en'),
+        );
+      },
+    );
+  });
+
+  group('P036 buffer-clear hooks (SessionIdCoordinator)', () {
+    test('resetSession() invokes registered listener', () async {
+      final coord = SessionIdCoordinator();
+      var calls = 0;
+      coord.addResetListener(() => calls++);
+      await coord.resetSession();
+      expect(calls, 1);
+    });
+
+    test('addResetListener disposer removes the listener', () async {
+      final coord = SessionIdCoordinator();
+      var calls = 0;
+      final dispose = coord.addResetListener(() => calls++);
+      dispose();
+      await coord.resetSession();
+      expect(calls, 0);
+    });
+
+    test(
+      'adoptConversationId(differentId) fires conversation-change listener',
+      () {
+        final coord = SessionIdCoordinator();
+        coord.adoptConversationId('conv-1');
+        var lastNotified = '';
+        coord.addConversationChangeListener((id) => lastNotified = id);
+        coord.adoptConversationId('conv-2');
+        expect(lastNotified, 'conv-2');
+      },
+    );
+
+    test(
+      'adoptConversationId(sameId) does NOT fire conversation-change listener',
+      () {
+        final coord = SessionIdCoordinator();
+        coord.adoptConversationId('conv-1');
+        var calls = 0;
+        coord.addConversationChangeListener((_) => calls++);
+        coord.adoptConversationId('conv-1');
+        expect(calls, 0);
+      },
+    );
+
+    test(
+      'first adopt from null fires conversation-change listener (id changed)',
+      () {
+        final coord = SessionIdCoordinator();
+        var calls = 0;
+        coord.addConversationChangeListener((_) => calls++);
+        coord.adoptConversationId('conv-1');
+        expect(calls, 1);
+      },
+    );
+
+    test('integration: buffer cleared on resetSession via wired listener', () {
+      final coord = SessionIdCoordinator();
+      final buffer = InMemoryTtsReplyBuffer();
+      coord.addResetListener(buffer.clear);
+
+      buffer.record('hello', languageCode: 'en');
+      expect(buffer.last(), isNotNull);
+
+      coord.resetSession();
+      expect(buffer.last(), isNull);
+    });
+
+    test(
+      'integration: buffer cleared on adoptConversationId(different) but '
+      'NOT on adoptConversationId(same)',
+      () {
+        final coord = SessionIdCoordinator();
+        final buffer = InMemoryTtsReplyBuffer();
+        coord.addConversationChangeListener((_) => buffer.clear());
+
+        coord.adoptConversationId('conv-1');
+        buffer.record('first', languageCode: 'en');
+
+        // Same id — should NOT clear.
+        coord.adoptConversationId('conv-1');
+        expect(buffer.last(), isNotNull);
+
+        // Different id — should clear.
+        coord.adoptConversationId('conv-2');
+        expect(buffer.last(), isNull);
+      },
+    );
+  });
+}
+
+/// Counts `post` calls so we can assert the local-replay path skips backend.
+class _CountingApiClient extends ApiClient {
+  int postCalls = 0;
+  ApiResult nextResult = const ApiSuccess();
+  String? nextBody;
+
+  @override
+  Future<ApiResult> post(
+    Transcript transcript, {
+    required String url,
+    String? token,
+  }) async {
+    postCalls++;
+    if (nextResult is ApiSuccess) return ApiSuccess(body: nextBody);
+    return nextResult;
+  }
 }
