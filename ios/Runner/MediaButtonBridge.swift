@@ -67,21 +67,38 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
         NSLog("[MediaButtonDbg] activateRemoteCommands called")
         logAudioSession("activate")
         let center = MPRemoteCommandCenter.shared()
-        center.togglePlayPauseCommand.isEnabled = true
-        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+
+        // The hardware press is routed by iOS to one of these three commands
+        // depending on the inferred playback state (and headset hardware).
+        // togglePlayPause is the canonical case; play/pause are how iOS
+        // disambiguates when nowPlayingInfo's playbackRate is 0.0 vs 1.0.
+        // Register the same target on all three so we never miss the press.
+        let toggleHandler: (MPRemoteCommandEvent) -> MPRemoteCommandHandlerStatus = { [weak self] _ in
             let hasSink = (self?.eventSink != nil)
             NSLog("[MediaButtonDbg] togglePlayPause TARGET FIRED hasEventSink=\(hasSink)")
             logAudioSession("targetFired")
             self?.eventSink?("togglePlayPause")
             return .success
         }
+        center.togglePlayPauseCommand.isEnabled = true
+        center.togglePlayPauseCommand.addTarget(handler: toggleHandler)
+        center.playCommand.isEnabled = true
+        center.playCommand.addTarget(handler: toggleHandler)
+        center.pauseCommand.isEnabled = true
+        center.pauseCommand.addTarget(handler: toggleHandler)
 
-        // Set minimal now-playing info so the system recognizes this app
-        // as an active media participant (required for AirPods routing).
+        // Now-playing info must signal "actively playing" so iOS treats this
+        // app as the foreground media participant. Setting playbackRate=1.0
+        // and a non-zero duration is the standard pattern; without it, iOS
+        // may route the hardware button to the lock-screen default player
+        // (or the prior "now playing" app) instead.
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
-            MPMediaItemPropertyTitle: "Voice Agent"
+            MPMediaItemPropertyTitle: "Voice Agent",
+            MPMediaItemPropertyPlaybackDuration: NSNumber(value: 1.0),
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: NSNumber(value: 0.0),
+            MPNowPlayingInfoPropertyPlaybackRate: NSNumber(value: 1.0),
         ]
-        NSLog("[MediaButtonDbg] activateRemoteCommands DONE (target registered, nowPlayingInfo set)")
+        NSLog("[MediaButtonDbg] activateRemoteCommands DONE (3 targets, nowPlayingInfo with rate=1)")
     }
 
     private func deactivateRemoteCommands() {
@@ -89,6 +106,10 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
         let center = MPRemoteCommandCenter.shared()
         center.togglePlayPauseCommand.isEnabled = false
         center.togglePlayPauseCommand.removeTarget(nil)
+        center.playCommand.isEnabled = false
+        center.playCommand.removeTarget(nil)
+        center.pauseCommand.isEnabled = false
+        center.pauseCommand.removeTarget(nil)
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
