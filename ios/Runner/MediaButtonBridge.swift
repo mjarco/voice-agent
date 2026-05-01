@@ -1,6 +1,7 @@
 import AVFoundation
 import Flutter
 import MediaPlayer
+import UIKit
 
 private func logAudioSession(_ tag: String) {
     let s = AVAudioSession.sharedInstance()
@@ -24,6 +25,10 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
 
     private var methodChannel: FlutterMethodChannel?
     private var eventSink: FlutterEventSink?
+
+    private var interruptionObserver: NSObjectProtocol?
+    private var didBecomeActiveObserver: NSObjectProtocol?
+    private var routeChangeObserver: NSObjectProtocol?
 
     private override init() {
         super.init()
@@ -98,13 +103,108 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
         // and a non-zero duration is the standard pattern; without it, iOS
         // may route the hardware button to the lock-screen default player
         // (or the prior "now playing" app) instead.
+        refreshNowPlayingInfo()
+        installLifecycleObservers()
+        NSLog("[MediaButtonDbg] activateRemoteCommands DONE (3 targets, nowPlayingInfo with rate=1)")
+    }
+
+    /// (Re)publish the now-playing dictionary so iOS keeps treating us
+    /// as the active media participant. Without a fresh entry iOS may
+    /// route hardware-button events to whichever app last had a slot,
+    /// producing the rejection "boop" sound on AirPods presses.
+    private func refreshNowPlayingInfo() {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
             MPMediaItemPropertyTitle: "Voice Agent",
             MPMediaItemPropertyPlaybackDuration: NSNumber(value: 1.0),
             MPNowPlayingInfoPropertyElapsedPlaybackTime: NSNumber(value: 0.0),
             MPNowPlayingInfoPropertyPlaybackRate: NSNumber(value: 1.0),
         ]
-        NSLog("[MediaButtonDbg] activateRemoteCommands DONE (3 targets, nowPlayingInfo with rate=1)")
+    }
+
+    /// Subscribe to the lifecycle events that drop us out of media-
+    /// participant routing without producing a deactivate call:
+    ///   • `AVAudioSessionInterruption.ended` — phone call, Siri,
+    ///     alarm, screen lock — any of these can suspend our session.
+    ///   • `applicationDidBecomeActive` — fired when the app returns
+    ///     from the lock screen or background. iOS sometimes drops
+    ///     the now-playing slot during the suspension window even
+    ///     when no formal interruption fires.
+    ///   • `AVAudioSessionRouteChange` — AirPods reconnect, output
+    ///     swap, etc. The route change may invalidate the slot.
+    /// In all three we reactivate the session and refresh the
+    /// now-playing dict so the next AirPods press lands on us.
+    private func installLifecycleObservers() {
+        let center = NotificationCenter.default
+        if interruptionObserver == nil {
+            interruptionObserver = center.addObserver(
+                forName: AVAudioSession.interruptionNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] note in
+                self?.handleInterruption(note)
+            }
+        }
+        if didBecomeActiveObserver == nil {
+            didBecomeActiveObserver = center.addObserver(
+                forName: UIApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                NSLog("[MediaButtonDbg] didBecomeActive — reactivating session + nowPlayingInfo")
+                self?.reactivateSession()
+            }
+        }
+        if routeChangeObserver == nil {
+            routeChangeObserver = center.addObserver(
+                forName: AVAudioSession.routeChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] note in
+                let reasonValue = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt) ?? 0
+                NSLog("[MediaButtonDbg] routeChange reason=\(reasonValue) — refreshing nowPlayingInfo")
+                self?.refreshNowPlayingInfo()
+            }
+        }
+    }
+
+    private func removeLifecycleObservers() {
+        let center = NotificationCenter.default
+        if let o = interruptionObserver { center.removeObserver(o); interruptionObserver = nil }
+        if let o = didBecomeActiveObserver { center.removeObserver(o); didBecomeActiveObserver = nil }
+        if let o = routeChangeObserver { center.removeObserver(o); routeChangeObserver = nil }
+    }
+
+    private func handleInterruption(_ note: Notification) {
+        guard let userInfo = note.userInfo,
+              let raw = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else {
+            return
+        }
+        switch type {
+        case .began:
+            NSLog("[MediaButtonDbg] interruption began")
+        case .ended:
+            let optsRaw = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) ?? 0
+            let opts = AVAudioSession.InterruptionOptions(rawValue: optsRaw)
+            NSLog("[MediaButtonDbg] interruption ended (shouldResume=\(opts.contains(.shouldResume)))")
+            // Reactivate regardless of `shouldResume` — for our use
+            // case (hardware-button routing) we always want the slot
+            // back; iOS will pause output if the user truly didn't
+            // intend to resume.
+            reactivateSession()
+        @unknown default:
+            break
+        }
+    }
+
+    private func reactivateSession() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            refreshNowPlayingInfo()
+            NSLog("[MediaButtonDbg] session reactivated")
+        } catch {
+            NSLog("[MediaButtonDbg] reactivateSession FAILED: \(error.localizedDescription)")
+        }
     }
 
     // Diagnostic: every 2s log audio session + nowPlayingInfo state so we
@@ -128,6 +228,7 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
 
     private func deactivateRemoteCommands() {
         stopStatePolling()
+        removeLifecycleObservers()
         NSLog("[MediaButtonDbg] deactivateRemoteCommands called")
         let center = MPRemoteCommandCenter.shared()
         center.togglePlayPauseCommand.isEnabled = false
