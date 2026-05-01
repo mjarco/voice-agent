@@ -313,12 +313,23 @@ void main() {
     testWidgets('button is disabled when hands-free is capturing',
         (tester) async {
       final engine = _FakeHfEngine();
+      late ProviderContainer container;
       await tester.pumpWidget(
         ProviderScope(
           overrides: _baseOverrides(engine: engine),
-          child: const App(),
+          child: Builder(builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return const App();
+          }),
         ),
       );
+      await tester.pumpAndSettle();
+
+      // P037 v2: app opens in Idle. Engage so the controller subscribes
+      // to the engine stream and reflects the emitted phase.
+      await container
+          .read(handsFreeControllerProvider.notifier)
+          .startSession();
       await tester.pumpAndSettle();
 
       engine.emit(const EngineCapturing());
@@ -333,12 +344,21 @@ void main() {
     testWidgets('button is disabled when hands-free is stopping',
         (tester) async {
       final engine = _FakeHfEngine();
+      late ProviderContainer container;
       await tester.pumpWidget(
         ProviderScope(
           overrides: _baseOverrides(engine: engine),
-          child: const App(),
+          child: Builder(builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return const App();
+          }),
         ),
       );
+      await tester.pumpAndSettle();
+
+      await container
+          .read(handsFreeControllerProvider.notifier)
+          .startSession();
       await tester.pumpAndSettle();
 
       engine.emit(const EngineStopping());
@@ -382,6 +402,7 @@ void main() {
       final toaster = _SpyToaster();
       final haptic = _SpyHapticService();
       final engine = _FakeHfEngine();
+      late ProviderContainer container;
 
       await tester.pumpWidget(
         ProviderScope(
@@ -391,9 +412,17 @@ void main() {
             toaster: toaster,
             hapticService: haptic,
           ),
-          child: const App(),
+          child: Builder(builder: (context) {
+            container = ProviderScope.containerOf(context);
+            return const App();
+          }),
         ),
       );
+      await tester.pumpAndSettle();
+
+      await container
+          .read(handsFreeControllerProvider.notifier)
+          .startSession();
       await tester.pumpAndSettle();
 
       engine.emit(const EngineCapturing());
