@@ -49,9 +49,14 @@ class AudioSessionBridge {
                 NSLog("[AudioSessionDbg] setPlayback requested (current=\(session.category.rawValue))")
                 self.savedCategoryBeforeTtsPlayback = session.category
                 self.savedCategoryOptionsBeforeTtsPlayback = session.categoryOptions
+                // Deactivate first so iOS releases the underlying audio I/O
+                // unit. setCategory between .playAndRecord and .playback while
+                // active fails with OSStatus 561017449 (incompatible).
+                // notifyOthersOnDeactivation lets ducked apps resume cleanly.
+                try? session.setActive(false, options: [.notifyOthersOnDeactivation])
                 try session.setCategory(.playback, mode: .spokenAudio, options: [])
                 try session.setActive(true)
-                NSLog("[AudioSessionDbg] setPlayback applied — category=\(session.category.rawValue) options=\(session.categoryOptions.rawValue)")
+                NSLog("[AudioSessionDbg] setPlayback applied — category=\(session.category.rawValue) mode=\(session.mode.rawValue) options=\(session.categoryOptions.rawValue)")
                 result(nil)
             } catch {
                 NSLog("[AudioSessionDbg] setPlayback FAILED: \(error.localizedDescription)")
@@ -73,7 +78,11 @@ class AudioSessionBridge {
                 }
                 let savedOptions = self.savedCategoryOptionsBeforeTtsPlayback ?? []
                 NSLog("[AudioSessionDbg] restoreAudioSession requested (target=\(savedCategory.rawValue) options=\(savedOptions.rawValue))")
-                try session.setCategory(savedCategory, mode: .default, options: savedOptions)
+                // Symmetrical with setPlayback: deactivate before category
+                // change so iOS allows the switch back to .playAndRecord with
+                // mic capability.
+                try? session.setActive(false, options: [.notifyOthersOnDeactivation])
+                try session.setCategory(savedCategory, mode: .spokenAudio, options: savedOptions)
                 try session.setActive(true)
                 self.savedCategoryBeforeTtsPlayback = nil
                 self.savedCategoryOptionsBeforeTtsPlayback = nil
