@@ -1,8 +1,9 @@
 # ADR-AUDIO-009: Conditional iOS audio session category tied to hands-free session lifecycle
 
-Status: Accepted
+Status: Partially superseded by [ADR-AUDIO-011](./ADR-AUDIO-011-always-on-capture-with-engagement-gate.md) (the runtime-switching portion). The category-pinning rationale below carries forward.
 Proposed in: P019
 Amended in: P026
+Superseded in: P038 (lifecycle portion)
 
 ## Context
 
