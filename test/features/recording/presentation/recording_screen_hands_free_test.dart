@@ -149,14 +149,31 @@ Future<void> pumpRecordScreen(
   WidgetTester tester, {
   required FakeHfEngine engine,
   List<Override> extra = const [],
+  bool engageAfterPump = true,
 }) async {
+  late ProviderContainer container;
   await tester.pumpWidget(
     ProviderScope(
       overrides: [...baseOverrides(engine), ...extra],
-      child: const App(),
+      child: Builder(
+        builder: (context) {
+          container = ProviderScope.containerOf(context);
+          return const App();
+        },
+      ),
     ),
   );
   await tester.pumpAndSettle();
+
+  // P037 v2: app opens in HandsFreeIdle (no auto-start). Tests that
+  // exercise the listening state machine engage explicitly here, which
+  // mirrors the AirPods short-click entry point in production.
+  if (engageAfterPump) {
+    await container
+        .read(handsFreeControllerProvider.notifier)
+        .startSession();
+    await tester.pumpAndSettle();
+  }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -164,13 +181,15 @@ Future<void> pumpRecordScreen(
 void main() {
   setUpAll(() => WidgetsFlutterBinding.ensureInitialized());
 
-  group('auto-start', () {
-    testWidgets('hands-free session starts automatically on screen load',
+  group('auto-start (P037 v2: removed)', () {
+    testWidgets('hands-free session does NOT auto-start on screen load',
         (tester) async {
       final engine = FakeHfEngine();
-      await pumpRecordScreen(tester, engine: engine);
+      await pumpRecordScreen(tester, engine: engine, engageAfterPump: false);
 
-      expect(engine.started, isTrue);
+      // v2 contract: app opens in Idle. Engagement requires an explicit
+      // user action (AirPods short-click → startSession).
+      expect(engine.started, isFalse);
     });
   });
 
@@ -248,6 +267,11 @@ void main() {
           }),
         ),
       );
+      await tester.pumpAndSettle();
+      // v2: explicit engage replaces the legacy auto-start.
+      await container
+          .read(handsFreeControllerProvider.notifier)
+          .startSession();
       await tester.pumpAndSettle();
 
       expect(container.read(latestAgentReplyProvider), 'stale reply');

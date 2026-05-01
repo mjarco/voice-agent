@@ -31,9 +31,13 @@ sealed class HandsFreeSessionState {
   const HandsFreeSessionState();
 }
 
-/// Session not running. No jobs.
+/// Session not running. The [jobs] list carries in-flight work from a
+/// previous engagement (P037 v2 one-shot model — STT/persistence
+/// continues asynchronously after the controller disengages).
 class HandsFreeIdle extends HandsFreeSessionState {
-  const HandsFreeIdle();
+  const HandsFreeIdle({this.jobs = const []});
+
+  final List<SegmentJob> jobs;
 }
 
 /// Session is engaged. The [phase] indicates the engine sub-state

@@ -182,7 +182,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(controller.startCalls, 1); // RecordingScreen.initState
+    // P037 v2: app opens in Idle. Engage explicitly to mirror the
+    // production AirPods short-click entry point so the tab-switch
+    // teardown has something to stop.
+    await controller.startSession();
+    await tester.pumpAndSettle();
+    expect(controller.startCalls, 1);
 
     await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle();
@@ -205,13 +210,17 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    // v2: explicit engage first (replaces auto-start in initState).
+    await controller.startSession();
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle(); // stopSession called, state → idle
 
     await tester.tap(recordNavIcon);
     await tester.pumpAndSettle();
 
-    expect(controller.startCalls, 2); // 1 from initState + 1 from tab return
+    expect(controller.startCalls, 2); // 1 manual engage + 1 from tab return
   });
 
   testWidgets('session recovers when user returns to Record during stopSession drain',
@@ -231,6 +240,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    // v2: explicit engage first (replaces auto-start in initState).
+    await controller.startSession();
+    await tester.pumpAndSettle();
     expect(controller.startCalls, 1);
 
     // Navigate away — stopSession starts but won't finish until drainCompleter fires.

@@ -394,7 +394,7 @@ HandsFreeSessionState stateOf(ProviderContainer c) =>
 List<SegmentJob> jobsOf(HandsFreeSessionState s) => switch (s) {
       HandsFreeListening(:final jobs) => jobs,
       HandsFreeSessionError(:final jobs) => jobs,
-      HandsFreeIdle() => [],
+      HandsFreeIdle(:final jobs) => jobs,
     };
 
 /// True when [s] is [HandsFreeListening] with the given [phase].
@@ -548,7 +548,6 @@ void main() {
       expect(s, isA<HandsFreeListening>());
       final jobs = (s as HandsFreeListening).jobs;
       expect(jobs, hasLength(1));
-      // After one microtask tick the job has transitioned from Queued → Transcribing.
       expect(jobs.first.state, isA<Transcribing>());
       expect(jobs.first.wavPath, '/tmp/seg1.wav');
     });

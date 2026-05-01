@@ -124,6 +124,7 @@ void main() {
 
   testWidgets('Record screen shows error when API URL not configured',
       (tester) async {
+    late ProviderContainer container;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -132,9 +133,19 @@ void main() {
             _FixedConfigService(const AppConfig(groqApiKey: 'test-key', apiUrl: null)),
           ),
         ],
-        child: const App(),
+        child: Builder(builder: (context) {
+          container = ProviderScope.containerOf(context);
+          return const App();
+        }),
       ),
     );
+    await tester.pumpAndSettle();
+
+    // P037 v2: app opens in Idle. Engage explicitly so the missing-API-URL
+    // guard fires and surfaces the banner.
+    await container
+        .read(handsFreeControllerProvider.notifier)
+        .startSession();
     await tester.pumpAndSettle();
 
     expect(find.text('API URL not set.'), findsOneWidget);

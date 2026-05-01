@@ -35,11 +35,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(handsFreeControllerProvider.notifier).startSession();
+        // P037 v2: app opens in Idle. User engages explicitly via
+        // AirPods short-click (handled in _onMediaButtonEvent) or the
+        // mic UI button. The previous auto-startSession in initState
+        // is removed — that was the continuous-listening contract from
+        // the pre-v2 model.
         _activateMediaButton();
         _ambientPlayer = AmbientLoopPlayer();
-        // Initial Idle silence; the listener below switches to listening
-        // mode as soon as the controller transitions to HandsFreeListening.
         unawaited(_ambientPlayer!.setMode(AmbientMode.idle));
       }
     });

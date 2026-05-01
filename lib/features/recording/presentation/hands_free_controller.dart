@@ -50,6 +50,24 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       : _engagement = engagement ?? EngagementController(),
         super(const HandsFreeIdle()) {
     WidgetsBinding.instance.addObserver(this);
+    // P037 v2 one-shot model: when the engagement layer transitions to
+    // Idle externally (e.g. 30 s timer expiry without speech), tear the
+    // engine down and reflect it in the public state. The re-entry
+    // guard (`state is! HandsFreeIdle`) prevents recursion when
+    // [_disengageOneShot] itself drives engagement to Idle.
+    _engagementSub = _engagement.stream.listen((engagementState) {
+      // Guard against the controller being disposed mid-flight; stream
+      // events may still arrive on the same microtask.
+      if (!mounted) return;
+      // Re-read the current engagement state instead of trusting the
+      // emitted event: the event may be stale (e.g. a disengage→engage
+      // pair issued synchronously by suspend+resume produces two
+      // microtask events; by the time the first runs, engagement is
+      // already Listening again and we must not tear the engine down).
+      if (_engagement.state is EngagementIdle && state is! HandsFreeIdle) {
+        unawaited(_disengageOneShot());
+      }
+    });
   }
 
   final Ref _ref;
@@ -57,6 +75,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   HandsFreeEngine? _engine;
   StreamSubscription<HandsFreeEngineEvent>? _engineSub;
+  StreamSubscription<EngagementState>? _engagementSub;
 
   // ── Job list ─────────────────────────────────────────────────────────────
   // Mutable list kept in controller; copied into each emitted state.
@@ -367,6 +386,30 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   /// or clearing the [_suspendedForManualRecording] flag. Used by the
   /// "soft pause" paths ([suspendForTts], [suspendForManualRecording],
   /// [suspendByUser]) where we want to come back to listening shortly.
+  /// P037 v2 one-shot: close the engagement after a captured utterance
+  /// or a 30 s silence timeout. Stops the engine, switches the audio
+  /// session back to .playback (so AirPods buttons keep routing), and
+  /// transitions to [HandsFreeIdle] preserving the in-flight job
+  /// queue. Does NOT drain jobs — STT and persistence continue
+  /// asynchronously via [_sttSlot].
+  Future<void> _disengageOneShot() async {
+    if (!mounted) return;
+    if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
+    _ref.read(sessionActiveProvider.notifier).state = false;
+    await _ref
+        .read(backgroundServiceProvider)
+        .stopService(target: AudioSessionTarget.playback);
+    if (!mounted) return;
+    _engagement.disengage();
+    await _engineSub?.cancel();
+    _engineSub = null;
+    await _engine?.stop();
+    _engine = null;
+    if (!mounted) return;
+    _phase = HandsFreeListeningPhase.listening;
+    state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
+  }
+
   Future<void> _closeEngagement({
     required AudioSessionTarget toAmbientFor,
   }) async {
@@ -385,6 +428,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_engagementSub?.cancel());
     unawaited(_engagement.dispose());
     // Clean up WAV files for any remaining unprocessed jobs.
     for (final job in _jobs) {
@@ -416,6 +460,10 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
       case EngineSegmentReady(wavPath: final path):
         _onSegmentReady(path);
+        // Note: engine continues listening after a segment in this
+        // commit. Full one-shot (disengage on segment ready) is
+        // deferred — it requires a coordinated update of ~25 tests
+        // that assume continuous mode.
 
       case EngineError(
           message: final msg,

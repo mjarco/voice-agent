@@ -89,8 +89,18 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
         center.pauseCommand.isEnabled = true
         center.pauseCommand.addTarget(handler: makeHandler("pause"))
 
+        // Proposal 037 T1+T2: hypothesis test. Are nextTrack / previousTrack
+        // (AirPods double-tap / triple-tap) gated by the same .playAndRecord
+        // call-mode rule as togglePlayPause? Targets are NSLog-only — we do
+        // NOT yet forward to Dart. The presence (or absence) of the
+        // "TARGET FIRED" log answers the hypothesis.
+        center.nextTrackCommand.isEnabled = true
+        center.nextTrackCommand.addTarget(handler: makeHandler("nextTrack"))
+        center.previousTrackCommand.isEnabled = true
+        center.previousTrackCommand.addTarget(handler: makeHandler("previousTrack"))
+
         // Diagnostic: confirm registration stuck.
-        NSLog("[MediaButtonDbg] toggle.enabled=\(center.togglePlayPauseCommand.isEnabled) play.enabled=\(center.playCommand.isEnabled) pause.enabled=\(center.pauseCommand.isEnabled)")
+        NSLog("[MediaButtonDbg] toggle.enabled=\(center.togglePlayPauseCommand.isEnabled) play.enabled=\(center.playCommand.isEnabled) pause.enabled=\(center.pauseCommand.isEnabled) next.enabled=\(center.nextTrackCommand.isEnabled) prev.enabled=\(center.previousTrackCommand.isEnabled)")
         startStatePolling()
 
         // Now-playing info must signal "actively playing" so iOS treats this
@@ -136,6 +146,10 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
         center.playCommand.removeTarget(nil)
         center.pauseCommand.isEnabled = false
         center.pauseCommand.removeTarget(nil)
+        center.nextTrackCommand.isEnabled = false
+        center.nextTrackCommand.removeTarget(nil)
+        center.previousTrackCommand.isEnabled = false
+        center.previousTrackCommand.removeTarget(nil)
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
