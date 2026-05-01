@@ -1,10 +1,32 @@
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
 
+/// Sub-phase of [HandsFreeListening], mirroring [EngagementState]
+/// from the P037 v2 tap-to-engage refactor.
+///
+/// In the v2 one-shot model the session is either Idle or Listening at
+/// the public/UI level. The internal phase is tracked here so the UI can
+/// continue rendering distinct status text ("Listening...", "Capturing...",
+/// "Processing segment...") without resurrecting the old per-phase
+/// session-state classes.
+enum HandsFreeListeningPhase {
+  /// VAD running, no speech detected.
+  listening,
+
+  /// VAD detected start-of-speech; segment accumulating.
+  capturing,
+
+  /// Hangover or maxSegmentMs triggered; WAV being written asynchronously.
+  stopping,
+}
+
 /// Runtime state of a hands-free recording session.
 ///
-/// All active variants carry a [jobs] list so the UI can render the segment
-/// list without a separate provider. [HandsFreeIdle] carries no jobs because
-/// the session is not running.
+/// P037 v2 collapsed the previous fine-grained variants
+/// (`HandsFreeListening` / `HandsFreeWithBacklog` / `HandsFreeCapturing`
+/// / `HandsFreeStopping` / `HandsFreeSuspendedByUser`) into a single
+/// [HandsFreeListening] case carrying a [HandsFreeListeningPhase]
+/// indicator and the segment job list. [HandsFreeIdle] and
+/// [HandsFreeSessionError] are unchanged.
 sealed class HandsFreeSessionState {
   const HandsFreeSessionState();
 }
@@ -14,40 +36,17 @@ class HandsFreeIdle extends HandsFreeSessionState {
   const HandsFreeIdle();
 }
 
-/// VAD running; no speech detected; no job backlog.
-/// Cooldown (if active) is invisible — session stays Listening during cooldown.
+/// Session is engaged. The [phase] indicates the engine sub-state
+/// (listening / capturing / stopping); [jobs] carries the in-flight
+/// transcription/persistence backlog.
 class HandsFreeListening extends HandsFreeSessionState {
-  const HandsFreeListening(this.jobs);
+  const HandsFreeListening(
+    this.jobs, {
+    this.phase = HandsFreeListeningPhase.listening,
+  });
 
   final List<SegmentJob> jobs;
-}
-
-/// Speech frames accumulating in segment buffer.
-class HandsFreeCapturing extends HandsFreeSessionState {
-  const HandsFreeCapturing(this.jobs);
-
-  final List<SegmentJob> jobs;
-}
-
-/// Hangover or maxSegmentMs triggered; WAV being written asynchronously.
-class HandsFreeStopping extends HandsFreeSessionState {
-  const HandsFreeStopping(this.jobs);
-
-  final List<SegmentJob> jobs;
-}
-
-/// Listening; one or more STT jobs are pending or in-flight.
-class HandsFreeWithBacklog extends HandsFreeSessionState {
-  const HandsFreeWithBacklog(this.jobs);
-
-  final List<SegmentJob> jobs;
-}
-
-/// User-initiated pause via media button. Engine stopped, backlog preserved.
-class HandsFreeSuspendedByUser extends HandsFreeSessionState {
-  const HandsFreeSuspendedByUser(this.jobs);
-
-  final List<SegmentJob> jobs;
+  final HandsFreeListeningPhase phase;
 }
 
 /// Unrecoverable error. Microphone released.

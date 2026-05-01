@@ -214,7 +214,7 @@ void main() {
   setUpAll(() => WidgetsFlutterBinding.ensureInitialized());
 
   group('suspendByUser', () {
-    test('from listening transitions to HandsFreeSuspendedByUser', () async {
+    test('from listening transitions to HandsFreeIdle (P037 v2)', () async {
       final engine = _FakeHandsFreeEngine();
       final c = _makeContainer(engine: engine);
       await _ctrl(c).startSession();
@@ -224,7 +224,7 @@ void main() {
 
       await _ctrl(c).suspendByUser();
 
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
     });
 
     test('is no-op when already suspended by user', () async {
@@ -235,11 +235,11 @@ void main() {
       await Future.delayed(Duration.zero);
 
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
 
       // Second call should be no-op
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
     });
 
     test('is no-op from HandsFreeIdle', () async {
@@ -274,7 +274,7 @@ void main() {
       // Now suspend by user — should take the fast path
       await _ctrl(c).suspendByUser();
 
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
     });
   });
 
@@ -287,7 +287,7 @@ void main() {
       await Future.delayed(Duration.zero);
 
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
 
       engine.started = false;
       await _ctrl(c).resumeByUser();
@@ -317,7 +317,7 @@ void main() {
 
       await _ctrl(c).suspendForTts();
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
 
       engine.started = false;
       engine.startCount = 0;
@@ -338,7 +338,7 @@ void main() {
 
       await _ctrl(c).suspendForManualRecording();
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
 
       engine.started = false;
       engine.startCount = 0;
@@ -360,7 +360,7 @@ void main() {
       final result = await _ctrl(c).toggleUserSuspend();
 
       expect(result, isTrue);
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
     });
 
     test('resumes when already suspended', () async {
@@ -371,7 +371,7 @@ void main() {
       await Future.delayed(Duration.zero);
 
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
 
       final result = await _ctrl(c).toggleUserSuspend();
 
@@ -391,7 +391,7 @@ void main() {
       // TTS + user suspend
       await _ctrl(c).suspendForTts();
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
 
       engine.started = false;
       engine.startCount = 0;
@@ -414,7 +414,7 @@ void main() {
 
       await _ctrl(c).suspendForManualRecording();
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
 
       engine.started = false;
       engine.startCount = 0;
@@ -436,7 +436,7 @@ void main() {
       await Future.delayed(Duration.zero);
 
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
 
       engine.started = false;
       engine.startCount = 0;
@@ -457,7 +457,7 @@ void main() {
       await Future.delayed(Duration.zero);
 
       await _ctrl(c).suspendByUser();
-      expect(_stateOf(c), isA<HandsFreeSuspendedByUser>());
+      expect(_stateOf(c), isA<HandsFreeIdle>());
 
       await _ctrl(c).stopSession();
 

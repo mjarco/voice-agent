@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
+import 'package:voice_agent/core/background/background_service.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
@@ -13,32 +14,46 @@ import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/session_control/hands_free_control_port.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
+import 'package:voice_agent/features/recording/domain/engagement_controller.dart';
+import 'package:voice_agent/features/recording/domain/engagement_state.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
-/// T3a + T3b: session lifecycle and job processing for hands-free mode.
+/// Hands-free session controller (P037 v2 — tap-to-engage refactor, T4).
 ///
-/// T3a responsibilities (merged):
-///   • session-start guard (permission → Groq key → active-recording check)
-///   • [HandsFreeEngineEvent] → [HandsFreeSessionState] mapping
-///   • background lifecycle via [WidgetsBindingObserver]
-///   • stopSession() with in-flight job drain
+/// Wraps an [EngagementController] (T3) which owns the high-level
+/// `Idle / Listening / Capturing / Error` lifecycle and the 30 s
+/// auto-disengage timer (T6). This controller still owns:
+///   • session-start guard (permission → Groq key → API URL)
+///   • engine event mapping → [HandsFreeListeningPhase] sub-state
+///   • job queue + serial STT slot + persist+enqueue with rollback
+///   • foreground-service lifecycle (audio session category transitions)
 ///
-/// T3b additions:
-///   • STT serial slot — jobs processed one at a time
-///   • Bounded job queue (max [_maxJobs] non-terminal jobs)
-///   • [StorageService.saveTranscript] + [enqueue] with rollback on enqueue failure
-///   • WAV cleanup for rejections and session stop
+/// In the v2 one-shot model the publicly exposed states collapse to
+/// [HandsFreeIdle] / [HandsFreeListening] / [HandsFreeSessionError].
+/// The pre-v2 `WithBacklog`, `Capturing`, `Stopping`, and
+/// `SuspendedByUser` distinctions live as fields on
+/// [HandsFreeListening.phase] (capturing / stopping) or are simply gone
+/// (`SuspendedByUser` was a continuous-listening artefact and disappears
+/// in the one-shot model: a "user pause" maps to closing the engagement).
+///
+/// T7 (UI wiring of AirPods short-click → [engage]) is intentionally out
+/// of scope for this PR. The legacy session-start path
+/// ([startSession]) preserves the old "auto-start when the screen mounts"
+/// behaviour by internally calling [engage] so existing UI keeps working.
 class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     with WidgetsBindingObserver
     implements HandsFreeControlPort {
-  HandsFreeController(this._ref) : super(const HandsFreeIdle()) {
+  HandsFreeController(this._ref, {EngagementController? engagement})
+      : _engagement = engagement ?? EngagementController(),
+        super(const HandsFreeIdle()) {
     WidgetsBinding.instance.addObserver(this);
   }
 
   final Ref _ref;
+  final EngagementController _engagement;
 
   HandsFreeEngine? _engine;
   StreamSubscription<HandsFreeEngineEvent>? _engineSub;
@@ -56,69 +71,47 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   // All segment jobs are chained onto this future so they run sequentially.
   Future<void>? _sttSlot;
 
-  // ── Manual-recording suspension (T3: full implementation) ────────────────
-  // In T2 the stubs allow `ref.listen` in RecordingScreen to compile without
-  // producing side-effects. T3 fills in the real logic.
+  // Tracks the most recent engine sub-phase so [_listeningOrBacklog] can
+  // reflect capture/stopping in the collapsed [HandsFreeListening] state.
+  HandsFreeListeningPhase _phase = HandsFreeListeningPhase.listening;
 
-  // ignore: prefer_final_fields — T3 mutates this field
+  // Manual-recording suspension: the [HandsFreeControlPort] still exposes
+  // [isSuspendedForManualRecording] for [SessionControlDispatcher]. In the
+  // one-shot v2 model "suspended for manual recording" simply means the
+  // engagement was closed; the flag persists across the closure so the
+  // dispatcher knows to skip [stopSession].
   bool _suspendedForManualRecording = false;
-  bool _suspendedForTts = false;
+
+  // User-initiated suspension (P034 carry-over). In the v2 one-shot model
+  // the public state collapses to [HandsFreeIdle] when paused, but we
+  // still track *why* it was paused so that auto-resume paths
+  // ([resumeAfterTts] / [resumeAfterManualRecording]) honour the user's
+  // explicit pause intent and do NOT silently re-engage.
   bool _suspendedByUser = false;
 
   @override
   bool get isSuspendedForManualRecording => _suspendedForManualRecording;
 
+  /// Engagement-layer state (testability hook). Exposes the underlying
+  /// [EngagementController] state without leaking the controller itself.
+  EngagementState get engagementState => _engagement.state;
+
+  // ── Public API: legacy compatibility surface ─────────────────────────────
+
   /// Interrupts the active VAD segment and releases the microphone so that
   /// manual recording can start. The job backlog is preserved.
   ///
-  /// Returns when the microphone has been released and [RecordingController]
-  /// may call [startRecording].
+  /// In the v2 one-shot model this collapses to "close the engagement and
+  /// remember that we're in manual-recording mode so [resumeAfter*] knows
+  /// to re-engage". Mid-capture, the in-flight segment is discarded via
+  /// [HandsFreeEngine.interruptCapture] so the mic releases promptly.
   Future<void> suspendForManualRecording() async {
-    if (state is HandsFreeCapturing) {
-      await _engine?.interruptCapture(); // discards current segment
-    } else if (state is HandsFreeListening ||
-        state is HandsFreeWithBacklog ||
-        state is HandsFreeStopping) {
-      // HandsFreeStopping: stop() blocks on _wavWriteCompleter (~100–500ms).
-      // The segment is worth keeping — accept the latency.
-      await _engineSub?.cancel();
-      await _engine?.stop();
-    } else {
-      // HandsFreeIdle or HandsFreeSessionError — nothing to release.
+    if (state is HandsFreeIdle || state is HandsFreeSessionError) {
       return;
     }
-    _engineSub = null;
-    _engine = null;
-    _suspendedForManualRecording = true;
-    state = _listeningOrBacklog();
-  }
-
-  // ── User-initiated suspension (P034 T2) ─────────────────────────────────
-
-  /// Toggles user-initiated suspension. Called by media button dispatch.
-  /// Returns true if the session is now suspended, false if resumed.
-  Future<bool> toggleUserSuspend() async {
-    if (_suspendedByUser) {
-      await resumeByUser();
-      return false;
-    } else {
-      await suspendByUser();
-      return true;
-    }
-  }
-
-  Future<void> suspendByUser() async {
-    if (_suspendedByUser) return;
-    if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
-
-    // Fast path: engine already stopped by TTS or manual recording.
-    if (_suspendedForTts || _suspendedForManualRecording) {
-      _suspendedByUser = true;
-      state = HandsFreeSuspendedByUser(List<SegmentJob>.unmodifiable(_jobs));
-      return;
-    }
-
-    if (state is HandsFreeCapturing) {
+    if (state is HandsFreeListening &&
+        (state as HandsFreeListening).phase ==
+            HandsFreeListeningPhase.capturing) {
       await _engine?.interruptCapture();
     } else {
       await _engineSub?.cancel();
@@ -126,83 +119,109 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     }
     _engineSub = null;
     _engine = null;
+    _engagement.disengage();
+    _suspendedForManualRecording = true;
+    state = const HandsFreeIdle();
+  }
+
+  /// Toggles user-initiated suspension. Called by media button dispatch.
+  /// Returns true if the session is now suspended, false if resumed.
+  ///
+  /// In v2 this maps to engage/disengage on the underlying engagement.
+  Future<bool> toggleUserSuspend() async {
+    if (_suspendedByUser) {
+      await resumeByUser();
+      return false;
+    }
+    await suspendByUser();
+    return true;
+  }
+
+  Future<void> suspendByUser() async {
+    if (_suspendedByUser) return;
+
+    // Fast path: engine already idle from TTS or manual-recording suspend
+    // — just flip the flag so resume*() honours the user's pause intent.
+    if (state is HandsFreeIdle &&
+        (_suspendedForTts || _suspendedForManualRecording)) {
+      _suspendedByUser = true;
+      return;
+    }
+
+    if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
     _suspendedByUser = true;
-    state = HandsFreeSuspendedByUser(List<SegmentJob>.unmodifiable(_jobs));
+    await _closeEngagement(toAmbientFor: AudioSessionTarget.playback);
+    state = const HandsFreeIdle();
   }
 
   Future<void> resumeByUser() async {
     if (!_suspendedByUser) return;
     _suspendedByUser = false;
-    if (_suspendedForManualRecording || _suspendedForTts) {
-      state = _listeningOrBacklog();
-      return;
-    }
-    _startEngine(_ref.read(appConfigProvider).vadConfig);
-    state = _listeningOrBacklog();
+    if (_suspendedForManualRecording) return;
+    if (_suspendedForTts) return;
+    _resumeEngagement();
   }
 
   /// Restarts the VAD engine with the current [appConfigProvider] VAD config.
   ///
   /// Called when the user changes VAD parameters in Advanced Settings.
-  /// No-op when idle, in error, or suspended for manual recording (the new
-  /// config will be picked up automatically by [resumeAfterManualRecording]).
   Future<void> reloadVadConfig() async {
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
     if (_suspendedForManualRecording) return;
     if (_suspendedByUser) return;
 
-    if (state is HandsFreeCapturing) {
-      await _engine?.interruptCapture();
-    } else {
-      await _engineSub?.cancel();
-      _engineSub = null;
-      await _engine?.stop();
-    }
-    _engine = null;
+    await _engineSub?.cancel();
     _engineSub = null;
+    await _engine?.stop();
+    _engine = null;
     if (!mounted) return;
 
     _startEngine(_ref.read(appConfigProvider).vadConfig);
+    _phase = HandsFreeListeningPhase.listening;
     state = _listeningOrBacklog();
   }
 
   /// Restarts the VAD engine after manual recording completes.
-  ///
-  /// Does NOT clear [_jobs] or [_jobCounter] — the backlog is preserved.
   Future<void> resumeAfterManualRecording() async {
     if (!_suspendedForManualRecording) return;
     _suspendedForManualRecording = false;
     if (_suspendedByUser) return;
-    _startEngine(_ref.read(appConfigProvider).vadConfig);
-    state = _listeningOrBacklog();
+    _resumeEngagement();
   }
 
-
-  // ── TTS suspension ──────────────────────────────────────────────────────
+  // Tracks whether the most recent engagement closure was due to a TTS
+  // suspend; only that path should auto-resume when TTS ends.
+  bool _suspendedForTts = false;
 
   /// Pauses the VAD engine while TTS is playing to prevent the mic from
-  /// picking up speaker output.
+  /// picking up speaker output. In the v2 one-shot model this collapses
+  /// to closing the engagement; [resumeAfterTts] re-engages.
   Future<void> suspendForTts() async {
-    if (_suspendedForTts || _suspendedForManualRecording) return;
+    if (_suspendedForTts) return;
+    if (_suspendedForManualRecording) return;
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
-
-    if (state is HandsFreeCapturing) {
-      await _engine?.interruptCapture();
-    } else {
-      await _engineSub?.cancel();
-      await _engine?.stop();
-    }
-    _engineSub = null;
-    _engine = null;
     _suspendedForTts = true;
-    state = _listeningOrBacklog();
+    await _closeEngagement(toAmbientFor: AudioSessionTarget.playback);
+    state = const HandsFreeIdle();
   }
 
-  /// Restarts the VAD engine after TTS finishes playing.
+  /// Re-engages after TTS finishes playing.
   Future<void> resumeAfterTts() async {
     if (!_suspendedForTts) return;
     _suspendedForTts = false;
-    if (_suspendedForManualRecording || _suspendedByUser) return;
+    if (_suspendedForManualRecording) return;
+    if (_suspendedByUser) return;
+    _resumeEngagement();
+  }
+
+  /// Re-opens an engagement after a soft-suspend (TTS / manual recording /
+  /// user pause). Skips the [startSession] start-up guards because they
+  /// were already validated on the first start; the session is just being
+  /// re-engaged. Mirrors the pre-v2 inline `_startEngine` + state assign.
+  void _resumeEngagement() {
+    if (state is! HandsFreeIdle) return;
+    _engagement.engage();
+    _phase = HandsFreeListeningPhase.listening;
     _startEngine(_ref.read(appConfigProvider).vadConfig);
     state = _listeningOrBacklog();
   }
@@ -216,8 +235,12 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // stopped by stopSession() / _terminateWithError()) keeps the process alive.
   }
 
-  // ── Public API ────────────────────────────────────────────────────────────
+  // ── Public API: lifecycle ─────────────────────────────────────────────────
 
+  /// Open an engagement: run the start-up guards, flip the audio session
+  /// to `.playAndRecord` and start the VAD engine. Invoked by the
+  /// existing UI auto-start path; T7 will later wire AirPods short-click
+  /// here directly.
   Future<void> startSession() async {
     if (state is! HandsFreeIdle && state is! HandsFreeSessionError) return;
 
@@ -271,9 +294,16 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       body: 'Recording session active',
     ));
 
-    _jobs.clear();
-    _jobCounter = 0;
+    if (_jobs.isEmpty) {
+      _jobCounter = 0;
+    }
+    _phase = HandsFreeListeningPhase.listening;
+    _engagement.engage();
     _startEngine(_ref.read(appConfigProvider).vadConfig);
+    // State is left as-is — the controller transitions into a concrete
+    // [HandsFreeListening] (with the right phase) when the first engine
+    // event arrives. This matches the pre-v2 contract and keeps the
+    // session-start side effects behaviour-equivalent.
   }
 
   // ── Helpers — engine lifecycle ────────────────────────────────────────────
@@ -298,10 +328,14 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // background while we tear down (P027, ADR-NET-002).
     _ref.read(sessionActiveProvider.notifier).state = false;
 
-    // Stop foreground service before engine teardown; on iOS this reverts the
-    // audio session category from playAndRecord back to ambient before the
-    // next (possibly unrelated) capture begins.
+    // P037 v2: stopService now defaults to AudioSessionTarget.playback so
+    // the app keeps the media-participant slot and AirPods buttons remain
+    // routed to its MPRemoteCommandCenter targets. The legacy ambient
+    // behaviour is still available via the new parameter for callers that
+    // want to fully yield.
     await _ref.read(backgroundServiceProvider).stopService();
+
+    _engagement.disengage();
 
     await _engineSub?.cancel();
     _engineSub = null;
@@ -323,12 +357,35 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     state = const HandsFreeIdle();
     _jobs.clear();
     _jobCounter = 0;
+    _suspendedForManualRecording = false;
     _suspendedByUser = false;
+    _suspendedForTts = false;
+    _phase = HandsFreeListeningPhase.listening;
+  }
+
+  /// Tear down the engine + audio session without draining the job queue
+  /// or clearing the [_suspendedForManualRecording] flag. Used by the
+  /// "soft pause" paths ([suspendForTts], [suspendForManualRecording],
+  /// [suspendByUser]) where we want to come back to listening shortly.
+  Future<void> _closeEngagement({
+    required AudioSessionTarget toAmbientFor,
+  }) async {
+    _ref.read(sessionActiveProvider.notifier).state = false;
+    await _ref
+        .read(backgroundServiceProvider)
+        .stopService(target: toAmbientFor);
+    _engagement.disengage();
+    await _engineSub?.cancel();
+    _engineSub = null;
+    await _engine?.stop();
+    _engine = null;
+    _phase = HandsFreeListeningPhase.listening;
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_engagement.dispose());
     // Clean up WAV files for any remaining unprocessed jobs.
     for (final job in _jobs) {
       unawaited(_cleanupWav(job.wavPath));
@@ -343,14 +400,19 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   void _onEngineEvent(HandsFreeEngineEvent event) {
     switch (event) {
       case EngineListening():
+        _phase = HandsFreeListeningPhase.listening;
         state = _listeningOrBacklog();
 
       case EngineCapturing():
         unawaited(_ref.read(ttsServiceProvider).stop());
-        state = HandsFreeCapturing(List<SegmentJob>.unmodifiable(_jobs));
+        _phase = HandsFreeListeningPhase.capturing;
+        // Inform the engagement layer so the 30 s timer is cancelled.
+        _engagement.markCaptureStarted();
+        state = _listeningOrBacklog();
 
       case EngineStopping():
-        state = HandsFreeStopping(List<SegmentJob>.unmodifiable(_jobs));
+        _phase = HandsFreeListeningPhase.stopping;
+        state = _listeningOrBacklog();
 
       case EngineSegmentReady(wavPath: final path):
         _onSegmentReady(path);
@@ -504,14 +566,13 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  /// Returns [HandsFreeListening] or [HandsFreeWithBacklog] based on jobs.
+  /// Returns a [HandsFreeListening] state with the current jobs and
+  /// engine-driven [_phase]. Replaces the pre-v2 split between
+  /// `HandsFreeListening` and `HandsFreeWithBacklog` (the distinction is
+  /// recovered by inspecting `jobs` if needed).
   HandsFreeSessionState _listeningOrBacklog() {
-    final active = _jobs.any((j) =>
-        j.state is Transcribing ||
-        j.state is Persisting ||
-        j.state is QueuedForTranscription);
     final jobs = List<SegmentJob>.unmodifiable(_jobs);
-    return active ? HandsFreeWithBacklog(jobs) : HandsFreeListening(jobs);
+    return HandsFreeListening(jobs, phase: _phase);
   }
 
   void _terminateWithError(
@@ -522,6 +583,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // immediately (P027, ADR-NET-002).
     _ref.read(sessionActiveProvider.notifier).state = false;
     unawaited(_ref.read(backgroundServiceProvider).stopService());
+    _engagement.markError(message);
     unawaited(_engineSub?.cancel());
     _engineSub = null;
     unawaited(_engine?.stop());

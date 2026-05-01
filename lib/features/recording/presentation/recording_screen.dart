@@ -77,15 +77,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     } else if (recState is RecordingPaused) {
       debugPrint('[MediaButtonDbg] branch=resumeRecording');
       unawaited(recCtrl.resumeRecording());
-    } else if (hfState is HandsFreeListening ||
-        hfState is HandsFreeWithBacklog ||
-        hfState is HandsFreeCapturing) {
+    } else if (hfState is HandsFreeListening) {
       debugPrint('[MediaButtonDbg] branch=hfSuspend');
       unawaited(hfCtrl.toggleUserSuspend().then((_) {
         ref.read(toasterProvider).show('Paused');
         ref.read(hapticServiceProvider).lightImpact();
       }));
-    } else if (hfState is HandsFreeSuspendedByUser) {
+    } else if (hfState is HandsFreeIdle) {
       debugPrint('[MediaButtonDbg] branch=hfResume');
       unawaited(hfCtrl.toggleUserSuspend().then((_) {
         ref.read(toasterProvider).show('Resumed');
@@ -121,7 +119,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
 
     // Clear agent reply when hands-free starts capturing
     ref.listen<HandsFreeSessionState>(handsFreeControllerProvider, (prev, next) {
-      if (next is HandsFreeCapturing) {
+      if (next is HandsFreeListening &&
+          next.phase == HandsFreeListeningPhase.capturing) {
         ref.read(latestAgentReplyProvider.notifier).state = null;
       }
     });
@@ -144,11 +143,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     // already real output).
     ref.listen<HandsFreeSessionState>(handsFreeControllerProvider, (prev, next) {
       final ttsPlaying = ref.read(ttsPlayingProvider);
-      final shouldKeepAlive = !ttsPlaying &&
-          (next is HandsFreeListening ||
-              next is HandsFreeWithBacklog ||
-              next is HandsFreeCapturing ||
-              next is HandsFreeSuspendedByUser);
+      final shouldKeepAlive = !ttsPlaying && next is HandsFreeListening;
       if (shouldKeepAlive) {
         unawaited(_keepAlivePlayer?.start());
       } else {
@@ -162,10 +157,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         unawaited(_keepAlivePlayer?.stop());
       } else {
         final hfState = ref.read(handsFreeControllerProvider);
-        if (hfState is HandsFreeListening ||
-            hfState is HandsFreeWithBacklog ||
-            hfState is HandsFreeCapturing ||
-            hfState is HandsFreeSuspendedByUser) {
+        if (hfState is HandsFreeListening) {
           unawaited(_keepAlivePlayer?.start());
         }
       }
@@ -181,8 +173,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final isNewConversationDisabled = recState is RecordingActive ||
         recState is RecordingPaused ||
         recState is RecordingTranscribing ||
-        hfState is HandsFreeCapturing ||
-        hfState is HandsFreeStopping;
+        (hfState is HandsFreeListening &&
+            (hfState.phase == HandsFreeListeningPhase.capturing ||
+                hfState.phase == HandsFreeListeningPhase.stopping));
 
     return Scaffold(
       appBar: AppBar(
@@ -389,10 +382,6 @@ class _HandsFreeSection extends StatelessWidget {
 
   static List<SegmentJob> _jobsOf(HandsFreeSessionState s) => switch (s) {
         HandsFreeListening(:final jobs) => jobs,
-        HandsFreeWithBacklog(:final jobs) => jobs,
-        HandsFreeCapturing(:final jobs) => jobs,
-        HandsFreeStopping(:final jobs) => jobs,
-        HandsFreeSuspendedByUser(:final jobs) => jobs,
         HandsFreeSessionError(:final jobs) => jobs,
         HandsFreeIdle() => const [],
       };
@@ -418,12 +407,25 @@ class _HfStatusStrip extends StatelessWidget {
           requiresAppSettings: requiresAppSettings,
           onRetry: onRetry,
         ),
-      HandsFreeListening() => const _StatusText('Listening...'),
-      HandsFreeCapturing() => const _StatusText('Capturing...'),
-      HandsFreeStopping() => const _StatusText('Processing segment...'),
-      HandsFreeWithBacklog() => const _StatusText('Listening (jobs pending)...'),
-      HandsFreeSuspendedByUser() => const _StatusText('Listening paused'),
+      HandsFreeListening(:final phase, :final jobs) =>
+        _StatusText(_listeningStatusText(phase, jobs)),
       HandsFreeIdle() => const SizedBox.shrink(),
+    };
+  }
+
+  static String _listeningStatusText(
+    HandsFreeListeningPhase phase,
+    List<SegmentJob> jobs,
+  ) {
+    final hasBacklog = jobs.any((j) =>
+        j.state is QueuedForTranscription ||
+        j.state is Transcribing ||
+        j.state is Persisting);
+    return switch (phase) {
+      HandsFreeListeningPhase.capturing => 'Capturing...',
+      HandsFreeListeningPhase.stopping => 'Processing segment...',
+      HandsFreeListeningPhase.listening =>
+        hasBacklog ? 'Listening (jobs pending)...' : 'Listening...',
     };
   }
 }
@@ -529,7 +531,10 @@ class _MicButtonState extends ConsumerState<_MicButton> {
     final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
 
     if (recState is RecordingIdle) {
-      if (hfState is HandsFreeStopping) return; // no-op — wait for stop
+      if (hfState is HandsFreeListening &&
+          hfState.phase == HandsFreeListeningPhase.stopping) {
+        return; // no-op — wait for stop
+      }
       ref.read(latestAgentReplyProvider.notifier).state = null;
       await ref.read(ttsServiceProvider).stop();
       await hfCtrl.suspendForManualRecording();
@@ -549,7 +554,10 @@ class _MicButtonState extends ConsumerState<_MicButton> {
 
     // Only start if idle and engine not stopping.
     if (recState is! RecordingIdle) return;
-    if (hfState is HandsFreeStopping) return;
+    if (hfState is HandsFreeListening &&
+        hfState.phase == HandsFreeListeningPhase.stopping) {
+      return;
+    }
 
     _longPressActive = true;
     setState(() => _isPressAndHold = true);
@@ -580,7 +588,8 @@ class _MicButtonState extends ConsumerState<_MicButton> {
     final isRecording = recState is RecordingActive;
     final isPaused = recState is RecordingPaused;
     final isTranscribing = recState is RecordingTranscribing;
-    final isHfCapturing = hfState is HandsFreeCapturing;
+    final isHfCapturing = hfState is HandsFreeListening &&
+        hfState.phase == HandsFreeListeningPhase.capturing;
 
     // Clear press-and-hold flag when recording returns to idle or errors out.
     ref.listen<RecordingState>(recordingControllerProvider, (_, next) {
