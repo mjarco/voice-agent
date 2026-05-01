@@ -209,8 +209,17 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   }
 
   // Tracks whether the most recent engagement closure was due to a TTS
-  // suspend; only that path should auto-resume when TTS ends.
+  // suspend; only that path should auto-resume when TTS ends. (Legacy
+  // path: still in use for the rare case where TTS starts mid-listen.)
   bool _suspendedForTts = false;
+
+  // P037 v2 conversational-turn signal: set when [_disengageOneShot]
+  // closes the engagement after a captured segment, so the controller
+  // knows that the next TTS-end is the agent's reply to that turn and
+  // should re-open a fresh 30 s listening window. Cleared by
+  // [resumeAfterTts] after auto-resuming, by [startSession] when the
+  // user takes manual control, and by [stopSession] / pause flows.
+  bool _pendingConversationResume = false;
 
   /// Pauses the VAD engine while TTS is playing to prevent the mic from
   /// picking up speaker output. In the v2 one-shot model this collapses
@@ -224,13 +233,28 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
 
-  /// Re-engages after TTS finishes playing.
+  /// Re-engages after TTS finishes playing. Two paths:
+  ///
+  /// * Legacy: TTS started while engagement was open — [_suspendedForTts]
+  ///   is set. Resume restores the engagement.
+  /// * v2 conversational turn: per-segment one-shot already closed the
+  ///   engagement before TTS started, so [_suspendedForTts] is false.
+  ///   [_pendingConversationResume] (set by [_disengageOneShot]) signals
+  ///   that this TTS is the agent's reply to the user's captured
+  ///   utterance, so we open a fresh listening window.
   Future<void> resumeAfterTts() async {
-    if (!_suspendedForTts) return;
-    _suspendedForTts = false;
-    if (_suspendedForManualRecording) return;
-    if (_suspendedByUser) return;
-    _resumeEngagement();
+    if (_suspendedForManualRecording || _suspendedByUser) return;
+    if (state is! HandsFreeIdle) return;
+    if (_suspendedForTts) {
+      _suspendedForTts = false;
+      _pendingConversationResume = false;
+      _resumeEngagement();
+      return;
+    }
+    if (_pendingConversationResume) {
+      _pendingConversationResume = false;
+      _resumeEngagement();
+    }
   }
 
   /// Re-opens an engagement after a soft-suspend (TTS / manual recording /
@@ -316,6 +340,10 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     if (_jobs.isEmpty) {
       _jobCounter = 0;
     }
+    // Explicit user-initiated engage cancels any pending TTS-driven
+    // auto-resume — if the user clicks before the agent's reply lands,
+    // they're taking control of the next listening window.
+    _pendingConversationResume = false;
     _phase = HandsFreeListeningPhase.listening;
     _engagement.engage();
     _startEngine(_ref.read(appConfigProvider).vadConfig);
@@ -383,6 +411,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _suspendedForManualRecording = false;
     _suspendedByUser = false;
     _suspendedForTts = false;
+    _pendingConversationResume = false;
     _phase = HandsFreeListeningPhase.listening;
   }
 
@@ -411,6 +440,12 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _engine = null;
     if (!mounted) return;
     _phase = HandsFreeListeningPhase.listening;
+    // P037 v2: this disengage was driven by a captured segment, so the
+    // upcoming TTS reply (if any) should auto-resume into a fresh
+    // listening window. Setting the flag here covers both "VAD ended
+    // utterance" and "30 s timeout" — in the timeout case there's
+    // simply no jobs, so no TTS will play and the flag is harmless.
+    _pendingConversationResume = true;
     state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
 
