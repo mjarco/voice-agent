@@ -77,7 +77,9 @@ class FlutterForegroundTaskService implements BackgroundService {
   }
 
   @override
-  Future<void> stopService() async {
+  Future<void> stopService({
+    AudioSessionTarget target = AudioSessionTarget.playback,
+  }) async {
     if (!_running) return;
 
     if (Platform.isAndroid) {
@@ -85,8 +87,18 @@ class FlutterForegroundTaskService implements BackgroundService {
     }
 
     if (Platform.isIOS) {
+      // P037 v2: by default, when leaving the engaged listening state we
+      // switch to `.playback` (not `.ambient`). The app keeps the media
+      // participant slot so AirPods short-click reaches its
+      // MPRemoteCommandCenter targets — required for tap-to-engage.
+      // Callers that want the pre-P037 "fully yield to other apps" behaviour
+      // can opt into [AudioSessionTarget.ambient].
+      final method = switch (target) {
+        AudioSessionTarget.playback => 'setPlaybackOnly',
+        AudioSessionTarget.ambient => 'setAmbient',
+      };
       try {
-        await _audioSessionChannel.invokeMethod('setAmbient');
+        await _audioSessionChannel.invokeMethod(method);
       } on PlatformException {
         // Audio session revert failed — non-critical
       } on MissingPluginException {

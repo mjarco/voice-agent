@@ -56,7 +56,9 @@ class _TrackingBackgroundService implements BackgroundService {
   }
 
   @override
-  Future<void> stopService() async {
+  Future<void> stopService({
+    AudioSessionTarget target = AudioSessionTarget.playback,
+  }) async {
     calls.add('stopService');
     _running = false;
     lastStopCompleted = DateTime.now();
@@ -391,13 +393,13 @@ HandsFreeSessionState stateOf(ProviderContainer c) =>
 /// Extracts jobs from any [HandsFreeSessionState] variant that carries them.
 List<SegmentJob> jobsOf(HandsFreeSessionState s) => switch (s) {
       HandsFreeListening(:final jobs) => jobs,
-      HandsFreeWithBacklog(:final jobs) => jobs,
-      HandsFreeCapturing(:final jobs) => jobs,
-      HandsFreeStopping(:final jobs) => jobs,
-      HandsFreeSuspendedByUser(:final jobs) => jobs,
       HandsFreeSessionError(:final jobs) => jobs,
       HandsFreeIdle() => [],
     };
+
+/// True when [s] is [HandsFreeListening] with the given [phase].
+bool isPhase(HandsFreeSessionState s, HandsFreeListeningPhase phase) =>
+    s is HandsFreeListening && s.phase == phase;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -499,7 +501,7 @@ void main() {
       expect(stateOf(c), isA<HandsFreeListening>());
     });
 
-    test('EngineCapturing → HandsFreeCapturing', () async {
+    test('EngineCapturing → HandsFreeListening(phase=capturing)', () async {
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine);
       await ctrl(c).startSession();
@@ -507,7 +509,7 @@ void main() {
       engine.emit(const EngineCapturing());
       await Future.delayed(Duration.zero);
 
-      expect(stateOf(c), isA<HandsFreeCapturing>());
+      expect(isPhase(stateOf(c), HandsFreeListeningPhase.capturing), isTrue);
     });
 
     test('EngineCapturing → TtsService.stop() called', () async {
@@ -522,7 +524,7 @@ void main() {
       expect(spy.stopCount, 1);
     });
 
-    test('EngineStopping → HandsFreeStopping', () async {
+    test('EngineStopping → HandsFreeListening(phase=stopping)', () async {
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine);
       await ctrl(c).startSession();
@@ -530,10 +532,11 @@ void main() {
       engine.emit(const EngineStopping());
       await Future.delayed(Duration.zero);
 
-      expect(stateOf(c), isA<HandsFreeStopping>());
+      expect(isPhase(stateOf(c), HandsFreeListeningPhase.stopping), isTrue);
     });
 
-    test('EngineSegmentReady → job added, state becomes WithBacklog', () async {
+    test('EngineSegmentReady → job added, state still HandsFreeListening',
+        () async {
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine); // uses _HangingSttService
       await ctrl(c).startSession();
@@ -542,8 +545,8 @@ void main() {
       await Future.delayed(Duration.zero); // job transitions to Transcribing
 
       final s = stateOf(c);
-      expect(s, isA<HandsFreeWithBacklog>());
-      final jobs = (s as HandsFreeWithBacklog).jobs;
+      expect(s, isA<HandsFreeListening>());
+      final jobs = (s as HandsFreeListening).jobs;
       expect(jobs, hasLength(1));
       // After one microtask tick the job has transitioned from Queued → Transcribing.
       expect(jobs.first.state, isA<Transcribing>());
@@ -826,7 +829,7 @@ void main() {
       engine.emit(const EngineSegmentReady('/tmp/seg2.wav'));
       await Future.delayed(Duration.zero);
 
-      final jobs = (stateOf(c) as HandsFreeWithBacklog).jobs;
+      final jobs = (stateOf(c) as HandsFreeListening).jobs;
       expect(jobs, hasLength(2));
     });
 
@@ -937,7 +940,7 @@ void main() {
       }
       await Future.delayed(Duration.zero);
 
-      final jobs = (stateOf(c) as HandsFreeWithBacklog).jobs;
+      final jobs = (stateOf(c) as HandsFreeListening).jobs;
       expect(jobs, hasLength(4), reason: '5th segment must be dropped');
     });
 
@@ -989,6 +992,10 @@ void main() {
       final jobsBefore = jobsOf(stateOf(c)).length;
       await ctrl(c).suspendForManualRecording();
 
+      // P037 v2 collapses the suspended state into HandsFreeIdle, so the
+      // public job list isn't visible during the suspension. Resume to
+      // observe that the controller never cleared its internal _jobs list.
+      await ctrl(c).resumeAfterManualRecording();
       final jobsAfter = jobsOf(stateOf(c)).length;
       expect(jobsAfter, equals(jobsBefore),
           reason: 'suspendForManualRecording must not clear the job list');

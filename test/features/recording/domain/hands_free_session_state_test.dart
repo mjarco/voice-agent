@@ -4,14 +4,12 @@ import 'package:voice_agent/features/recording/domain/hands_free_session_state.d
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
 
 void main() {
-  group('HandsFreeSessionState sealed class exhaustiveness', () {
+  group('HandsFreeSessionState sealed class exhaustiveness (P037 v2)', () {
     final states = <HandsFreeSessionState>[
       const HandsFreeIdle(),
       const HandsFreeListening([]),
-      const HandsFreeCapturing([]),
-      const HandsFreeStopping([]),
-      const HandsFreeWithBacklog([]),
-      const HandsFreeSuspendedByUser([]),
+      const HandsFreeListening([], phase: HandsFreeListeningPhase.capturing),
+      const HandsFreeListening([], phase: HandsFreeListeningPhase.stopping),
       const HandsFreeSessionError(message: 'oops'),
     ];
 
@@ -22,19 +20,30 @@ void main() {
             break;
           case HandsFreeListening():
             break;
-          case HandsFreeCapturing():
-            break;
-          case HandsFreeStopping():
-            break;
-          case HandsFreeWithBacklog():
-            break;
-          case HandsFreeSuspendedByUser():
-            break;
           case HandsFreeSessionError():
             break;
         }
       }
-      expect(states.length, 7);
+      expect(states.length, 5);
+    });
+
+    test('HandsFreeListening defaults to listening phase', () {
+      const s = HandsFreeListening([]);
+      expect(s.phase, HandsFreeListeningPhase.listening);
+      expect(s.jobs, isEmpty);
+    });
+
+    test('HandsFreeListening preserves phase + jobs', () {
+      final job = SegmentJob(
+        id: 'j1',
+        label: 'Segment 1',
+        state: const Transcribing(),
+      );
+      final s = HandsFreeListening([job],
+          phase: HandsFreeListeningPhase.capturing);
+      expect(s.phase, HandsFreeListeningPhase.capturing);
+      expect(s.jobs, hasLength(1));
+      expect(s.jobs.first.id, 'j1');
     });
   });
 

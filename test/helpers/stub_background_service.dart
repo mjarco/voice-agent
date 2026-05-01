@@ -12,7 +12,10 @@ class StubBackgroundService implements BackgroundService {
   Future<void> startService() async => _running = true;
 
   @override
-  Future<void> stopService() async => _running = false;
+  Future<void> stopService({
+    AudioSessionTarget target = AudioSessionTarget.playback,
+  }) async =>
+      _running = false;
 
   @override
   Future<void> updateNotification({

@@ -150,6 +150,29 @@ class AudioSessionBridge {
                     details: nil
                 ))
             }
+        case "setPlaybackOnly":
+            // P037 v2: when leaving the engaged listening state, switch to
+            // .playback (NOT .ambient). With .playback, the app remains the
+            // active media participant, so AirPods media-button presses are
+            // routed to MPRemoteCommandCenter targets in the app — required
+            // for tap-to-engage. Mirrors `setPlayback` but does NOT save the
+            // prior category: this is the new resting state, not a temporary
+            // detour around TTS.
+            do {
+                NSLog("[AudioSessionDbg] setPlaybackOnly requested (current=\(session.category.rawValue))")
+                try? session.setActive(false, options: [.notifyOthersOnDeactivation])
+                try session.setCategory(.playback, mode: .spokenAudio, options: [])
+                try session.setActive(true)
+                NSLog("[AudioSessionDbg] setPlaybackOnly applied — category=\(session.category.rawValue) mode=\(session.mode.rawValue) options=\(session.categoryOptions.rawValue)")
+                result(nil)
+            } catch {
+                NSLog("[AudioSessionDbg] setPlaybackOnly FAILED: \(error.localizedDescription)")
+                result(FlutterError(
+                    code: "AUDIO_SESSION_ERROR",
+                    message: "Failed to set playbackOnly: \(error.localizedDescription)",
+                    details: nil
+                ))
+            }
         default:
             result(FlutterMethodNotImplemented)
         }
