@@ -93,8 +93,11 @@ class _MockFlutterTts implements FlutterTts {
   }
 
   // Unused FlutterTts members — not needed for these tests.
+  // Default to a settled Future so future-typed setters (e.g.
+  // setSharedInstance, setIosAudioCategory) don't throw a TypeError
+  // when the constructor fires them on iOS.
   @override
-  dynamic noSuchMethod(Invocation invocation) => null;
+  dynamic noSuchMethod(Invocation invocation) => Future<dynamic>.value(null);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
