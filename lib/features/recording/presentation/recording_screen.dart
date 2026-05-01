@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:voice_agent/core/audio/keep_alive_silent_player.dart';
+import 'package:voice_agent/core/audio/ambient_loop_player.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/media_button/media_button_port.dart';
 import 'package:voice_agent/core/media_button/media_button_provider.dart';
@@ -28,7 +28,7 @@ class RecordingScreen extends ConsumerStatefulWidget {
 class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   StreamSubscription<MediaButtonEvent>? _mediaButtonSub;
   MediaButtonPort? _mediaButtonPort;
-  KeepAliveSilentPlayer? _keepAlivePlayer;
+  AmbientLoopPlayer? _ambientPlayer;
 
   @override
   void initState() {
@@ -37,7 +37,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       if (mounted) {
         ref.read(handsFreeControllerProvider.notifier).startSession();
         _activateMediaButton();
-        _keepAlivePlayer = KeepAliveSilentPlayer();
+        _ambientPlayer = AmbientLoopPlayer();
+        // Initial Idle silence; the listener below switches to listening
+        // mode as soon as the controller transitions to HandsFreeListening.
+        unawaited(_ambientPlayer!.setMode(AmbientMode.idle));
       }
     });
   }
@@ -77,18 +80,21 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     } else if (recState is RecordingPaused) {
       debugPrint('[MediaButtonDbg] branch=resumeRecording');
       unawaited(recCtrl.resumeRecording());
-    } else if (hfState is HandsFreeListening) {
-      debugPrint('[MediaButtonDbg] branch=hfSuspend');
-      unawaited(hfCtrl.toggleUserSuspend().then((_) {
-        ref.read(toasterProvider).show('Paused');
-        ref.read(hapticServiceProvider).lightImpact();
-      }));
     } else if (hfState is HandsFreeIdle) {
-      debugPrint('[MediaButtonDbg] branch=hfResume');
-      unawaited(hfCtrl.toggleUserSuspend().then((_) {
-        ref.read(toasterProvider).show('Resumed');
+      // P037 v2: AirPods short-click in Idle → engage to Listening.
+      // This is the new entry point that replaces the legacy
+      // toggleUserSuspend "resume" branch.
+      debugPrint('[MediaButtonDbg] branch=engage');
+      unawaited(hfCtrl.startSession().then((_) {
+        ref.read(toasterProvider).show('Listening');
         ref.read(hapticServiceProvider).lightImpact();
       }));
+    } else if (hfState is HandsFreeListening) {
+      // iOS blocks media buttons during .playAndRecord with active mic, so
+      // this branch rarely fires in production. Kept as a no-op fallthrough
+      // for completeness — the listening session ends naturally via VAD or
+      // the 30 s auto-disengage timer (T6).
+      debugPrint('[MediaButtonDbg] branch=listening-noop (iOS-blocked path)');
     } else {
       debugPrint('[MediaButtonDbg] branch=noop');
     }
@@ -98,7 +104,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   void dispose() {
     _mediaButtonSub?.cancel();
     unawaited(_mediaButtonPort?.deactivate());
-    unawaited(_keepAlivePlayer?.dispose());
+    unawaited(_ambientPlayer?.dispose());
     super.dispose();
   }
 
@@ -135,33 +141,27 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       }
     });
 
-    // P034 follow-up: keep a silent loop playing while hands-free is in
-    // listening / capture / suspended-by-user states so iOS treats this
-    // app as actively producing audio output. Without this, AirPods
-    // hardware-button presses are rejected during listening (no playback
-    // → no media-button routing). Stopped during TTS (the TTS audio is
-    // already real output).
-    ref.listen<HandsFreeSessionState>(handsFreeControllerProvider, (prev, next) {
+    // P037 v2: AmbientLoopPlayer drives the audible engagement state.
+    //   Idle (no TTS)       → silence_loop.wav (volume 0) — keeps iOS
+    //                         treating us as active media participant.
+    //   Listening (no TTS)  → listening_loop.wav (low volume) — audible
+    //                         "I'm listening" cue.
+    //   TTS playing         → off (TTS is its own output).
+    void syncAmbient() {
       final ttsPlaying = ref.read(ttsPlayingProvider);
-      final shouldKeepAlive = !ttsPlaying && next is HandsFreeListening;
-      if (shouldKeepAlive) {
-        unawaited(_keepAlivePlayer?.start());
+      final hfState = ref.read(handsFreeControllerProvider);
+      AmbientMode target;
+      if (ttsPlaying) {
+        target = AmbientMode.off;
+      } else if (hfState is HandsFreeListening) {
+        target = AmbientMode.listening;
       } else {
-        unawaited(_keepAlivePlayer?.stop());
+        target = AmbientMode.idle;
       }
-    });
-    ref.listen<bool>(ttsPlayingProvider, (prev, next) {
-      // When TTS starts, silence loop must yield to TTS output.
-      // When TTS finishes and hands-free is listening, resume silence.
-      if (next) {
-        unawaited(_keepAlivePlayer?.stop());
-      } else {
-        final hfState = ref.read(handsFreeControllerProvider);
-        if (hfState is HandsFreeListening) {
-          unawaited(_keepAlivePlayer?.start());
-        }
-      }
-    });
+      unawaited(_ambientPlayer?.setMode(target));
+    }
+    ref.listen<HandsFreeSessionState>(handsFreeControllerProvider, (_, _) => syncAmbient());
+    ref.listen<bool>(ttsPlayingProvider, (_, _) => syncAmbient());
 
     final recState = ref.watch(recordingControllerProvider);
     final hfState = ref.watch(handsFreeControllerProvider);
