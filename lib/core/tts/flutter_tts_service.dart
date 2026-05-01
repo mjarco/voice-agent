@@ -14,6 +14,28 @@ class FlutterTtsService implements TtsService {
     _tts.setCompletionHandler(_onCompletion);
     _tts.setCancelHandler(_onCancel);
     _tts.setErrorHandler(_onError);
+    if (_isIOS) {
+      // P034 follow-up: tell flutter_tts to honour the app-managed
+      // AVAudioSession (set by AudioSessionBridge to .playAndRecord
+      // without .mixWithOthers). Without this, the plugin sets its own
+      // category (.playback with .mixWithOthers by default) which
+      // prevents the app from claiming exclusive media focus →
+      // hardware media-button events (AirPods togglePlayPause) never
+      // route to MediaButtonBridge.MPRemoteCommandCenter target.
+      // Awaited via fire-and-forget — these are setup calls and
+      // failure is non-fatal (tests stub the FlutterTts engine).
+      // ignore: discarded_futures
+      _tts.setSharedInstance(true);
+      // ignore: discarded_futures
+      _tts.setIosAudioCategory(
+        IosTextToSpeechAudioCategory.playAndRecord,
+        [
+          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+        ],
+        IosTextToSpeechAudioMode.defaultMode,
+      );
+    }
   }
 
   final FlutterTts _tts;
