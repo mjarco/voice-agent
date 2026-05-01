@@ -341,7 +341,11 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   @override
   Future<void> stopSession() async {
-    if (state is HandsFreeIdle) return;
+    // P037 v2 one-shot: when [HandsFreeIdle] is reached via per-segment
+    // disengage, [_jobs] may still hold in-flight transcripts. Treat
+    // [stopSession] as the explicit "drain everything" entry point —
+    // only short-circuit if both the engagement and the queue are quiet.
+    if (state is HandsFreeIdle && _jobs.isEmpty) return;
 
     // Flip the session-active flag early so SyncWorker stops draining in the
     // background while we tear down (P027, ADR-NET-002).
@@ -460,10 +464,12 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
       case EngineSegmentReady(wavPath: final path):
         _onSegmentReady(path);
-        // Note: engine continues listening after a segment in this
-        // commit. Full one-shot (disengage on segment ready) is
-        // deferred — it requires a coordinated update of ~25 tests
-        // that assume continuous mode.
+        // P037 v2 one-shot: VAD has emitted an utterance, so close the
+        // engagement. STT and persistence continue asynchronously on
+        // [_sttSlot]; the public state transitions to [HandsFreeIdle]
+        // (with the in-flight job preserved). Re-engaging requires a
+        // fresh user action (AirPods short-click / mic UI).
+        unawaited(_disengageOneShot());
 
       case EngineError(
           message: final msg,

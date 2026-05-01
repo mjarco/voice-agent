@@ -1,4 +1,4 @@
-.PHONY: deps vad-model analyze test verify clean setup doctor env run-web run-ios run-ios-dev run-macos simulator install-ios install-ios-dev help
+.PHONY: deps vad-model analyze test verify clean setup doctor env run-web run-ios run-ios-dev run-macos simulator install-ios install-ios-dev install-ios-dev-debug help
 
 MODEL_DIR := assets/models
 
@@ -105,30 +105,41 @@ run-macos:
 simulator:
 	@open -a Simulator
 
-## install-ios: Build and install stable on a physical iOS device (USB or wireless)
-install-ios:
-	@DEVICE_ID=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/^[ \t]+|[ \t]+$$/, "", $$2); print $$2}'); \
-	if [ -z "$$DEVICE_ID" ]; then \
-		echo "ERROR: No physical iOS device found."; \
-		echo "Connect your iPhone via USB or enable wireless debugging:"; \
-		echo "  Xcode > Window > Devices and Simulators > pair your device"; \
-		exit 1; \
-	fi; \
-	DEVICE_NAME=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/[ \t]+$$/, "", $$1); print $$1}'); \
-	echo "Installing stable on: $$DEVICE_NAME ($$DEVICE_ID)"; \
-	flutter run -d "$$DEVICE_ID" --flavor stable $(DART_DEFINE_FLAG)
+# Splits flutter-devices output on '•' (with surrounding spaces collapsed).
+# Field layout: $$1=name, $$2=id, $$3=platform, $$4=os version. The
+# previous `grep '• ios •'` filter was brittle — flutter pads the
+# platform column with whitespace so the literal pattern never matched
+# on recent versions. Using awk's regex field separator handles any
+# spacing.
+IOS_DEVICE_ID = flutter devices 2>/dev/null | awk -F' *• *' '$$3=="ios"{print $$2; exit}'
+IOS_DEVICE_NAME = flutter devices 2>/dev/null | awk -F' *• *' '$$3=="ios"{print $$1; exit}'
+IOS_NOT_FOUND = echo "ERROR: No physical iOS device found."; \
+	echo "Connect your iPhone via USB or enable wireless debugging:"; \
+	echo "  Xcode > Window > Devices and Simulators > pair your device"; \
+	exit 1
 
-## install-ios-dev: Build and install dev on a physical iOS device (USB or wireless)
+## install-ios: Build and install stable (release) on a physical iOS device
+install-ios:
+	@DEVICE_ID=$$($(IOS_DEVICE_ID)); \
+	if [ -z "$$DEVICE_ID" ]; then $(IOS_NOT_FOUND); fi; \
+	DEVICE_NAME=$$($(IOS_DEVICE_NAME)); \
+	echo "Installing stable (release) on: $$DEVICE_NAME ($$DEVICE_ID)"; \
+	flutter run -d "$$DEVICE_ID" --flavor stable --release $(DART_DEFINE_FLAG)
+
+## install-ios-dev: Build and install dev (release) on a physical iOS device
 install-ios-dev:
-	@DEVICE_ID=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/^[ \t]+|[ \t]+$$/, "", $$2); print $$2}'); \
-	if [ -z "$$DEVICE_ID" ]; then \
-		echo "ERROR: No physical iOS device found."; \
-		echo "Connect your iPhone via USB or enable wireless debugging:"; \
-		echo "  Xcode > Window > Devices and Simulators > pair your device"; \
-		exit 1; \
-	fi; \
-	DEVICE_NAME=$$(flutter devices 2>/dev/null | grep '• ios •' | head -1 | awk -F'•' '{gsub(/[ \t]+$$/, "", $$1); print $$1}'); \
-	echo "Installing dev on: $$DEVICE_NAME ($$DEVICE_ID)"; \
+	@DEVICE_ID=$$($(IOS_DEVICE_ID)); \
+	if [ -z "$$DEVICE_ID" ]; then $(IOS_NOT_FOUND); fi; \
+	DEVICE_NAME=$$($(IOS_DEVICE_NAME)); \
+	echo "Installing dev (release) on: $$DEVICE_NAME ($$DEVICE_ID)"; \
+	flutter run -d "$$DEVICE_ID" --flavor dev --release $(DART_DEFINE_FLAG)
+
+## install-ios-dev-debug: Build and install dev (debug, hot reload) on a physical iOS device
+install-ios-dev-debug:
+	@DEVICE_ID=$$($(IOS_DEVICE_ID)); \
+	if [ -z "$$DEVICE_ID" ]; then $(IOS_NOT_FOUND); fi; \
+	DEVICE_NAME=$$($(IOS_DEVICE_NAME)); \
+	echo "Installing dev (debug) on: $$DEVICE_NAME ($$DEVICE_ID)"; \
 	flutter run -d "$$DEVICE_ID" --flavor dev $(DART_DEFINE_FLAG)
 
 ## devices: List available devices
