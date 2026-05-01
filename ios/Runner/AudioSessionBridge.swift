@@ -101,13 +101,20 @@ class AudioSessionBridge {
                 // routes media-button events here. Trade-off: other apps'
                 // audio is interrupted during hands-free sessions, which is
                 // the intended behaviour for an assistant.
+                // P034 follow-up experiment B: mode .spokenAudio (instead of
+                // .default) signals to iOS that this is podcast/audiobook-style
+                // content, NOT a call. With .default mode + .playAndRecord,
+                // iOS treats the session as call-like and rejects hardware
+                // media-button presses (audible "boop" rejection sound on
+                // AirPods click). .spokenAudio explicitly tells iOS to treat
+                // play/pause hardware events as media controls.
                 try session.setCategory(
                     .playAndRecord,
-                    mode: .default,
+                    mode: .spokenAudio,
                     options: [.defaultToSpeaker, .allowBluetooth]
                 )
                 try session.setActive(true)
-                NSLog("[AudioSessionDbg] setPlayAndRecord applied — category=\(session.category.rawValue) options=\(session.categoryOptions.rawValue) active=true")
+                NSLog("[AudioSessionDbg] setPlayAndRecord applied — category=\(session.category.rawValue) mode=\(session.mode.rawValue) options=\(session.categoryOptions.rawValue) active=true")
                 result(nil)
             } catch {
                 NSLog("[AudioSessionDbg] setPlayAndRecord FAILED: \(error.localizedDescription)")
