@@ -150,8 +150,13 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                NSLog("[MediaButtonDbg] didBecomeActive — reactivating session + nowPlayingInfo")
-                self?.reactivateSession()
+                // Refresh-only: the audio session may already be owned
+                // by the recorder or the ambient player. Calling
+                // setActive(true) here races with their activation and
+                // surfaces as PlatformException("Failed to start audio")
+                // when AudioRecorder later attempts setCategory + setActive.
+                NSLog("[MediaButtonDbg] didBecomeActive — refreshing nowPlayingInfo")
+                self?.refreshNowPlayingInfo()
             }
         }
         if routeChangeObserver == nil {
@@ -187,11 +192,15 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
             let optsRaw = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) ?? 0
             let opts = AVAudioSession.InterruptionOptions(rawValue: optsRaw)
             NSLog("[MediaButtonDbg] interruption ended (shouldResume=\(opts.contains(.shouldResume)))")
-            // Reactivate regardless of `shouldResume` — for our use
-            // case (hardware-button routing) we always want the slot
-            // back; iOS will pause output if the user truly didn't
-            // intend to resume.
-            reactivateSession()
+            // Only call setActive(true) when iOS hands back the
+            // session via .shouldResume. Forcing reactivation in
+            // every case races with the recorder/ambient player and
+            // surfaces as PlatformException on the next startSession.
+            if opts.contains(.shouldResume) {
+                reactivateSession()
+            } else {
+                refreshNowPlayingInfo()
+            }
         @unknown default:
             break
         }
