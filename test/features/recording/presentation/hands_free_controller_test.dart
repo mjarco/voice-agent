@@ -536,18 +536,21 @@ void main() {
       expect(isPhase(stateOf(c), HandsFreeListeningPhase.stopping), isTrue);
     });
 
-    test('EngineSegmentReady → job added, state still HandsFreeListening',
-        () async {
+    test('EngineSegmentReady → job added, state collapses to HandsFreeIdle '
+        '(P037 v2 one-shot)', () async {
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine); // uses _HangingSttService
       await ctrl(c).startSession();
 
       engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
-      await Future.delayed(Duration.zero); // job transitions to Transcribing
+      // Two microtask ticks: one for job → Transcribing, one for the
+      // _disengageOneShot listener to land state in HandsFreeIdle.
+      await Future.delayed(Duration.zero);
+      await Future.delayed(Duration.zero);
 
       final s = stateOf(c);
-      expect(s, isA<HandsFreeListening>());
-      final jobs = (s as HandsFreeListening).jobs;
+      expect(s, isA<HandsFreeIdle>());
+      final jobs = (s as HandsFreeIdle).jobs;
       expect(jobs, hasLength(1));
       expect(jobs.first.state, isA<Transcribing>());
       expect(jobs.first.wavPath, '/tmp/seg1.wav');
@@ -794,17 +797,21 @@ void main() {
     });
 
     test('queued jobs rejected and WAVs cleaned up on stop', () async {
-      // Use a slow STT (50ms) so seg1 stays in Transcribing when stopSession
-      // is called, seg2 stays in QueuedForTranscription.
-      // stopSession() rejects seg2 synchronously, then drains seg1 (~50ms).
-      // Only seg1's transcript should be saved; seg2 never reaches STT.
+      // P037 v2 one-shot: each segment closes the engagement, so the
+      // backlog is built up across multiple engage→segment cycles.
+      // Use a slow STT (50ms) so seg1 stays in Transcribing while seg2
+      // sits Queued behind it on _sttSlot. stopSession() rejects seg2
+      // synchronously, then drains seg1 (~50ms).
       final stt = _SlowSttService(text: 'Hello');
       final storage = FakeStorageService();
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine, sttService: stt, storageService: storage);
       await ctrl(c).startSession();
-
       engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
+      await Future.delayed(Duration.zero);
+      await Future.delayed(Duration.zero); // disengage lands
+
+      await ctrl(c).startSession();
       engine.emit(const EngineSegmentReady('/tmp/seg2.wav'));
       await Future.delayed(Duration.zero); // seg1 → Transcribing, seg2 → Queued
 
@@ -821,16 +828,22 @@ void main() {
 
   group('job tracking', () {
     test('multiple segments → job list grows monotonically', () async {
+      // P037 v2: each segment closes the engagement, so multi-segment
+      // accumulation requires re-engaging between segments. The job
+      // list must persist across the engagement cycle.
       final engine = FakeHandsFreeEngine();
-      final c = makeContainer(engine: engine);
+      final c = makeContainer(engine: engine); // hanging STT keeps jobs in flight
       await ctrl(c).startSession();
-
       engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
+      await Future.delayed(Duration.zero);
+      await Future.delayed(Duration.zero); // disengage lands
+
+      await ctrl(c).startSession();
       engine.emit(const EngineSegmentReady('/tmp/seg2.wav'));
       await Future.delayed(Duration.zero);
+      await Future.delayed(Duration.zero);
 
-      final jobs = (stateOf(c) as HandsFreeListening).jobs;
-      expect(jobs, hasLength(2));
+      expect(jobsOf(stateOf(c)), hasLength(2));
     });
 
     test('no pending jobs → EngineListening maps to HandsFreeListening',
@@ -930,30 +943,38 @@ void main() {
 
     test('queue saturation: 5th segment is dropped (max 4 non-terminal jobs)',
         () async {
-      // Use a hanging STT so no jobs complete — all 4 slots stay occupied.
+      // P037 v2 one-shot: each engagement yields one segment. Build up
+      // five jobs by re-engaging between emits. Hanging STT keeps all
+      // accepted jobs in Transcribing so the queue stays saturated.
       final engine = FakeHandsFreeEngine();
       final c = makeContainer(engine: engine); // hanging STT default
-      await ctrl(c).startSession();
-
       for (var i = 1; i <= 5; i++) {
+        await ctrl(c).startSession();
         engine.emit(EngineSegmentReady('/tmp/seg$i.wav'));
+        await Future.delayed(Duration.zero);
+        await Future.delayed(Duration.zero); // disengage lands
       }
-      await Future.delayed(Duration.zero);
 
-      final jobs = (stateOf(c) as HandsFreeListening).jobs;
-      expect(jobs, hasLength(4), reason: '5th segment must be dropped');
+      expect(jobsOf(stateOf(c)), hasLength(4),
+          reason: '5th segment must be dropped (max 4 non-terminal jobs)');
     });
 
     test('jobs run serially (second job starts after first completes)',
         () async {
+      // P037 v2 one-shot: emit two segments via separate engagements.
+      // The serial _sttSlot guarantees seg2 starts only after seg1
+      // finishes, regardless of how the segments arrived.
       final stt = FakeSttService(text: 'Text');
       final storage = FakeStorageService();
       final engine = FakeHandsFreeEngine();
       final c =
           makeContainer(engine: engine, sttService: stt, storageService: storage);
       await ctrl(c).startSession();
-
       engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
+      await Future.delayed(Duration.zero);
+      await Future.delayed(Duration.zero);
+
+      await ctrl(c).startSession();
       engine.emit(const EngineSegmentReady('/tmp/seg2.wav'));
       await Future.delayed(const Duration(milliseconds: 100));
 
