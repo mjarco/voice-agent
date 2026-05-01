@@ -169,17 +169,122 @@ C and D are kept as documented alternatives but not in v1 scope.
 | 6 | Short-click during TTS. Verify TTS stops as before. | TTS stopped. |
 | 7 | Repeat 1–6 with AirPods 4 / wired headphones. | Behaviour documented; degradation mode documented. |
 
-## v2 fallback (Candidate B — tap-to-engage)
+## v2 — Candidate B (tap-to-engage, with audible state)
 
-If T2 of v1 demonstrates that `nextTrackCommand` is also blocked under `.playAndRecord` (i.e. iOS's call-mode check applies to the entire `MPRemoteCommandCenter`, not just the play/pause family), we abandon v1 and design a separate proposal for Candidate B. Sketch of the B-proposal scope:
+v1's hypothesis was disproved on 2026-05-01. v2 is the chosen path. The user-driven design adds an audible-state twist that turns the architectural change into a UX improvement, not just a workaround.
 
-- HandsFreeController lifecycle: replace `Listening / WithBacklog / Capturing / SuspendedByUser` with `Idle / Engaged(one-shot)`.
-- Default audio session: `.playback` with silent-loop keepalive.
-- Engagement: AirPods short-click (or on-screen mic button) → `setActive(false)` → `setCategory(.playAndRecord, mode: .spokenAudio, …)` → `setActive(true)` → start engine → capture one utterance → engine.stop() → reverse the audio-session flip → `.playback` resumes.
-- VAD parameters tuned for one-shot capture (probably more aggressive end-of-utterance than today's continuous tuning).
-- ADR-AUDIO-009 amendment.
+### State model
 
-Estimated cost for B: 5–8 PRs, plus a UX review of the new engagement model.
+The hands-free flow becomes a two-state machine driven by a single "engage" gesture (AirPods short-click in the default state, or the on-screen mic button as a fallback).
+
+```
+                     ┌──────────────────────────────────┐
+                     │ Idle                             │
+        ←── disengage│  audio session: .playback         │
+        ───────────► │  silence_loop.wav (volume 0)      │
+                     │  AirPods media buttons routed     │
+                     │  TTS replies play here normally   │
+                     └──────────────────────────────────┘
+                                  ↓ click engage
+                     ┌──────────────────────────────────┐
+                     │ Listening                        │
+                     │  audio session: .playAndRecord    │
+                     │  listening_loop.wav (low volume) │
+                     │  mic engine + VAD active          │
+                     │  30 s auto-disengage timer        │
+                     │  AirPods buttons BLOCKED by iOS   │
+                     └──────────────────────────────────┘
+```
+
+### State semantics
+
+**Idle (default).**
+- Audio session is `.playback` with no mic. Silent loop keeps the app the active media participant — `MPRemoteCommandCenter` routes hardware presses to us.
+- AirPods short-click → `engage()` transition.
+- TTS replies from the backend play here; nothing about playback changes (it already works).
+- Battery/CPU minimal — only the silent loop.
+
+**Listening.**
+- Audio session is `.playAndRecord` (mode `.spokenAudio`, no `.mixWithOthers`).
+- Silent loop swapped for `listening_loop.wav` — a subtle, low-volume ambient signal so the user *hears* that the mic is hot. Distinct from silence so engagement is unambiguous (no "is it on?" guessing).
+- Mic engine starts, VAD active. The first speech detected becomes the captured utterance.
+- 30 s auto-disengage timer starts on engage. Cancelled when VAD detects start-of-speech (capture takes as long as it takes); resets are unnecessary because once VAD fires, the session ends naturally on end-of-speech.
+- If the timer expires (no speech detected) → disengage to Idle without any utterance.
+- iOS still blocks AirPods buttons in this state — but it doesn't matter: the natural end is VAD or timer, not a user click. The user does NOT need a click to interrupt their own listening session.
+
+### Engagement triggers (Idle → Listening)
+
+| Trigger | Source | Available |
+|---|---|---|
+| AirPods short-click | hardware (MPRemoteCommandCenter `togglePlayPauseCommand` while app in `.playback`) | Always |
+| On-screen mic button | UI tap | Always (fallback) |
+| Voice wake-word | future | Out of scope for v2 |
+
+### Disengage triggers (Listening → Idle)
+
+| Trigger | Path | Notes |
+|---|---|---|
+| VAD end-of-speech | `HandsFreeEngine` reports utterance complete → `SyncWorker` enqueues → disengage immediately | The dominant case. Normal user flow. |
+| 30 s timer expiry | No speech detected; disengage | Protects against "click but didn't speak". Configurable via `AppConfig` later if user wants. |
+| Backend response → TTS plays | TTS reply itself triggers `.playback`-only context as today; no extra disengage needed since utterance flow already disengaged | Automatic. |
+| Manual disengage (UI button or voice "stop") | UI / domain event | Optional safety. |
+| App backgrounded | Standard iOS behaviour | Already handled by background service stop. |
+
+### Audio assets
+
+| Asset | Format | Purpose | Status |
+|---|---|---|---|
+| `assets/audio/silence_loop.wav` | 1 s mono PCM 44.1 kHz | Idle keepalive | exists (PR #270) |
+| `assets/audio/listening_loop.wav` | seamless loop, soft ambient pad / low hum, ~30–60 dB below TTS, no transients | Listening state cue | **new** — generate before T1 of implementation |
+
+The listening sample must:
+- Be **distinguishable** from silence so user notices state change.
+- Be **quiet enough** not to trigger our own VAD on the captured input mic. (AirPods echo cancellation handles most of it; sample volume should be low and tonal — broadband noise risks self-trigger.)
+- Be **seamlessly loopable** (no click between iterations).
+- Be **calm** — not a UI ding/beep that gets old fast. Soft pad / drone / breathing tone.
+
+Initial generation: 2 s sine pad at 220 Hz + 330 Hz, slow LFO amplitude, fade-in/out 100 ms each side, normalize to −30 dBFS. Ship as starting point; iterate on UX feedback.
+
+### Implementation tasks
+
+| # | Task | Layer | LOC |
+|---|---|---|---|
+| T1 | Generate `listening_loop.wav` + register in `pubspec.yaml`. | assets | n/a |
+| T2 | Audio session bridge: `setPlayback` already exists (PR #270). Add a state property tracking which sample is active. | `ios/Runner/AudioSessionBridge.swift` | ~10 |
+| T3 | New domain port: `EngagementController` with states `Idle / Listening / Capturing / Error` and methods `engage()`, `disengage()`, `tickTimeout()`. | `lib/features/recording/domain/` | ~80 |
+| T4 | Replace `HandsFreeController` continuous lifecycle with one-shot driven by `EngagementController`. Old states (`HandsFreeListening` / `WithBacklog` / `Capturing` / `SuspendedByUser`) collapse into `Idle` / `Listening`. | `lib/features/recording/presentation/hands_free_controller.dart` | ~150 (refactor) |
+| T5 | Audio output orchestration: extend `KeepAliveSilentPlayer` to a two-track manager (`AmbientLoopPlayer`) that swaps `silence_loop` ↔ `listening_loop` based on EngagementController state. Volume control hook for tuning. | `lib/core/audio/` | ~60 |
+| T6 | 30 s auto-disengage timer in `EngagementController`. Cancelled on VAD start-of-speech; expires → call `disengage()`. | `lib/features/recording/domain/` | ~20 |
+| T7 | Wire AirPods short-click during Idle → `engage()`. Reuse the existing `_onMediaButtonEvent` handler — the togglePlayPause case in Idle becomes `engage()` instead of "stop TTS" (TTS-stop branch still applies if TTS is currently playing). | `lib/features/recording/presentation/recording_screen.dart` | ~15 |
+| T8 | Update `HandsFreeSessionState` enum / sealed class to match new model. Migrate any consumers (UI conditionals, sync worker checks). | several | ~50 |
+| T9 | UI updates: idle screen shows "Tap to talk" or similar; listening screen shows "Listening… 28s remaining" or similar visual cue (synced with the audible loop). | `lib/features/recording/presentation/recording_screen.dart` | ~50 |
+| T10 | Tests: integration test of full Idle → engage → speech → capture → disengage cycle with mocked engine. Tests for 30 s timeout. Test for VAD cancelling timer. Audio session category assertions on each transition. | `test/` | ~150 |
+| T11 | Update ADR-AUDIO-009 (conditional iOS audio session) — the category is now driven by `EngagementController` state, not by a continuous "background service" assertion. | `docs/decisions/` | ~30 |
+| T12 | Delete dead code paths (`HandsFreeWithBacklog`, `HandsFreeCapturing` old, `SuspendedByUser`, suspendForTts complications). | various | -100 (delete) |
+
+### Acceptance criteria
+
+- Default state after app open: Idle. Silence loop running. AirPods media buttons route to app's `MPRemoteCommandCenter` targets (already verified in PR #270 path).
+- AirPods short-click in Idle: engage to Listening within 200 ms (audible state change confirms).
+- Listening loop audibly distinct from silence; user reports "I can hear that it's listening".
+- VAD captures user speech within 30 s of engage → utterance sent to backend → app disengages to Idle automatically.
+- No speech for 30 s → app disengages automatically. No user action required.
+- Backend TTS reply plays in Idle. AirPods short-click during TTS still stops TTS (PR #266-270 path preserved).
+- Battery: idle > listening only by mic engine cost (sample loop volume nearly zero); no measurable impact from audio session category churn.
+- VAD does NOT self-trigger on the listening loop sample (regression test on chosen sample).
+- iOS hardware-button handling during Listening is documented as "user does not click during listening" — UI is the disengage path if needed (rare, since timer + VAD cover normal flow).
+
+### Risk register (v2-specific)
+
+- **Listening sample triggers our own VAD.** Mitigation: tonal sample at low volume, AirPods echo cancellation. Test pre-ship by recording mic during loop playback and feeding into VAD model offline.
+- **Click to engage causes hardware audio "blip" before sample starts.** AVAudioPlayer warm-up time. Mitigation: pre-load asset on app start; transitions feel instantaneous after first cycle.
+- **30 s default unreasonable for some users.** Make it configurable via `AppConfig` in T6 implementation (default 30, range 5–120). Defer UI for it to follow-up.
+- **TTS interrupts engagement.** If user clicks during a TTS reply, current model: stop TTS, *don't engage* (user's intent was to interrupt, not start a new turn). Expose as preference if desired.
+- **Mid-utterance disengage timer race.** Already handled: timer is cancelled on VAD start-of-speech. Need an integration test that proves the cancel happens before timer expiry edge cases.
+
+### v2 cost estimate
+
+~5–8 PRs, ~600 LOC net (more deletions than additions in some areas). One independent code review (`/review-pr`) recommended on the EngagementController + audio session orchestration PR.
 
 ## Risk register
 
