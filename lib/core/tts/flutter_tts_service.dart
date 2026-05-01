@@ -2,14 +2,20 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:voice_agent/core/tts/ssml_lang_splitter.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 
 class FlutterTtsService implements TtsService {
-  FlutterTtsService({FlutterTts? tts, bool? isIOS})
-      : _tts = tts ?? FlutterTts(),
-        _isIOS = isIOS ?? Platform.isIOS {
+  FlutterTtsService({
+    FlutterTts? tts,
+    bool? isIOS,
+    MethodChannel? audioSessionChannel,
+  })  : _tts = tts ?? FlutterTts(),
+        _isIOS = isIOS ?? Platform.isIOS,
+        _audioSession = audioSessionChannel ??
+            const MethodChannel('com.voiceagent/audio_session') {
     _tts.setStartHandler(_onStart);
     _tts.setCompletionHandler(_onCompletion);
     _tts.setCancelHandler(_onCancel);
@@ -28,11 +34,8 @@ class FlutterTtsService implements TtsService {
       _tts.setSharedInstance(true);
       // ignore: discarded_futures
       _tts.setIosAudioCategory(
-        IosTextToSpeechAudioCategory.playAndRecord,
-        [
-          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
-          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
-        ],
+        IosTextToSpeechAudioCategory.playback,
+        [],
         IosTextToSpeechAudioMode.defaultMode,
       );
     }
@@ -40,7 +43,36 @@ class FlutterTtsService implements TtsService {
 
   final FlutterTts _tts;
   final bool _isIOS;
+  final MethodChannel _audioSession;
   final ValueNotifier<bool> _speaking = ValueNotifier(false);
+
+  /// P034 follow-up: switch the iOS audio session to .playback for the
+  /// duration of TTS so that hardware media-button presses (AirPods
+  /// click) reach our MPRemoteCommand handlers. With .playAndRecord
+  /// active iOS treats the session as call-like and rejects play/pause
+  /// hardware presses (audible "boop" rejection sound). Calls are
+  /// best-effort: failures don't abort speech.
+  Future<void> _acquirePlaybackFocus() async {
+    if (!_isIOS) return;
+    try {
+      await _audioSession.invokeMethod<void>('setPlayback');
+    } on PlatformException catch (e) {
+      debugPrint('[TtsDbg] setPlayback failed: ${e.message}');
+    } on MissingPluginException {
+      // Bridge not registered (tests etc.) — proceed without focus switch.
+    }
+  }
+
+  Future<void> _releasePlaybackFocus() async {
+    if (!_isIOS) return;
+    try {
+      await _audioSession.invokeMethod<void>('restoreAudioSession');
+    } on PlatformException catch (e) {
+      debugPrint('[TtsDbg] restoreAudioSession failed: ${e.message}');
+    } on MissingPluginException {
+      // Bridge not registered — no state to restore.
+    }
+  }
 
   @override
   ValueListenable<bool> get isSpeaking => _speaking;
@@ -58,6 +90,11 @@ class FlutterTtsService implements TtsService {
   Future<void> speak(String text, {String? languageCode}) async {
     final segments = SsmlLangSplitter.split(text);
     if (segments.isEmpty) return;
+
+    // P034 follow-up: acquire .playback session BEFORE the first speak so
+    // hardware media buttons route to MPRemoteCommand during the entire
+    // utterance. Released on completion / cancel / error / stop().
+    await _acquirePlaybackFocus();
 
     // Single segment with no explicit language override: follow the original
     // path exactly (zero behavior change for untagged replies).
@@ -127,6 +164,8 @@ class FlutterTtsService implements TtsService {
     if (queue == null) {
       // No active queue — single-utterance path or already cleared.
       _speaking.value = false;
+      // ignore: discarded_futures
+      _releasePlaybackFocus();
       return;
     }
 
@@ -140,6 +179,8 @@ class FlutterTtsService implements TtsService {
     } else {
       // Queue drained.
       _activeQueue = null;
+      // ignore: discarded_futures
+      _releasePlaybackFocus();
       if (!queue.doneCompleter.isCompleted) {
         queue.doneCompleter.complete();
       }
@@ -155,6 +196,8 @@ class FlutterTtsService implements TtsService {
       queue.doneCompleter.complete();
     }
     _speaking.value = false;
+    // ignore: discarded_futures
+    _releasePlaybackFocus();
   }
 
   void _onError(dynamic error) {
@@ -165,6 +208,8 @@ class FlutterTtsService implements TtsService {
       queue.doneCompleter.complete();
     }
     _speaking.value = false;
+    // ignore: discarded_futures
+    _releasePlaybackFocus();
   }
 
   @override
@@ -185,6 +230,10 @@ class FlutterTtsService implements TtsService {
 
     // (4) Ensure _speaking is false.
     if (_speaking.value) _speaking.value = false;
+
+    // (5) Release the .playback session so .playAndRecord (or whatever
+    // was active before TTS) is restored.
+    await _releasePlaybackFocus();
     debugPrint('[TtsDbg] stop() done speaking=${_speaking.value}');
   }
 

@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:ui';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:voice_agent/core/tts/flutter_tts_service.dart';
@@ -103,6 +103,15 @@ class _MockFlutterTts implements FlutterTts {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
+  // FlutterTtsService.speak invokes a MethodChannel for audio-session
+  // focus switching (P034 follow-up). The test binding must be ready
+  // before any platform-channel call. The handler returns null so the
+  // call is a no-op in tests.
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const audioSessionChannel = MethodChannel('com.voiceagent/audio_session');
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(audioSessionChannel, (call) async => null);
+
   group('FlutterTtsService', () {
     test('speak() with explicit languageCode calls setLanguage with that code',
         () async {
