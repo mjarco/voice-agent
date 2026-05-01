@@ -55,7 +55,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // engine down and reflect it in the public state. The re-entry
     // guard (`state is! HandsFreeIdle`) prevents recursion when
     // [_disengageOneShot] itself drives engagement to Idle.
-    _engagementSub = _engagement.stream.listen((engagementState) {
+    _engagementSub = _engagement.stream.listen((_) {
       // Guard against the controller being disposed mid-flight; stream
       // events may still arrive on the same microtask.
       if (!mounted) return;
@@ -140,7 +140,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _engine = null;
     _engagement.disengage();
     _suspendedForManualRecording = true;
-    state = const HandsFreeIdle();
+    state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
 
   /// Toggles user-initiated suspension. Called by media button dispatch.
@@ -170,7 +170,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
     _suspendedByUser = true;
     await _closeEngagement(toAmbientFor: AudioSessionTarget.playback);
-    state = const HandsFreeIdle();
+    state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
 
   Future<void> resumeByUser() async {
@@ -221,7 +221,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
     _suspendedForTts = true;
     await _closeEngagement(toAmbientFor: AudioSessionTarget.playback);
-    state = const HandsFreeIdle();
+    state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
 
   /// Re-engages after TTS finishes playing.
@@ -614,12 +614,19 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  /// Returns a [HandsFreeListening] state with the current jobs and
-  /// engine-driven [_phase]. Replaces the pre-v2 split between
-  /// `HandsFreeListening` and `HandsFreeWithBacklog` (the distinction is
-  /// recovered by inspecting `jobs` if needed).
+  /// Returns the current public state with an up-to-date [_jobs]
+  /// snapshot. Reads [_engagement.state] (not the current
+  /// [HandsFreeSessionState]) to decide between idle/listening — that
+  /// way job-progression updates from the async [_sttSlot] don't flip
+  /// [HandsFreeIdle] back to [HandsFreeListening] after a one-shot
+  /// disengage, while engine events that arrive after [startSession]
+  /// (when the public state is still the seeded [HandsFreeIdle]) still
+  /// drive the controller into [HandsFreeListening] correctly.
   HandsFreeSessionState _listeningOrBacklog() {
     final jobs = List<SegmentJob>.unmodifiable(_jobs);
+    if (_engagement.state is EngagementIdle) {
+      return HandsFreeIdle(jobs: jobs);
+    }
     return HandsFreeListening(jobs, phase: _phase);
   }
 

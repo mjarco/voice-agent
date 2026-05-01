@@ -17,6 +17,7 @@ import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
+import 'package:voice_agent/features/recording/domain/engagement_controller.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
@@ -1061,4 +1062,95 @@ void main() {
           reason: 'resumeAfterManualRecording must not reset _jobs');
     });
   });
+
+  // ── Auto-disengage with in-flight jobs (P037 v2 regression) ────────────────
+  group('auto-disengage with in-flight jobs', () {
+    test('STT completing after auto-disengage keeps state HandsFreeIdle',
+        () async {
+      // Reproduces the regression where _processJob's
+      // `state = _listeningOrBacklog()` flipped HandsFreeIdle back to
+      // HandsFreeListening when a job state advanced (Transcribing →
+      // Persisting → Completed) while engagement was already closed.
+      final engine = FakeHandsFreeEngine();
+      final sttCompleter = Completer<TranscriptResult>();
+      final stt = _ControllableSttService(sttCompleter);
+      final storage = FakeStorageService();
+      final engagement =
+          EngagementController(timeout: const Duration(milliseconds: 5));
+
+      final container = ProviderContainer(overrides: [
+        handsFreeEngineProvider.overrideWithValue(engine),
+        appConfigServiceProvider.overrideWithValue(
+          _FixedConfigService(const AppConfig(
+            groqApiKey: 'gsk_test_valid',
+            apiUrl: 'https://test.example.com/api',
+          )),
+        ),
+        recordingControllerProvider.overrideWith(
+          (ref) => _IdleRecordingController(ref),
+        ),
+        sttServiceProvider.overrideWithValue(stt),
+        storageServiceProvider.overrideWithValue(storage),
+        ttsServiceProvider.overrideWithValue(_StubTtsService()),
+        audioFeedbackServiceProvider.overrideWithValue(
+          _StubAudioFeedbackService(),
+        ),
+        backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+        handsFreeControllerProvider.overrideWith(
+          (ref) => HandsFreeController(ref, engagement: engagement),
+        ),
+      ]);
+      addTearDown(container.dispose);
+
+      await container.read(handsFreeControllerProvider.notifier).startSession();
+      engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
+      await Future.delayed(Duration.zero); // Queued → Transcribing
+
+      // Trigger the 30 s auto-disengage. Listener microtask runs and the
+      // controller should transition to HandsFreeIdle preserving the
+      // Transcribing job in `jobs`.
+      engagement.tickTimeout();
+      await Future.delayed(const Duration(milliseconds: 10));
+      expect(
+        container.read(handsFreeControllerProvider),
+        isA<HandsFreeIdle>(),
+        reason: 'auto-disengage should land in HandsFreeIdle',
+      );
+
+      // Now finish STT — this triggers the original bug if
+      // _listeningOrBacklog ignores the current Idle state.
+      sttCompleter.complete(TranscriptResult(
+        text: 'Hello',
+        segments: [],
+        detectedLanguage: 'en',
+        audioDurationMs: 1000,
+      ));
+      await Future.delayed(Duration.zero);
+      await Future.delayed(Duration.zero);
+
+      final after = container.read(handsFreeControllerProvider);
+      expect(after, isA<HandsFreeIdle>(),
+          reason:
+              'job advances must not flip HandsFreeIdle back to Listening');
+      final jobs = jobsOf(after);
+      expect(jobs, hasLength(1));
+      expect(jobs.first.state, isA<Completed>(),
+          reason: 'job state must reflect post-STT progression');
+    });
+  });
+}
+
+class _ControllableSttService implements SttService {
+  _ControllableSttService(this._completer);
+  final Completer<TranscriptResult> _completer;
+
+  @override
+  Future<TranscriptResult> transcribe(String wavPath,
+          {String? languageCode}) =>
+      _completer.future;
+
+  @override
+  Future<bool> isModelLoaded() async => true;
+  @override
+  Future<void> loadModel() async {}
 }
