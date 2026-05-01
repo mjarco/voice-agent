@@ -33,10 +33,21 @@ class AudioSessionBridge {
         case "setPlayAndRecord":
             do {
                 NSLog("[AudioSessionDbg] setPlayAndRecord requested")
+                // NOTE: .mixWithOthers was removed (P034 follow-up). With it set,
+                // iOS does NOT route hardware media-button events
+                // (togglePlayPause from AirPods etc.) to this app — the
+                // currently "now playing" app (Spotify, podcasts, …) keeps
+                // the focus, so the user's headset button cannot interrupt
+                // TTS or pause/resume the hands-free recording. Without
+                // mixWithOthers, the app claims exclusive media focus when
+                // playAndRecord is activated; iOS pauses other audio and
+                // routes media-button events here. Trade-off: other apps'
+                // audio is interrupted during hands-free sessions, which is
+                // the intended behaviour for an assistant.
                 try session.setCategory(
                     .playAndRecord,
                     mode: .default,
-                    options: [.defaultToSpeaker, .allowBluetooth, .mixWithOthers]
+                    options: [.defaultToSpeaker, .allowBluetooth]
                 )
                 try session.setActive(true)
                 NSLog("[AudioSessionDbg] setPlayAndRecord applied — category=\(session.category.rawValue) options=\(session.categoryOptions.rawValue) active=true")
