@@ -27,9 +27,66 @@ class AudioSessionBridge {
         }
     }
 
+    /// Saved category when transitioning into TTS playback. Used by
+    /// restoreAudioSession() to flip back to whatever the app had set
+    /// before TTS started. Nil means "no saved state — caller must
+    /// explicitly pick a category".
+    private var savedCategoryBeforeTtsPlayback: AVAudioSession.Category?
+    private var savedCategoryOptionsBeforeTtsPlayback: AVAudioSession.CategoryOptions?
+
     private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let session = AVAudioSession.sharedInstance()
         switch call.method {
+        case "setPlayback":
+            // P034 follow-up: during TTS playback, switch to .playback (no
+            // microphone). With .playAndRecord active, iOS treats the
+            // session as a "call/voice" mode and rejects hardware media
+            // button presses — user hears the iOS rejection sound when
+            // pressing AirPods. Switching to .playback during TTS makes
+            // iOS route the press as media play/pause normally.
+            // Saves the prior category so restoreAudioSession can flip back.
+            do {
+                NSLog("[AudioSessionDbg] setPlayback requested (current=\(session.category.rawValue))")
+                self.savedCategoryBeforeTtsPlayback = session.category
+                self.savedCategoryOptionsBeforeTtsPlayback = session.categoryOptions
+                try session.setCategory(.playback, mode: .spokenAudio, options: [])
+                try session.setActive(true)
+                NSLog("[AudioSessionDbg] setPlayback applied — category=\(session.category.rawValue) options=\(session.categoryOptions.rawValue)")
+                result(nil)
+            } catch {
+                NSLog("[AudioSessionDbg] setPlayback FAILED: \(error.localizedDescription)")
+                result(FlutterError(
+                    code: "AUDIO_SESSION_ERROR",
+                    message: "Failed to set playback: \(error.localizedDescription)",
+                    details: nil
+                ))
+            }
+        case "restoreAudioSession":
+            // Restore the category captured by the most recent setPlayback
+            // call. If none was captured (caller never set playback or
+            // restore was already called), this is a no-op.
+            do {
+                guard let savedCategory = self.savedCategoryBeforeTtsPlayback else {
+                    NSLog("[AudioSessionDbg] restoreAudioSession called but nothing was saved — no-op")
+                    result(nil)
+                    return
+                }
+                let savedOptions = self.savedCategoryOptionsBeforeTtsPlayback ?? []
+                NSLog("[AudioSessionDbg] restoreAudioSession requested (target=\(savedCategory.rawValue) options=\(savedOptions.rawValue))")
+                try session.setCategory(savedCategory, mode: .default, options: savedOptions)
+                try session.setActive(true)
+                self.savedCategoryBeforeTtsPlayback = nil
+                self.savedCategoryOptionsBeforeTtsPlayback = nil
+                NSLog("[AudioSessionDbg] restoreAudioSession applied — category=\(session.category.rawValue) options=\(session.categoryOptions.rawValue)")
+                result(nil)
+            } catch {
+                NSLog("[AudioSessionDbg] restoreAudioSession FAILED: \(error.localizedDescription)")
+                result(FlutterError(
+                    code: "AUDIO_SESSION_ERROR",
+                    message: "Failed to restore: \(error.localizedDescription)",
+                    details: nil
+                ))
+            }
         case "setPlayAndRecord":
             do {
                 NSLog("[AudioSessionDbg] setPlayAndRecord requested")
