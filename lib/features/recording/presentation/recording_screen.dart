@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:voice_agent/core/audio/keep_alive_silent_player.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/media_button/media_button_port.dart';
 import 'package:voice_agent/core/media_button/media_button_provider.dart';
@@ -27,6 +28,7 @@ class RecordingScreen extends ConsumerStatefulWidget {
 class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   StreamSubscription<MediaButtonEvent>? _mediaButtonSub;
   MediaButtonPort? _mediaButtonPort;
+  KeepAliveSilentPlayer? _keepAlivePlayer;
 
   @override
   void initState() {
@@ -35,6 +37,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       if (mounted) {
         ref.read(handsFreeControllerProvider.notifier).startSession();
         _activateMediaButton();
+        _keepAlivePlayer = KeepAliveSilentPlayer();
       }
     });
   }
@@ -97,6 +100,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   void dispose() {
     _mediaButtonSub?.cancel();
     unawaited(_mediaButtonPort?.deactivate());
+    unawaited(_keepAlivePlayer?.dispose());
     super.dispose();
   }
 
@@ -129,6 +133,41 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         unawaited(hfCtrl.suspendForTts());
       } else {
         unawaited(hfCtrl.resumeAfterTts());
+      }
+    });
+
+    // P034 follow-up: keep a silent loop playing while hands-free is in
+    // listening / capture / suspended-by-user states so iOS treats this
+    // app as actively producing audio output. Without this, AirPods
+    // hardware-button presses are rejected during listening (no playback
+    // → no media-button routing). Stopped during TTS (the TTS audio is
+    // already real output).
+    ref.listen<HandsFreeSessionState>(handsFreeControllerProvider, (prev, next) {
+      final ttsPlaying = ref.read(ttsPlayingProvider);
+      final shouldKeepAlive = !ttsPlaying &&
+          (next is HandsFreeListening ||
+              next is HandsFreeWithBacklog ||
+              next is HandsFreeCapturing ||
+              next is HandsFreeSuspendedByUser);
+      if (shouldKeepAlive) {
+        unawaited(_keepAlivePlayer?.start());
+      } else {
+        unawaited(_keepAlivePlayer?.stop());
+      }
+    });
+    ref.listen<bool>(ttsPlayingProvider, (prev, next) {
+      // When TTS starts, silence loop must yield to TTS output.
+      // When TTS finishes and hands-free is listening, resume silence.
+      if (next) {
+        unawaited(_keepAlivePlayer?.stop());
+      } else {
+        final hfState = ref.read(handsFreeControllerProvider);
+        if (hfState is HandsFreeListening ||
+            hfState is HandsFreeWithBacklog ||
+            hfState is HandsFreeCapturing ||
+            hfState is HandsFreeSuspendedByUser) {
+          unawaited(_keepAlivePlayer?.start());
+        }
       }
     });
 
