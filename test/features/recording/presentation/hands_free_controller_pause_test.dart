@@ -35,6 +35,9 @@ import '../../../helpers/stub_background_service.dart';
 // ── FakeHandsFreeEngine ──────────────────────────────────────────────────────
 
 class _FakeHandsFreeEngine implements HandsFreeEngine {
+  @override
+  Future<void> setCaptureGate({required bool open}) async {}
+
   bool permissionGranted = true;
   bool started = false;
   bool stopped = false;
@@ -279,7 +282,11 @@ void main() {
   });
 
   group('resumeByUser', () {
-    test('from suspended transitions to HandsFreeListening', () async {
+    test('from suspended transitions to HandsFreeListening (gate model)',
+        () async {
+      // Always-on capture model: suspendByUser closes the gate and
+      // disengages, but the recorder + engine stay alive. resumeByUser
+      // reopens the gate without restarting the engine.
       final engine = _FakeHandsFreeEngine();
       final c = _makeContainer(engine: engine);
       await _ctrl(c).startSession();
@@ -288,12 +295,13 @@ void main() {
 
       await _ctrl(c).suspendByUser();
       expect(_stateOf(c), isA<HandsFreeIdle>());
+      // Engine stays running across user suspend; it was never stopped.
+      expect(engine.stopped, isFalse,
+          reason: 'gate model: engine must NOT be stopped on suspend');
 
-      engine.started = false;
       await _ctrl(c).resumeByUser();
 
       expect(_stateOf(c), isA<HandsFreeListening>());
-      expect(engine.started, isTrue, reason: 'engine must restart on resume');
     });
 
     test('is no-op when not suspended by user', () async {
@@ -405,60 +413,52 @@ void main() {
   });
 
   group('conversation-turn auto-resume after TTS (P037 v2)', () {
-    test('TTS-end after per-segment one-shot re-engages a fresh '
-        'listening window', () async {
-      // Reproduces the user-reported gap: per-segment one-shot closes
-      // the engagement immediately, so by the time TTS plays the
-      // controller is already HandsFreeIdle and the legacy
-      // `_suspendedForTts` flag is never set. The conversational
-      // signal `_pendingConversationResume` (set by _disengageOneShot)
-      // must drive the resume instead.
+    test('TTS-end after per-segment one-shot reopens the gate', () async {
+      // Always-on capture model: per-segment one-shot closes the gate
+      // (and disengages); TTS plays; on TTS-end the gate reopens. The
+      // engine is NOT stopped or restarted — only the chunk gate
+      // toggles. State transitions to HandsFreeListening.
       final engine = _FakeHandsFreeEngine();
       final c = _makeContainer(engine: engine);
 
       await _ctrl(c).startSession();
       engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
-      // Two microtask ticks: one for job → Transcribing, one for
-      // _disengageOneShot to land HandsFreeIdle with the flag set.
+      // Two microtask ticks: one for job → Transcribing, one for the
+      // _disengageOneShot gate-close to land HandsFreeIdle.
       await Future.delayed(Duration.zero);
       await Future.delayed(Duration.zero);
       expect(_stateOf(c), isA<HandsFreeIdle>(),
           reason: 'per-segment one-shot must close engagement');
+      // Engine is NOT stopped — it stays alive with gate closed.
+      expect(engine.stopped, isFalse,
+          reason: 'gate model: engine must stay alive across disengage');
 
-      engine.startCount = 0;
-
-      // No suspendForTts in v2 — the recording_screen still calls it
-      // when ttsPlayingProvider flips to true, but it short-circuits
-      // because state is already Idle. So we only need to fire the
-      // resume callback to model "TTS just ended."
+      // TTS-end (model the listener firing).
       await _ctrl(c).resumeAfterTts();
 
-      expect(engine.startCount, 1,
-          reason: 'TTS-end after captured utterance must re-engage');
+      expect(_stateOf(c), isA<HandsFreeListening>(),
+          reason: 'TTS-end after captured utterance must reopen the gate');
     });
 
-    test('does NOT auto-resume when no segment was captured (cold TTS)',
-        () async {
-      // If TTS plays without a preceding captured segment (e.g. an
-      // unrelated background announcement), we must not silently open
-      // a listening window — that would steal the mic with no user
-      // intent.
+    test('cold TTS-end (no prior engagement) is a no-op', () async {
+      // The user has never engaged in this app session, so _engine is
+      // null. resumeAfterTts must not silently spin up the recorder
+      // from cold — that would surprise the user with an unexpected
+      // mic activation.
       final engine = _FakeHandsFreeEngine();
       final c = _makeContainer(engine: engine);
 
-      // Controller starts in HandsFreeIdle, never engaged → no flag.
-      engine.startCount = 0;
       await _ctrl(c).resumeAfterTts();
 
-      expect(engine.startCount, 0,
-          reason: 'cold TTS-end (no captured segment) must NOT engage');
+      // No engine started, state is still Idle.
+      expect(engine.started, isFalse);
+      expect(_stateOf(c), isA<HandsFreeIdle>());
     });
 
-    test('user re-engaging before TTS-end clears the conversation flag',
-        () async {
-      // User clicks AirPods between disengage and TTS-end. They've
-      // taken control. The deferred TTS-end must NOT trigger a second
-      // engage on top of the user's manual one.
+    test('user re-engaging before TTS-end keeps the manual engage', () async {
+      // User pressed VolumeUp between disengage and TTS-end. They are
+      // already engaged via the explicit press. The deferred TTS-end
+      // must not crash or break the engaged state.
       final engine = _FakeHandsFreeEngine();
       final c = _makeContainer(engine: engine);
 
@@ -468,19 +468,18 @@ void main() {
       await Future.delayed(Duration.zero);
       expect(_stateOf(c), isA<HandsFreeIdle>());
 
-      // User clicks again before TTS plays.
+      // User VolumeUp's again before TTS plays — manually re-engages.
       await _ctrl(c).startSession();
       engine.emit(const EngineListening());
       await Future.delayed(Duration.zero);
       expect(_stateOf(c), isA<HandsFreeListening>());
-      engine.startCount = 0;
 
-      // Now (delayed) TTS-end fires. Should be a no-op — we're
-      // already engaged via the user's manual click.
+      // Now (delayed) TTS-end fires. resumeAfterTts short-circuits on
+      // `state is! HandsFreeIdle`, so no double engage.
       await _ctrl(c).resumeAfterTts();
 
-      expect(engine.startCount, 0,
-          reason: 'manual re-engage must clear pending conversation flag');
+      expect(_stateOf(c), isA<HandsFreeListening>(),
+          reason: 'state stays Listening; TTS-end is a no-op while engaged');
     });
   });
 

@@ -8,6 +8,8 @@ import 'package:voice_agent/core/audio/ambient_loop_player.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/media_button/media_button_port.dart';
 import 'package:voice_agent/core/media_button/media_button_provider.dart';
+import 'package:voice_agent/core/volume_button/volume_button_port.dart';
+import 'package:voice_agent/core/volume_button/volume_button_provider.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
@@ -28,6 +30,8 @@ class RecordingScreen extends ConsumerStatefulWidget {
 class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   StreamSubscription<MediaButtonEvent>? _mediaButtonSub;
   MediaButtonPort? _mediaButtonPort;
+  StreamSubscription<VolumeButtonEvent>? _volumeButtonSub;
+  VolumeButtonPort? _volumeButtonPort;
   AmbientLoopPlayer? _ambientPlayer;
 
   @override
@@ -41,8 +45,15 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         // is removed — that was the continuous-listening contract from
         // the pre-v2 model.
         _activateMediaButton();
-        _ambientPlayer = AmbientLoopPlayer();
-        unawaited(_ambientPlayer!.setMode(AmbientMode.idle));
+        _activateVolumeButton();
+        // EXPERIMENT: AmbientLoopPlayer disabled. `audioplayers` package
+        // takes ownership of the AVAudioSession on play/stop, which tears
+        // down the recorder's I/O unit and kills the mic — exactly the
+        // failure mode the always-on capture model is trying to avoid.
+        // Without this player there is no listening tone; will be added
+        // back via a different audio path once gate semantics are stable.
+        // _ambientPlayer = AmbientLoopPlayer();
+        // unawaited(_ambientPlayer!.setMode(AmbientMode.idle));
       }
     });
   }
@@ -51,6 +62,57 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     _mediaButtonPort = ref.read(mediaButtonProvider);
     unawaited(_mediaButtonPort!.activate());
     _mediaButtonSub = _mediaButtonPort!.events.listen(_onMediaButtonEvent);
+  }
+
+  void _activateVolumeButton() {
+    _volumeButtonPort = ref.read(volumeButtonProvider);
+    unawaited(_volumeButtonPort!.activate());
+    _volumeButtonSub = _volumeButtonPort!.events.listen(_onVolumeButtonEvent);
+  }
+
+  /// Volume UP → engage (start hands-free listening). Volume DOWN →
+  /// suspend (close gate / disengage). Used as a fallback hardware
+  /// gesture for lock-screen capture, since `MPRemoteCommand` events
+  /// are blocked by iOS while `.playAndRecord` has an active mic
+  /// engine. Volume buttons travel a different routing path that is
+  /// not gated by the call-mode rule.
+  void _onVolumeButtonEvent(VolumeButtonEvent event) {
+    final hfState = ref.read(handsFreeControllerProvider);
+    final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
+    final ttsPlaying = ref.read(ttsPlayingProvider);
+    debugPrint(
+      '[VolumeBtnDbg] _onVolumeButtonEvent event=$event hfState=${hfState.runtimeType} ttsPlaying=$ttsPlaying',
+    );
+
+    switch (event) {
+      case VolumeButtonEvent.up:
+        if (hfState is HandsFreeIdle || hfState is HandsFreeSessionError) {
+          debugPrint('[VolumeBtnDbg] branch=engage');
+          unawaited(hfCtrl.startSession().then((_) {
+            ref.read(toasterProvider).show('Listening');
+            ref.read(hapticServiceProvider).lightImpact();
+          }));
+        } else {
+          debugPrint('[VolumeBtnDbg] branch=up-noop (already engaged)');
+        }
+      case VolumeButtonEvent.down:
+        if (ttsPlaying) {
+          // Volume-down during TTS: interrupt the agent's reply but
+          // keep the listening gate open. resumeAfterTts (wired to
+          // ttsPlayingProvider flipping to false) will reopen the
+          // gate automatically.
+          debugPrint('[VolumeBtnDbg] branch=stopTts');
+          unawaited(ref.read(ttsServiceProvider).stop());
+        } else if (hfState is HandsFreeListening) {
+          debugPrint('[VolumeBtnDbg] branch=suspend');
+          unawaited(hfCtrl.suspendByUser().then((_) {
+            ref.read(toasterProvider).show('Paused');
+            ref.read(hapticServiceProvider).lightImpact();
+          }));
+        } else {
+          debugPrint('[VolumeBtnDbg] branch=down-noop (not engaged, no TTS)');
+        }
+    }
   }
 
   void _onMediaButtonEvent(MediaButtonEvent event) {
@@ -106,6 +168,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   void dispose() {
     _mediaButtonSub?.cancel();
     unawaited(_mediaButtonPort?.deactivate());
+    _volumeButtonSub?.cancel();
+    unawaited(_volumeButtonPort?.deactivate());
     unawaited(_ambientPlayer?.dispose());
     super.dispose();
   }
@@ -133,15 +197,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       }
     });
 
-    // Pause VAD while TTS is playing to avoid mic picking up speaker output.
-    ref.listen<bool>(ttsPlayingProvider, (prev, next) {
-      final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
-      if (next) {
-        unawaited(hfCtrl.suspendForTts());
-      } else {
-        unawaited(hfCtrl.resumeAfterTts());
-      }
-    });
+    // TTS suspend/resume is wired at the controller level (in
+    // HandsFreeController's constructor). Doing it in this widget via
+    // `ref.listen` does not survive the lock-screen UI pause —
+    // controller-level listeners are bound to the provider scope and
+    // fire reliably whether the widget tree is visible or not.
 
     // P037 v2: AmbientLoopPlayer drives the audible engagement state.
     //   Idle (no TTS)       → silence_loop.wav (volume 0) — keeps iOS
@@ -369,14 +429,15 @@ class _HandsFreeSection extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Divider(height: 1),
-        if (isOn) ...[
-          _HfStatusStrip(hfState: hfState, onRetry: onRetry),
-          if (jobs.isNotEmpty)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 200),
-              child: _SegmentList(jobs: jobs),
-            ),
-        ],
+        if (isOn) _HfStatusStrip(hfState: hfState, onRetry: onRetry),
+        // Segment list remains visible after disengage as long as
+        // there are in-flight or recently-completed jobs — STT and
+        // persistence continue async beyond the engagement window.
+        if (jobs.isNotEmpty)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: _SegmentList(jobs: jobs),
+          ),
         const _VadParamsStrip(),
       ],
     );
@@ -385,7 +446,7 @@ class _HandsFreeSection extends StatelessWidget {
   static List<SegmentJob> _jobsOf(HandsFreeSessionState s) => switch (s) {
         HandsFreeListening(:final jobs) => jobs,
         HandsFreeSessionError(:final jobs) => jobs,
-        HandsFreeIdle() => const [],
+        HandsFreeIdle(:final jobs) => jobs,
       };
 }
 

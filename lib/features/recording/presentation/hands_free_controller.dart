@@ -68,7 +68,30 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         unawaited(_disengageOneShot());
       }
     });
+    // Subscribe directly to the TTS ValueNotifier (not via Riverpod's
+    // ttsPlayingProvider) so the auto-resume after TTS fires reliably
+    // on a locked screen. Riverpod's `Provider.invalidateSelf` ->
+    // listener chain depends on the provider being re-evaluated;
+    // when iOS pauses Flutter rendering during lock, that
+    // re-evaluation can be deferred. ValueNotifier listeners fire
+    // synchronously on each value change regardless of UI state.
+    final tts = _ref.read(ttsServiceProvider);
+    final isSpeaking = tts.isSpeaking;
+    void ttsListener() {
+      if (!mounted) return;
+      final speaking = isSpeaking.value;
+      debugPrint('[HFCDbg] tts.isSpeaking → $speaking');
+      if (speaking) {
+        unawaited(suspendForTts());
+      } else {
+        unawaited(resumeAfterTts());
+      }
+    }
+    isSpeaking.addListener(ttsListener);
+    _ttsListenerCleanup = () => isSpeaking.removeListener(ttsListener);
   }
+
+  void Function()? _ttsListenerCleanup;
 
   final Ref _ref;
   final EngagementController _engagement;
@@ -169,7 +192,12 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
     _suspendedByUser = true;
-    await _closeEngagement(toAmbientFor: AudioSessionTarget.playback);
+    // Volume-button engagement model: close the chunk gate; keep the
+    // recorder + audio session alive so the mic is "warm" and the next
+    // engage doesn't have to re-acquire the I/O unit (which iOS
+    // rejects on a locked screen).
+    await _engine?.setCaptureGate(open: false);
+    _engagement.disengage();
     state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
 
@@ -229,7 +257,12 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     if (_suspendedForManualRecording) return;
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
     _suspendedForTts = true;
-    await _closeEngagement(toAmbientFor: AudioSessionTarget.playback);
+    // Volume-button engagement model: close the gate so the mic does
+    // not feed TTS audio back into VAD. Keep the recorder + audio
+    // session alive — tearing them down would force a re-acquisition
+    // on resume that iOS rejects on a locked screen.
+    await _engine?.setCaptureGate(open: false);
+    _engagement.disengage();
     state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
 
@@ -245,27 +278,37 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   Future<void> resumeAfterTts() async {
     if (_suspendedForManualRecording || _suspendedByUser) return;
     if (state is! HandsFreeIdle) return;
-    if (_suspendedForTts) {
-      _suspendedForTts = false;
-      _pendingConversationResume = false;
-      _resumeEngagement();
-      return;
-    }
-    if (_pendingConversationResume) {
-      _pendingConversationResume = false;
-      _resumeEngagement();
-    }
+    // Auto-resume only after a TTS that was the agent's reply to a
+    // captured segment. `_pendingConversationResume` is set by
+    // `_disengageOneShot` (which runs on every per-segment one-shot
+    // and on the 30 s auto-disengage). A "cold" TTS — one that fires
+    // without a preceding capture — must not silently spin up the
+    // mic. `_suspendedForTts` is the legacy fallback for TTS that
+    // started while the engagement was still open.
+    debugPrint(
+      '[HFCDbg] resumeAfterTts (suspendedForTts=$_suspendedForTts '
+      'pendingConv=$_pendingConversationResume)',
+    );
+    if (!_suspendedForTts && !_pendingConversationResume) return;
+    _suspendedForTts = false;
+    _pendingConversationResume = false;
+    _resumeEngagement();
   }
 
   /// Re-opens an engagement after a soft-suspend (TTS / manual recording /
   /// user pause). Skips the [startSession] start-up guards because they
-  /// were already validated on the first start; the session is just being
-  /// re-engaged. Mirrors the pre-v2 inline `_startEngine` + state assign.
+  /// were already validated on the first start.
   void _resumeEngagement() {
     if (state is! HandsFreeIdle) return;
     _engagement.engage();
     _phase = HandsFreeListeningPhase.listening;
-    _startEngine(_ref.read(appConfigProvider).vadConfig);
+    if (_engine != null) {
+      // Gate-only path: engine + recorder still alive after a
+      // suspend that used setCaptureGate (suspendByUser / TTS).
+      unawaited(_engine!.setCaptureGate(open: true));
+    } else {
+      _startEngine(_ref.read(appConfigProvider).vadConfig);
+    }
     state = _listeningOrBacklog();
   }
 
@@ -341,12 +384,24 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       _jobCounter = 0;
     }
     // Explicit user-initiated engage cancels any pending TTS-driven
-    // auto-resume — if the user clicks before the agent's reply lands,
-    // they're taking control of the next listening window.
+    // auto-resume and clears any prior suspension flags. The user is
+    // taking control of the next listening window — `resumeAfterTts`
+    // (which gates on these flags) must not bail out if the user
+    // previously volume-down'd before this volume-up.
     _pendingConversationResume = false;
+    _suspendedByUser = false;
+    _suspendedForTts = false;
     _phase = HandsFreeListeningPhase.listening;
     _engagement.engage();
-    _startEngine(_ref.read(appConfigProvider).vadConfig);
+    if (_engine != null) {
+      // Volume-button engagement model: engine + recorder already
+      // running with the gate closed. Just reopen it — no recorder
+      // restart, no audio session re-acquisition. iOS lock-screen
+      // recording requires the I/O unit to stay attached.
+      await _engine!.setCaptureGate(open: true);
+    } else {
+      _startEngine(_ref.read(appConfigProvider).vadConfig);
+    }
     // State is left as-is — the controller transitions into a concrete
     // [HandsFreeListening] (with the right phase) when the first engine
     // event arrives. This matches the pre-v2 contract and keeps the
@@ -428,23 +483,15 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   Future<void> _disengageOneShot() async {
     if (!mounted) return;
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
-    _ref.read(sessionActiveProvider.notifier).state = false;
-    await _ref
-        .read(backgroundServiceProvider)
-        .stopService(target: AudioSessionTarget.playback);
-    if (!mounted) return;
+    // Volume-button engagement model: keep the recorder + audio session
+    // alive (mic stays warm), just close the chunk gate so VAD/STT/API
+    // stop processing audio. iOS lock-screen recording requires the
+    // audio I/O unit to remain attached across disengage, so we
+    // deliberately skip stopService / engine.stop here.
+    await _engine?.setCaptureGate(open: false);
     _engagement.disengage();
-    await _engineSub?.cancel();
-    _engineSub = null;
-    await _engine?.stop();
-    _engine = null;
     if (!mounted) return;
     _phase = HandsFreeListeningPhase.listening;
-    // P037 v2: this disengage was driven by a captured segment, so the
-    // upcoming TTS reply (if any) should auto-resume into a fresh
-    // listening window. Setting the flag here covers both "VAD ended
-    // utterance" and "30 s timeout" — in the timeout case there's
-    // simply no jobs, so no TTS will play and the flag is harmless.
     _pendingConversationResume = true;
     state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
@@ -467,6 +514,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _ttsListenerCleanup?.call();
     unawaited(_engagementSub?.cancel());
     unawaited(_engagement.dispose());
     // Clean up WAV files for any remaining unprocessed jobs.

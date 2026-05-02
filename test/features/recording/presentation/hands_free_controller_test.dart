@@ -77,6 +77,9 @@ class _TrackingBackgroundService implements BackgroundService {
 // ── FakeHandsFreeEngine ──────────────────────────────────────────────────────
 
 class FakeHandsFreeEngine implements HandsFreeEngine {
+  @override
+  Future<void> setCaptureGate({required bool open}) async {}
+
   bool permissionGranted = true;
   bool started = false;
   bool stopped = false;
@@ -295,6 +298,9 @@ class _NullSttService implements SttService {
 /// used to verify which path [HandsFreeController.suspendForManualRecording]
 /// takes based on the current session state.
 class _TrackingHfEngine implements HandsFreeEngine {
+  @override
+  Future<void> setCaptureGate({required bool open}) async {}
+
   _TrackingHfEngine({this.onInterruptCapture});
 
   final VoidCallback? onInterruptCapture;

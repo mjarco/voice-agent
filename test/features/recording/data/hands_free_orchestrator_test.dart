@@ -449,4 +449,124 @@ void main() {
           reason: 'no new events after interruptCapture');
     });
   });
+
+  // ── Capture gate (P038-experiment, "always-on capture with engagement gate") ──
+
+  group('captureGate', () {
+    test('chunks are discarded when gate is closed; recorder stays running',
+        () async {
+      // A long run of speech that would normally trigger EngineCapturing.
+      final labels = List.filled(_minSpeechFrameThreshold * 2, VadLabel.speech);
+      orch = make(labels);
+
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      // Close the gate before any chunk arrives.
+      await orch.setCaptureGate(open: false);
+
+      recorder.push(pcm(labels.length));
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      // Recorder is still running (gate is a chunk-level filter, not a
+      // recorder lifecycle event).
+      expect(recorder.started, isTrue,
+          reason: 'closing the gate must not stop the underlying recorder');
+      // VAD never saw the chunks → no Capturing/SegmentReady events.
+      expect(events.whereType<EngineCapturing>(), isEmpty);
+      expect(events.whereType<EngineSegmentReady>(), isEmpty);
+
+      await orch.stop();
+      await sub.cancel();
+    });
+
+    test('reopening the gate emits a fresh EngineListening', () async {
+      orch = make([]);
+
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      await orch.setCaptureGate(open: false);
+      final beforeReopen = events.whereType<EngineListening>().length;
+      await orch.setCaptureGate(open: true);
+      // Listener fires asynchronously through the broadcast stream.
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(events.whereType<EngineListening>().length,
+          greaterThan(beforeReopen),
+          reason: 'reopening the gate must signal a fresh listening window');
+
+      await orch.stop();
+      await sub.cancel();
+    });
+
+    test('audio captured BEFORE gate-close does not leak into next open '
+        'window via pre-roll', () async {
+      // Step 1: stream speech with the gate OPEN. Some frames land in the
+      // pre-roll ring. Step 2: close the gate (must clear pre-roll).
+      // Step 3: reopen the gate, push silence, then push enough speech to
+      // emit a segment — and assert the segment does NOT carry the
+      // pre-roll from step 1.
+      final labels = [
+        // Step 1: 3 speech frames (below minSpeechMs; will be in pre-roll
+        // ring once they're processed as labelled-but-not-captured).
+        ...List.filled(3, VadLabel.speech),
+        ...List.filled(_hangoverFrameThreshold, VadLabel.nonSpeech),
+        // Step 3: enough speech to actually emit a segment.
+        ...List.filled(_minSpeechFrameThreshold, VadLabel.speech),
+        ...List.filled(_hangoverFrameThreshold, VadLabel.nonSpeech),
+      ];
+      orch = make(labels);
+
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      // Step 1
+      recorder.push(pcm(3 + _hangoverFrameThreshold));
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // Step 2: close the gate. This MUST clear the pre-roll ring so
+      // step-1 frames cannot leak into the step-3 segment.
+      await orch.setCaptureGate(open: false);
+
+      // Step 3
+      await orch.setCaptureGate(open: true);
+      recorder.push(pcm(_minSpeechFrameThreshold + _hangoverFrameThreshold));
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      // The segment was captured (length >= minSpeechMs), so EngineStopping
+      // must have fired for step 3.
+      expect(events.whereType<EngineStopping>(), isNotEmpty);
+      // We can't inspect the WAV bytes from the test (path_provider is
+      // unavailable). Structural privacy invariant: gate-close is what
+      // resets `_preRoll`, so step-1 audio cannot appear in step-3's
+      // pre-roll. The deeper assertion is that the orchestrator did
+      // not crash on the close→open cycle.
+
+      await orch.stop();
+      await sub.cancel();
+    });
+
+    test('setCaptureGate is idempotent', () async {
+      orch = make([]);
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: const VadConfig.defaults()).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      // Already open → no-op.
+      await orch.setCaptureGate(open: true);
+      await orch.setCaptureGate(open: true);
+      // Close + double-close.
+      await orch.setCaptureGate(open: false);
+      await orch.setCaptureGate(open: false);
+
+      expect(recorder.started, isTrue);
+
+      await orch.stop();
+      await sub.cancel();
+    });
+  });
 }

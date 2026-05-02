@@ -82,4 +82,23 @@ abstract interface class HandsFreeEngine {
   /// Release all resources. Must be called when the owning controller is
   /// disposed. Safe to call after [stop].
   void dispose();
+
+  /// Open or close the chunk-processing gate.
+  ///
+  /// When the gate is closed the underlying audio stream keeps draining
+  /// (so the OS-level recorder, audio session, and microphone remain
+  /// active) but each chunk is discarded before reaching VAD. No
+  /// segments are emitted, no STT is invoked, no API calls fire.
+  ///
+  /// Used to model "mic stays warm but app is not engaged" — the gate
+  /// is closed on disengage and reopened on engage, so the recorder
+  /// does not have to be torn down and re-acquired (which iOS rejects
+  /// on a locked screen).
+  ///
+  /// On close the in-flight VAD state is reset (remainder, speech
+  /// buffer, pre-roll, cooldown) so a half-segment captured before
+  /// the close cannot leak into the next open window.
+  ///
+  /// Default state on [start] is **open**.
+  Future<void> setCaptureGate({required bool open});
 }

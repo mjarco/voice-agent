@@ -98,6 +98,9 @@ class _NoOpSttService implements SttService {
 
 /// Fake [HandsFreeEngine] that tests control via [emit].
 class FakeHfEngine implements HandsFreeEngine {
+  @override
+  Future<void> setCaptureGate({required bool open}) async {}
+
   final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
   bool started = false;
   bool stopped = false;

@@ -20,5 +20,8 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "MediaButtonBridge") {
       MediaButtonBridge.shared.configure(with: registrar.messenger())
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "VolumeButtonBridge") {
+      VolumeButtonBridge.shared.configure(with: registrar.messenger())
+    }
   }
 }

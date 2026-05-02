@@ -84,6 +84,9 @@ class _NoOpConnectivity extends ConnectivityService {
 }
 
 class _IdleHfEngine implements HandsFreeEngine {
+  @override
+  Future<void> setCaptureGate({required bool open}) async {}
+
   final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
   @override
   Future<bool> hasPermission() async => true;
@@ -100,6 +103,9 @@ class _IdleHfEngine implements HandsFreeEngine {
 
 /// Fake [HandsFreeEngine] that tests control via [emit].
 class _FakeHfEngine implements HandsFreeEngine {
+  @override
+  Future<void> setCaptureGate({required bool open}) async {}
+
   final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
 
   void emit(HandsFreeEngineEvent e) => _ctrl.add(e);

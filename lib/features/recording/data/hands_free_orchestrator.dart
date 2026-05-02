@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
@@ -31,6 +32,13 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   StreamSubscription<Uint8List>? _audioSub;
 
   _Phase _phase = _Phase.idle;
+
+  /// Capture gate: when `false`, incoming audio chunks are discarded
+  /// before reaching VAD. Recorder + audio session stay active so the
+  /// I/O unit is preserved across disengage (iOS lock-screen recording
+  /// requires this). Default `true` so first-engage path works
+  /// unchanged. Driven by [setCaptureGate].
+  bool _captureGateOpen = true;
 
   // Derived from VadService.frameSize after init()
   int _frameSize = 0;
@@ -139,6 +147,38 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     unawaited(_stopAndRelease());
   }
 
+  @override
+  Future<void> setCaptureGate({required bool open}) async {
+    if (_captureGateOpen == open) return;
+    _captureGateOpen = open;
+    debugPrint('[HFODbg] setCaptureGate(open=$open)');
+    if (open) {
+      // Synchronous flag flip; takes effect on the next chunk.
+      // VAD pipeline picks up from a clean buffer (we cleared on close).
+      _phase = _Phase.listening;
+      _emit(const EngineListening());
+      return;
+    }
+    // Closing the gate: drop all in-flight VAD state so a half-segment
+    // captured before the close cannot leak into the next open window.
+    // Pre-roll is also cleared — closed-gate audio must not appear in
+    // the pre-roll of the next segment.
+    _chunkQueue.clear();
+    _remainder.clear();
+    _speechBuffer = BytesBuilder(copy: false);
+    _speechFrameCount = 0;
+    _captureFrameCount = 0;
+    _hangoverCount = 0;
+    _preRoll.clear();
+    _pendingFrames.clear();
+    _pendingLabels.clear();
+    _pendingSpeechStarted = false;
+    _cooldownTimer?.cancel();
+    _cooldownTimer = null;
+    _inCooldown = false;
+    _phase = _Phase.listening; // engine itself is still alive in "listening" sub-state
+  }
+
   Future<void> _stopAndRelease() async {
     await stop();
     try {
@@ -192,6 +232,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   // ── Chunk queue (ensures sequential async frame processing) ─────────────────
 
   void _enqueueChunk(Uint8List chunk) {
+    if (!_captureGateOpen) return; // gate closed: discard, mic still warm
     _chunkQueue.add(chunk);
     if (!_processingChunks) _drainQueue();
   }
