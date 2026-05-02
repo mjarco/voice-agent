@@ -65,12 +65,20 @@ class _NoOpConnectivity extends ConnectivityService {
 }
 
 class _IdleHfEngine implements HandsFreeEngine {
-  @override
-  Future<void> setCaptureGate({required bool open}) async {}
-
   final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
+
+  @override
+  Future<void> setCaptureGate({required bool open}) async {
+    if (open) _ctrl.add(const EngineListening());
+  }
+
   @override Future<bool> hasPermission() async => true;
-  @override Stream<HandsFreeEngineEvent> start({required VadConfig config}) => _ctrl.stream;
+  @override Stream<HandsFreeEngineEvent> start({required VadConfig config}) {
+    // Mirror the real orchestrator: emit EngineListening once subscribed
+    // so the controller transitions out of HandsFreeIdle.
+    Future.microtask(() => _ctrl.add(const EngineListening()));
+    return _ctrl.stream;
+  }
   @override Future<void> stop() async {}
   @override Future<void> interruptCapture() async {}
   @override void dispose() => _ctrl.close();
@@ -215,8 +223,8 @@ Future<_SpyTtsService> _pumpAppWithSpyTts(WidgetTester tester) async {
 void main() {
   setUpAll(() => WidgetsFlutterBinding.ensureInitialized());
 
-  group('tap-to-record', () {
-    testWidgets('idle → tap → button turns red', (tester) async {
+  group('tap-to-engage (P038 — hands-free via mic button)', () {
+    testWidgets('idle → tap → button turns orange (listening)', (tester) async {
       await pumpApp(tester);
 
       await tester.tap(find.byKey(const Key('record-button')));
@@ -226,17 +234,19 @@ void main() {
         find.byKey(const Key('record-button')),
       );
       final decoration = container.decoration as BoxDecoration;
-      expect(decoration.color, equals(Colors.red));
+      expect(decoration.color, equals(Colors.orange),
+          reason: 'tap engages hands-free; button reflects gate-open state');
     });
 
-    testWidgets('idle → tap → shows "Tap to stop" label', (tester) async {
+    testWidgets('idle → tap → shows "Listening — tap to suspend" label',
+        (tester) async {
       await pumpApp(tester);
 
       await tester.tap(find.byKey(const Key('record-button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Tap to stop'), findsOneWidget);
-      expect(find.text('Tap to record'), findsNothing);
+      expect(find.text('Listening — tap to suspend'), findsOneWidget);
+      expect(find.text('Tap to start listening'), findsNothing);
     });
   });
 
@@ -300,7 +310,7 @@ void main() {
 
       // silentOnEmpty → RecordingIdle, no error
       expect(find.byIcon(Icons.error), findsNothing);
-      expect(find.text('Tap to record'), findsOneWidget);
+      expect(find.text('Tap to start listening'), findsOneWidget);
     });
   });
 

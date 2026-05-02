@@ -122,7 +122,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.mic), findsWidgets);
-    expect(find.text('Tap to record'), findsOneWidget);
+    expect(find.text('Tap to start listening'), findsOneWidget);
   });
 
   testWidgets('Record screen shows error when API URL not configured',
