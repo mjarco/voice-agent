@@ -1092,18 +1092,19 @@ void main() {
 
   // ── Auto-disengage with in-flight jobs (P037 v2 regression) ────────────────
   group('auto-disengage with in-flight jobs', () {
-    test('STT completing after auto-disengage keeps state HandsFreeIdle',
-        () async {
-      // Reproduces the regression where _processJob's
-      // `state = _listeningOrBacklog()` flipped HandsFreeIdle back to
-      // HandsFreeListening when a job state advanced (Transcribing →
-      // Persisting → Completed) while engagement was already closed.
+    test('STT completing after user-driven disengage keeps state '
+        'HandsFreeIdle', () async {
+      // PR #278 regression: `_processJob`'s `state = _listeningOrBacklog()`
+      // used to flip HandsFreeIdle back to HandsFreeListening when a job
+      // state advanced (Transcribing → Persisting → Completed) while
+      // engagement was already closed. P038 keeps the same invariant:
+      // any disengage path (per-segment one-shot, suspendByUser,
+      // suspendForTts) leaves jobs in flight to complete asynchronously,
+      // and the public state must stay Idle.
       final engine = FakeHandsFreeEngine();
       final sttCompleter = Completer<TranscriptResult>();
       final stt = _ControllableSttService(sttCompleter);
       final storage = FakeStorageService();
-      final engagement =
-          EngagementController(timeout: const Duration(milliseconds: 5));
 
       final container = ProviderContainer(overrides: [
         handsFreeEngineProvider.overrideWithValue(engine),
@@ -1123,25 +1124,21 @@ void main() {
           _StubAudioFeedbackService(),
         ),
         backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
-        handsFreeControllerProvider.overrideWith(
-          (ref) => HandsFreeController(ref, engagement: engagement),
-        ),
       ]);
       addTearDown(container.dispose);
 
-      await container.read(handsFreeControllerProvider.notifier).startSession();
+      final ctrl = container.read(handsFreeControllerProvider.notifier);
+      await ctrl.startSession();
       engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
       await Future.delayed(Duration.zero); // Queued → Transcribing
 
-      // Trigger the 30 s auto-disengage. Listener microtask runs and the
-      // controller should transition to HandsFreeIdle preserving the
-      // Transcribing job in `jobs`.
-      engagement.tickTimeout();
-      await Future.delayed(const Duration(milliseconds: 10));
+      // User-driven disengage (Volume Down). Replaces the P037 v2
+      // 30 s timer that this test originally exercised.
+      await ctrl.suspendByUser();
       expect(
         container.read(handsFreeControllerProvider),
         isA<HandsFreeIdle>(),
-        reason: 'auto-disengage should land in HandsFreeIdle',
+        reason: 'user-driven disengage should land in HandsFreeIdle',
       );
 
       // Now finish STT — this triggers the original bug if

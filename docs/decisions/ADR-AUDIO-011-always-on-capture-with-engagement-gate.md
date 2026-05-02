@@ -51,7 +51,22 @@ Documented limitation: the first lock-screen press after a manual recording reve
 
 `flutter_tts_service.dart`'s `_acquirePlaybackFocus` / `_releasePlaybackFocus` (the `setActive(false) → setCategory(.playback) → setActive(true)` round-trip from P034 follow-up) are reduced to no-ops. The round-trip tore down the recorder I/O unit, defeating the always-on capture model. Hardware-button routing during TTS now relies on the same `.playAndRecord + .spokenAudio` posture the volume button gesture already uses.
 
-### 5. TTS suspend/resume listener at controller level
+### 5. The 30 s auto-disengage timer is removed
+
+P037 v2's `EngagementController` carried a 30 s timer that auto-closed
+a listening window if no speech arrived. With the volume-button
+gesture the user has explicit hardware control over the capture gate
+(Volume Up to engage, Volume Down to suspend), so the timer is
+redundant and produces surprising "session quietly closed" behaviour.
+
+`kListeningEngagementTimeout`, `EngagementController._timer` /
+`tickTimeout()` / `markCaptureStarted()`, and the
+`EngagementCapturing` state variant are removed. The state machine
+collapses to `Idle / Listening / Error`. Engagement is now driven
+exclusively by user gesture (volume buttons), per-segment one-shot,
+or error.
+
+### 6. TTS suspend/resume listener at controller level
 
 The `ttsPlayingProvider → suspendForTts/resumeAfterTts` bridge moved from `RecordingScreen.build()` (Riverpod `ref.listen`) to a direct `ValueNotifier.addListener` in the `HandsFreeController` constructor. The widget-level subscription does not fire reliably when iOS pauses Flutter rendering on a lock screen; ValueNotifier callbacks fire on every value change regardless of UI state.
 
