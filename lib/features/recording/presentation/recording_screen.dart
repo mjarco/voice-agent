@@ -593,15 +593,22 @@ class _MicButtonState extends ConsumerState<_MicButton> {
     final recCtrl = ref.read(recordingControllerProvider.notifier);
     final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
 
+    // Tap-driven hands-free engagement (P038): mirror the Volume Up
+    // gesture so the on-screen button is a UI parity affordance.
+    // Idle (or in error state) → engage. Listening → suspend. The
+    // legacy push-to-talk path stays on long-press; tapping here used
+    // to start manual recording, but with always-on capture in place
+    // long-press is the cleaner gesture for that intent.
     if (recState is RecordingIdle) {
-      if (hfState is HandsFreeListening &&
-          hfState.phase == HandsFreeListeningPhase.stopping) {
-        return; // no-op — wait for stop
+      if (hfState is HandsFreeListening) {
+        if (hfState.phase == HandsFreeListeningPhase.stopping) return;
+        await hfCtrl.suspendByUser();
+      } else if (hfState is HandsFreeIdle ||
+          hfState is HandsFreeSessionError) {
+        ref.read(latestAgentReplyProvider.notifier).state = null;
+        await ref.read(ttsServiceProvider).stop();
+        await hfCtrl.startSession();
       }
-      ref.read(latestAgentReplyProvider.notifier).state = null;
-      await ref.read(ttsServiceProvider).stop();
-      await hfCtrl.suspendForManualRecording();
-      await recCtrl.startRecording();
     } else if (recState is RecordingActive) {
       await recCtrl.stopAndTranscribe();
     } else if (recState is RecordingPaused) {
@@ -653,6 +660,8 @@ class _MicButtonState extends ConsumerState<_MicButton> {
     final isTranscribing = recState is RecordingTranscribing;
     final isHfCapturing = hfState is HandsFreeListening &&
         hfState.phase == HandsFreeListeningPhase.capturing;
+    final isHfListeningQuiet = hfState is HandsFreeListening &&
+        hfState.phase == HandsFreeListeningPhase.listening;
 
     // Clear press-and-hold flag when recording returns to idle or errors out.
     ref.listen<RecordingState>(recordingControllerProvider, (_, next) {
@@ -661,6 +670,12 @@ class _MicButtonState extends ConsumerState<_MicButton> {
       }
     });
 
+    // Color reflects what the next tap does + what is currently going
+    // on under the hood. Red = audio is actively being captured (manual
+    // record OR VAD mid-utterance). Orange = engaged but quiet (gate
+    // open, manual paused, or press-and-hold mid-recording). Grey =
+    // transcribing in progress (button is non-interactive). Green =
+    // idle / available — tap to engage.
     final color = isTranscribing
         ? Colors.grey
         : isPaused
@@ -669,7 +684,9 @@ class _MicButtonState extends ConsumerState<_MicButton> {
                 ? Colors.orange
                 : (isRecording || isHfCapturing)
                     ? Colors.red
-                    : Colors.green;
+                    : isHfListeningQuiet
+                        ? Colors.orange
+                        : Colors.green;
 
     final label = isPaused
         ? 'Paused — tap to resume'
@@ -677,7 +694,9 @@ class _MicButtonState extends ConsumerState<_MicButton> {
             ? (_isPressAndHold ? 'Release to stop' : 'Tap to stop')
             : isTranscribing
                 ? 'Transcribing...'
-                : 'Tap to record';
+                : isHfListeningQuiet
+                    ? 'Listening — tap to suspend'
+                    : 'Tap to start listening';
 
     return GestureDetector(
       onTap: _onTap,
