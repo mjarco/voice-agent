@@ -54,24 +54,20 @@ class FlutterTtsService implements TtsService {
   /// best-effort: failures don't abort speech.
   Future<void> _acquirePlaybackFocus() async {
     if (!_isIOS) return;
-    try {
-      await _audioSession.invokeMethod<void>('setPlayback');
-    } on PlatformException catch (e) {
-      debugPrint('[TtsDbg] setPlayback failed: ${e.message}');
-    } on MissingPluginException {
-      // Bridge not registered (tests etc.) — proceed without focus switch.
-    }
+    // EXPERIMENT (volume-button gate model): do NOT switch the audio
+    // session to .playback during TTS. The setActive(false)/setCategory
+    // round-trip required to swap categories tears down the recorder
+    // I/O unit, which is exactly what the always-on capture model is
+    // built to avoid (iOS rejects re-acquisition from a locked
+    // context). Hardware-button routing during TTS will fall back to
+    // whatever .playAndRecord + .spokenAudio delivers, which is the
+    // same routing the volume-button path already uses.
   }
 
   Future<void> _releasePlaybackFocus() async {
     if (!_isIOS) return;
-    try {
-      await _audioSession.invokeMethod<void>('restoreAudioSession');
-    } on PlatformException catch (e) {
-      debugPrint('[TtsDbg] restoreAudioSession failed: ${e.message}');
-    } on MissingPluginException {
-      // Bridge not registered — no state to restore.
-    }
+    // Symmetric no-op: nothing was changed in _acquirePlaybackFocus,
+    // nothing to restore.
   }
 
   @override

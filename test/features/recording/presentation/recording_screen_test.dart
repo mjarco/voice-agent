@@ -61,6 +61,9 @@ class _NoOpConnectivity extends ConnectivityService {
 }
 
 class _IdleHfEngine implements HandsFreeEngine {
+  @override
+  Future<void> setCaptureGate({required bool open}) async {}
+
   final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
   @override Future<bool> hasPermission() async => true;
   @override Stream<HandsFreeEngineEvent> start({required VadConfig config}) => _ctrl.stream;
