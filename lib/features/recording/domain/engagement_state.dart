@@ -1,41 +1,38 @@
-/// Runtime state of the tap-to-engage listening machine introduced by
-/// P037 v2 (Candidate B). The engagement machine is the high-level
-/// "are we currently capturing speech for one turn or not?" model that
-/// drives audio-session category transitions and the 30 s auto-disengage
-/// timer.
+/// Runtime state of the engagement machine.
 ///
-/// Layered above this, [HandsFreeSessionState] still carries the segment
-/// job list so the UI can render in-flight transcription/persistence work.
+/// The engagement machine is the high-level "is the user actively
+/// engaged in a hands-free turn?" model that drives capture-gate
+/// transitions in the always-on capture model (P038).
+///
+/// Layered above this, [HandsFreeSessionState] still carries the
+/// segment job list so the UI can render in-flight
+/// transcription/persistence work.
+///
+/// **History:**
+/// - P037 v2 added a third [EngagementCapturing] variant and a 30 s
+///   auto-disengage timer that ran while [EngagementListening].
+/// - P038 (2026-05-02) collapsed the model back to two active variants
+///   (Idle / Listening) and removed the timer. Engagement is now
+///   driven exclusively by user gesture (volume buttons), per-segment
+///   one-shot disengage, and explicit error.
 sealed class EngagementState {
   const EngagementState();
 }
 
-/// Resting state. Audio session is `.playback`; mic is not engaged. The
-/// app remains the active media participant so AirPods short-click is
-/// routed via `MPRemoteCommandCenter`.
+/// Resting state. Capture gate is closed; the recorder may still be
+/// running with chunks discarded (always-on capture model from P038).
 class EngagementIdle extends EngagementState {
   const EngagementIdle();
 }
 
-/// Engagement opened. Audio session is `.playAndRecord`, VAD is running,
-/// the 30 s auto-disengage timer is active. Transitions to
-/// [EngagementCapturing] on VAD start-of-speech (which cancels the timer)
-/// or back to [EngagementIdle] on `disengage()` / `tickTimeout()`.
+/// Engagement opened. Capture gate is open; VAD is processing audio
+/// chunks. Transitions back to [EngagementIdle] on `disengage()`.
 class EngagementListening extends EngagementState {
   const EngagementListening();
 }
 
-/// VAD detected start-of-speech and is accumulating an utterance. The
-/// 30 s timer was cancelled at start-of-speech. Transitions back to
-/// [EngagementIdle] on `disengage()` (typically called when the engine
-/// reports the segment is ready and the controller decides to close the
-/// turn).
-class EngagementCapturing extends EngagementState {
-  const EngagementCapturing();
-}
-
-/// Unrecoverable engagement error. Mirrors [HandsFreeSessionError] at the
-/// engagement layer. The owning [HandsFreeController] surfaces the
+/// Unrecoverable engagement error. Mirrors [HandsFreeSessionError] at
+/// the engagement layer. The owning [HandsFreeController] surfaces the
 /// detailed error message via [HandsFreeSessionError]; this variant is
 /// only used to gate transitions inside [EngagementController].
 class EngagementError extends EngagementState {

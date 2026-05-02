@@ -537,8 +537,9 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       case EngineCapturing():
         unawaited(_ref.read(ttsServiceProvider).stop());
         _phase = HandsFreeListeningPhase.capturing;
-        // Inform the engagement layer so the 30 s timer is cancelled.
-        _engagement.markCaptureStarted();
+        // P038 update: the 30 s auto-disengage timer was removed
+        // (engagement is now exclusively user-driven via volume
+        // buttons), so there is nothing to cancel here.
         state = _listeningOrBacklog();
 
       case EngineStopping():

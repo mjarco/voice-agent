@@ -204,3 +204,53 @@ All other test fakes that implement `HandsFreeEngine` got a `setCaptureGate` stu
 `ADR-AUDIO-011 — Always-on capture with engagement gate` (drafted in PR #283 alongside the original P038) captures the always-on-capture decision and the privacy-indicator trade-off. It carries forward unchanged for this implementation; the engagement gesture (volume buttons vs MPRemoteCommand) is a tactical choice within the same architectural model.
 
 The supersession note on `ADR-AUDIO-009` (lifecycle portion superseded by ADR-AUDIO-011) also carries forward unchanged.
+
+## Addendum (2026-05-02): the 30 s auto-disengage timer is removed
+
+P037 v2 added a 30 s auto-disengage timer in `EngagementController` to
+auto-close a listening window if no speech arrived. The timer was a
+safety net for the `MPRemoteCommand` engagement gesture, where the user
+could click AirPods and forget — the app would silently close the
+session after a quiet half-minute.
+
+In the P038 always-on capture model that timer is **redundant and
+surprising**:
+
+- Engagement is now driven by **explicit hardware gestures** (Volume
+  Up to engage, Volume Down to suspend / interrupt TTS). The user has
+  unambiguous control over the capture gate at any moment.
+- The recorder + audio session stay alive across disengage anyway —
+  the cost the timer was minimising (mic warm uselessly) no longer
+  matters because the mic is always warm by design.
+- A timer-driven "session quietly closed" is harder to reason about
+  in a model where the user expects "I pressed Volume Up so I'm
+  listening, until I press Volume Down."
+
+The following code is removed in this addendum:
+
+- `kListeningEngagementTimeout` constant
+- `EngagementController._timer` / `_timeout` / `tickTimeout()` / the
+  `Timer(_timeout, tickTimeout)` start in `engage()`
+- `EngagementController.markCaptureStarted()` (its sole purpose was
+  to cancel the timer on VAD start-of-speech)
+- `EngagementCapturing` state variant (only set by
+  `markCaptureStarted`; replaced semantically by `HandsFreeListening`
+  with `phase == capturing` at the controller layer)
+- The `_engagement.markCaptureStarted()` call in
+  `HandsFreeController._onEngineEvent` for `EngineCapturing`
+
+The `EngagementController` API is now: `engage` / `disengage` /
+`markError` / `state` / `stream` / `dispose`. State machine collapses
+to `Idle / Listening / Error`.
+
+Test impact: the PR #278 regression test ("STT completing after
+auto-disengage keeps state HandsFreeIdle") was rewritten to use
+`suspendByUser` instead of `tickTimeout` — the underlying invariant
+(jobs progressing async after disengage do not flip state back to
+Listening) is unchanged; only the trigger differs.
+
+If a future feature needs an inactivity timeout (e.g. "auto-pause
+after 5 min of no speech to release the orange dot"), it can be
+re-added at the controller layer with explicit user-visible
+semantics, rather than at the engagement layer where it produced
+silent state changes.
