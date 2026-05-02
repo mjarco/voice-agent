@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/core/background/flutter_foreground_task_service.dart';
+import 'package:voice_agent/core/notifications/come_back_notifier.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/session_control/toaster.dart';
 import 'package:voice_agent/core/storage/sqlite_storage_service.dart';
@@ -13,6 +14,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterForegroundTaskService.initForegroundTask();
+
+  await ComeBackNotifier.instance.init();
 
   final storage = await SqliteStorageService.initialize();
 
