@@ -106,7 +106,8 @@ class ApiChatRepository implements ChatRepository {
     );
     final body = _unwrap(result);
     final json = jsonDecode(body) as Map<String, dynamic>;
-    return (json['models'] as List)
+    final data = json['data'] as Map<String, dynamic>;
+    return (data['models'] as List)
         .map((e) => ModelInfo.fromMap(e as Map<String, dynamic>))
         .toList();
   }
@@ -116,12 +117,13 @@ class ApiChatRepository implements ChatRepository {
     final result = await _apiClient.get('/chat/backends');
     final body = _unwrap(result);
     final json = jsonDecode(body) as Map<String, dynamic>;
-    final backends = (json['backends'] as List)
+    final data = json['data'] as Map<String, dynamic>;
+    final backends = (data['backends'] as List)
         .map((e) => BackendInfo.fromMap(e as Map<String, dynamic>))
         .toList();
     return BackendOptions(
       backends: backends,
-      defaultBackend: json['default_backend'] as String?,
+      defaultBackend: data['default_backend'] as String?,
     );
   }
 
@@ -131,7 +133,8 @@ class ApiChatRepository implements ChatRepository {
         await _apiClient.postJson('/records/$recordId/endorse');
     final body = _unwrap(result);
     final json = jsonDecode(body) as Map<String, dynamic>;
-    return json['user_endorsed'] as bool;
+    final data = json['data'] as Map<String, dynamic>;
+    return data['user_endorsed'] as bool;
   }
 
   String _unwrap(ApiResult result) {
