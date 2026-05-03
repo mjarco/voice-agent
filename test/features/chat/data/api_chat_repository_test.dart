@@ -87,13 +87,13 @@ Map<String, dynamic> _sampleRecord() => {
 
 Map<String, dynamic> _sampleModel() => {
       'id': 'model-1',
-      'name': 'GPT-4',
+      'label': 'GPT-4',
       'backend': 'openai',
     };
 
 Map<String, dynamic> _sampleBackend({bool available = true}) => {
       'id': 'groq',
-      'name': 'Groq',
+      'label': 'Groq',
       'available': available,
     };
 
