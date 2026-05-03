@@ -16,7 +16,7 @@ class ModelInfo {
   factory ModelInfo.fromMap(Map<String, dynamic> map) {
     return ModelInfo(
       id: map['id'] as String,
-      name: map['name'] as String,
+      name: map['label'] as String,
       backendId: map['backend'] as String,
     );
   }
@@ -36,7 +36,7 @@ class BackendInfo {
   factory BackendInfo.fromMap(Map<String, dynamic> map) {
     return BackendInfo(
       id: map['id'] as String,
-      name: map['name'] as String,
+      name: map['label'] as String,
       available: map['available'] as bool,
     );
   }
