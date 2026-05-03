@@ -238,9 +238,13 @@ void main() {
   });
 
   group('getModels', () {
-    test('fetches models from models key', () async {
+    test('fetches models from data envelope', () async {
       apiClient.nextGetResult = ApiSuccess(
-        body: jsonEncode({'models': [_sampleModel()]}),
+        body: jsonEncode({
+          'data': {
+            'models': [_sampleModel()],
+          },
+        }),
       );
 
       final models = await repo.getModels();
@@ -253,7 +257,9 @@ void main() {
 
     test('sends backend query parameter when specified', () async {
       apiClient.nextGetResult = ApiSuccess(
-        body: jsonEncode({'models': []}),
+        body: jsonEncode({
+          'data': {'models': []},
+        }),
       );
 
       await repo.getModels(backend: 'groq');
@@ -263,7 +269,9 @@ void main() {
 
     test('omits backend query parameter when null', () async {
       apiClient.nextGetResult = ApiSuccess(
-        body: jsonEncode({'models': []}),
+        body: jsonEncode({
+          'data': {'models': []},
+        }),
       );
 
       await repo.getModels();
@@ -279,11 +287,13 @@ void main() {
   });
 
   group('getBackends', () {
-    test('parses backends and defaultBackend', () async {
+    test('parses backends and defaultBackend from data envelope', () async {
       apiClient.nextGetResult = ApiSuccess(
         body: jsonEncode({
-          'backends': [_sampleBackend()],
-          'default_backend': 'groq',
+          'data': {
+            'backends': [_sampleBackend()],
+            'default_backend': 'groq',
+          },
         }),
       );
 
@@ -297,8 +307,10 @@ void main() {
     test('handles null default_backend', () async {
       apiClient.nextGetResult = ApiSuccess(
         body: jsonEncode({
-          'backends': [_sampleBackend()],
-          'default_backend': null,
+          'data': {
+            'backends': [_sampleBackend()],
+            'default_backend': null,
+          },
         }),
       );
 
@@ -310,8 +322,10 @@ void main() {
     test('parses available flag', () async {
       apiClient.nextGetResult = ApiSuccess(
         body: jsonEncode({
-          'backends': [_sampleBackend(available: false)],
-          'default_backend': null,
+          'data': {
+            'backends': [_sampleBackend(available: false)],
+            'default_backend': null,
+          },
         }),
       );
 
@@ -330,7 +344,7 @@ void main() {
   group('toggleEndorse', () {
     test('returns true when endorsed', () async {
       apiClient.nextPostResult = const ApiSuccess(
-        body: '{"user_endorsed": true}',
+        body: '{"data": {"user_endorsed": true}}',
       );
 
       final result = await repo.toggleEndorse('rec-1');
@@ -341,7 +355,7 @@ void main() {
 
     test('returns false when unendorsed', () async {
       apiClient.nextPostResult = const ApiSuccess(
-        body: '{"user_endorsed": false}',
+        body: '{"data": {"user_endorsed": false}}',
       );
 
       final result = await repo.toggleEndorse('rec-1');
