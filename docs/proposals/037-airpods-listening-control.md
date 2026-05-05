@@ -1,6 +1,6 @@
 # Proposal 037 — Hardware-button control of hands-free listening
 
-## Status: Draft — v1 hypothesis empirically DISPROVED 2026-05-01; pivot to v2 or alternative
+## Status: Superseded by P038 (always-on capture with volume-button engagement). v1 hypothesis empirically DISPROVED 2026-05-01; the v2 architectural pivot was redesigned and shipped as P038 (PRs #284, #286, #287; ADR-AUDIO-011 in #285). Proposal PR #272 closed without merge.
 
 ## Experiment result (2026-05-01)
 

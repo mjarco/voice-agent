@@ -1,6 +1,6 @@
 # Proposal 036 — Replay Last TTS Reply (Client-Side)
 
-## Status: Draft
+## Status: Implemented (PR #265)
 
 ## Origin
 

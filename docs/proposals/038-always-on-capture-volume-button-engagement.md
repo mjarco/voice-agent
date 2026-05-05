@@ -1,6 +1,6 @@
 # Proposal 038 — Always-on capture with volume-button engagement
 
-## Status: Implemented as experiment on `experiment/volume-button-engage` (2026-05-02). Replaces / consolidates the never-merged P038 draft (PR #283) and the post-review T0 pre-flight risk that landed empirically on the device.
+## Status: Implemented (PRs #284, #286, #287; ADR-AUDIO-011 in #285). Replaces the never-merged P038 draft (PR #283).
 
 ## Origin
 

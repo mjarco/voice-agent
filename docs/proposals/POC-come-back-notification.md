@@ -4,7 +4,7 @@
 > what we tried, why, and what we learned. Do not run `/proposal-review` on it.
 > If the PoC graduates into real work, write a proper proposal then.
 
-## Status: Draft / not implemented
+## Status: PoC implemented (PR #288). Local notification on iOS only; not yet promoted to a full proposal.
 
 ## Goal
 

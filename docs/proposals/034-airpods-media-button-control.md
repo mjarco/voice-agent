@@ -1,6 +1,6 @@
 # Proposal 034 — AirPods / Media Button Pause & Resume
 
-## Status: Draft (seed)
+## Status: Superseded by P038. The media-button approach explored here was empirically rejected by the P037 v1 experiment (iOS gates `MPRemoteCommandCenter` while `.playAndRecord` has an active mic engine — see ADR-AUDIO-010). P038 ships the equivalent UX via volume-button KVO instead (ADR-AUDIO-011, PRs #284, #286, #287).
 
 ## Origin
 

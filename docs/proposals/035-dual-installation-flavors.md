@@ -1,6 +1,6 @@
 # Proposal 035 — Dual Installation via Flutter Flavors
 
-## Status: Draft
+## Status: Implemented (PR #259)
 
 ## Origin
 
