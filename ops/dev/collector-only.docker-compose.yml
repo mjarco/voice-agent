@@ -1,0 +1,11 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.131.0
+    container_name: voice-agent-otel-spike
+    command: ["--config=/etc/otelcol-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otelcol-config.yml:ro
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    restart: unless-stopped
