@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
@@ -220,6 +221,11 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
   }
 }
 
+final _ssmlLangStrip =
+    RegExp(r'<lang xml:lang="[a-z]{2,3}(?:-[A-Z]{2,4})?">|</lang>');
+
+String _stripSsmlLang(String text) => text.replaceAll(_ssmlLangStrip, '');
+
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     super.key,
@@ -234,31 +240,108 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final isUser = role == EventRole.user;
+
+    final bubbleColor = isUser
+        ? cs.primary.withAlpha(pending ? 128 : 255)
+        : cs.surfaceContainerHighest;
+    final fgColor = isUser ? cs.onPrimary : cs.onSurface;
+
+    final Widget body;
+    if (isUser) {
+      body = SelectableText(
+        content,
+        key: Key('bubble-$role'),
+        style: TextStyle(color: fgColor, height: 1.4),
+      );
+    } else {
+      body = MarkdownBody(
+        key: Key('bubble-$role'),
+        data: _stripSsmlLang(content),
+        selectable: true,
+        styleSheet: _agentMarkdownStyle(theme),
+        softLineBreak: true,
+      );
+    }
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: isUser ? 10 : 12,
+        ),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+          maxWidth:
+              MediaQuery.of(context).size.width * (isUser ? 0.78 : 0.92),
         ),
         decoration: BoxDecoration(
-          color: isUser
-              ? Theme.of(context).colorScheme.primary.withAlpha(pending ? 128 : 255)
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
+          color: bubbleColor,
+          borderRadius: BorderRadius.circular(14),
         ),
-        child: Text(
-          content,
-          key: Key('bubble-$role'),
-          style: TextStyle(
-            color: isUser ? Theme.of(context).colorScheme.onPrimary : null,
-          ),
-        ),
+        child: body,
       ),
     );
   }
+}
+
+MarkdownStyleSheet _agentMarkdownStyle(ThemeData theme) {
+  final tt = theme.textTheme;
+  final cs = theme.colorScheme;
+  final base = tt.bodyMedium?.copyWith(height: 1.45, color: cs.onSurface);
+  final mono = TextStyle(
+    fontFamily: 'monospace',
+    fontSize: (base?.fontSize ?? 14) - 1,
+    color: cs.onSurface,
+  );
+  final codeBg = cs.surfaceContainerHigh;
+
+  return MarkdownStyleSheet(
+    p: base,
+    pPadding: const EdgeInsets.only(bottom: 4),
+    h1: tt.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+    h1Padding: const EdgeInsets.only(top: 8, bottom: 4),
+    h2: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+    h2Padding: const EdgeInsets.only(top: 8, bottom: 4),
+    h3: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+    h3Padding: const EdgeInsets.only(top: 6, bottom: 2),
+    h4: tt.titleSmall,
+    h5: tt.titleSmall,
+    h6: tt.titleSmall,
+    strong: const TextStyle(fontWeight: FontWeight.w700),
+    em: const TextStyle(fontStyle: FontStyle.italic),
+    code: mono.copyWith(backgroundColor: codeBg),
+    codeblockDecoration: BoxDecoration(
+      color: codeBg,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    codeblockPadding: const EdgeInsets.all(10),
+    blockquoteDecoration: BoxDecoration(
+      border: Border(
+        left: BorderSide(color: cs.primary, width: 3),
+      ),
+    ),
+    blockquotePadding: const EdgeInsets.only(left: 10, top: 2, bottom: 2),
+    blockquote: base?.copyWith(color: cs.onSurfaceVariant),
+    listBullet: base,
+    listIndent: 20,
+    a: TextStyle(
+      color: cs.primary,
+      decoration: TextDecoration.underline,
+    ),
+    tableBorder: TableBorder.all(color: cs.outlineVariant, width: 1),
+    tableHead: const TextStyle(fontWeight: FontWeight.w700),
+    tableCellsPadding:
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    horizontalRuleDecoration: BoxDecoration(
+      border: Border(
+        top: BorderSide(color: cs.outlineVariant, width: 1),
+      ),
+    ),
+  );
 }
 
 class _TypingIndicator extends StatelessWidget {

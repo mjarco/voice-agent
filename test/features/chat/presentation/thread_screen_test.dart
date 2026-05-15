@@ -189,7 +189,7 @@ void main() {
         ..eventsResult = [_event(id: 'a1', role: EventRole.agent, content: 'Agent replies')];
       await _pumpScreen(tester, repository: repo);
 
-      expect(find.text('Agent replies'), findsOneWidget);
+      expect(find.text('Agent replies', findRichText: true), findsOneWidget);
     });
 
     testWidgets('shows record badges after last agent bubble', (tester) async {
