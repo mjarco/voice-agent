@@ -2,6 +2,7 @@
 
 Status: Accepted
 Proposed in: P004
+Amended in: P039 (telemetry boot ordering)
 
 ## Context
 
@@ -29,3 +30,15 @@ Pre-runApp initialization guarantees every widget has database access from the f
 - No `AsyncValue` handling needed in any database consumer — simpler widget code.
 - Tests must provide the override: `ProviderScope(overrides: [storageServiceProvider.overrideWithValue(mockStorage)])`.
 - If a second async service needs pre-runApp initialization, the same pattern applies in `main()`.
+
+## Known applications
+
+- **P004 — SqliteStorageService** (the original case).
+- **P039 — Telemetry.bootIfEnabled** (dev-flavor only). The
+  flavor-specific entrypoints (`lib/main_dev.dart` /
+  `lib/main_stable.dart`, see ADR-OBS-001) run in this order:
+  `WidgetsFlutterBinding.ensureInitialized()` →
+  `SqliteStorageService.initialize()` →
+  `Telemetry.bootIfEnabled(storage)` → `runApp(...)`. Telemetry init
+  comes after storage because the durable span processor writes to the
+  SQLite `telemetry_outbox` table synchronously on `onEnd`.

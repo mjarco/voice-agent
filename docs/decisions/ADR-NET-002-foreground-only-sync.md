@@ -2,7 +2,7 @@
 
 Status: Accepted
 Proposed in: P005
-Amended in: P027
+Amended in: P027, P039 (dev-flavor telemetry flusher exception)
 
 ## Context
 
@@ -81,3 +81,24 @@ Users who do not start a hands-free session see zero behavior change.
   mechanisms.
 - Adding true background sync (sync without any active session) still
   requires `workmanager` integration — not planned.
+
+## P039 amendment — dev-flavor telemetry flusher exception
+
+The dev-flavor telemetry flusher in `lib/core/observability/` runs on
+its own 10s foreground / 60s background cadence, **unconditional on
+`sessionActiveProvider`**.
+
+Justified by:
+- **Dev flavor only.** The `stable` build does not include the OTel
+  package or the flusher (see ADR-OBS-001). Zero impact on production
+  users.
+- **Small payloads.** OTLP batches are bounded by the per-cycle row
+  limit (50 rows) and span sizes are kilobytes, not megabytes.
+- **Observability requires backgrounded delivery** to capture
+  lock-screen audio state — the very thing telemetry exists to debug.
+  Gating the flusher on `sessionActiveProvider` would lose the data
+  whenever the user leaves the app mid-session.
+
+**This exception does not authorise other features to add background
+sync without ADR-level justification.** It is narrowly scoped to
+dev-flavor observability traffic. See ADR-OBS-001 for the full rule.

@@ -2,6 +2,7 @@
 
 Status: Accepted
 Proposed in: P004
+Amended in: P039 (observability storage extends the convention)
 
 ## Context
 
@@ -31,3 +32,11 @@ Two tables do not justify an ORM's codegen overhead. Raw SQL keeps the persisten
 - `fromMap`/`toMap` must be kept in sync with schema manually.
 - Database initialization is async and must complete before `runApp` — uses provider override pattern.
 - Drift can be adopted later if the schema grows significantly.
+
+## Known applications
+
+- **P004 — `transcripts` + `sync_queue`** (original case).
+- **P039 — `telemetry_outbox`** (dev-flavor observability storage).
+  Same raw-SQL + manual migration pattern; lives in
+  `lib/core/storage/` alongside the existing tables. Schema and
+  migration SQL detailed in P039 §Offline buffering.
