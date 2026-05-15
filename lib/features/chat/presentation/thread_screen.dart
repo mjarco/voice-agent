@@ -370,7 +370,7 @@ class _TypingIndicator extends StatelessWidget {
   }
 }
 
-class _RecordBadges extends StatelessWidget {
+class _RecordBadges extends StatefulWidget {
   const _RecordBadges({
     required this.records,
     required this.onToggleEndorse,
@@ -380,21 +380,74 @@ class _RecordBadges extends StatelessWidget {
   final void Function(String recordId) onToggleEndorse;
 
   @override
+  State<_RecordBadges> createState() => _RecordBadgesState();
+}
+
+class _RecordBadgesState extends State<_RecordBadges> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final n = widget.records.length;
+    final label = '$n knowledge item${n == 1 ? '' : 's'}';
+
     return Padding(
+      key: const Key('thread-record-badges'),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Wrap(
-        key: const Key('thread-record-badges'),
-        spacing: 6,
-        runSpacing: 4,
-        children: records
-            .map(
-              (r) => _RecordBadge(
-                record: r,
-                onToggleEndorse: () => onToggleEndorse(r.recordId),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            key: const Key('thread-knowledge-toggle'),
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: theme.colorScheme.tertiary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.tertiary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-            )
-            .toList(),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            alignment: Alignment.topLeft,
+            child: _expanded
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: widget.records
+                          .map(
+                            (r) => _RecordBadge(
+                              record: r,
+                              onToggleEndorse: () =>
+                                  widget.onToggleEndorse(r.recordId),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
       ),
     );
   }
