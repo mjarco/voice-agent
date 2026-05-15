@@ -184,6 +184,9 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
                             .every((e) => e.role != EventRole.agent);
                     if (isLastAgent && records.isNotEmpty) {
                       widgets.add(_RecordBadges(
+                        key: ValueKey(
+                          'badges-${event.eventId}-${records.map((r) => r.recordId).join(',')}',
+                        ),
                         records: records,
                         onToggleEndorse: notifier.toggleEndorse,
                       ));
@@ -328,10 +331,6 @@ MarkdownStyleSheet _agentMarkdownStyle(ThemeData theme) {
     blockquote: base?.copyWith(color: cs.onSurfaceVariant),
     listBullet: base,
     listIndent: 20,
-    a: TextStyle(
-      color: cs.primary,
-      decoration: TextDecoration.underline,
-    ),
     tableBorder: TableBorder.all(color: cs.outlineVariant, width: 1),
     tableHead: const TextStyle(fontWeight: FontWeight.w700),
     tableCellsPadding:
@@ -372,6 +371,7 @@ class _TypingIndicator extends StatelessWidget {
 
 class _RecordBadges extends StatefulWidget {
   const _RecordBadges({
+    super.key,
     required this.records,
     required this.onToggleEndorse,
   });

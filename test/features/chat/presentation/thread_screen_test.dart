@@ -192,6 +192,38 @@ void main() {
       expect(find.text('Agent replies', findRichText: true), findsOneWidget);
     });
 
+    testWidgets('agent bubble renders markdown (asterisks stripped)',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [
+          _event(id: 'a1', role: EventRole.agent, content: '**bold word**'),
+        ];
+      await _pumpScreen(tester, repository: repo);
+
+      // Markdown processed: rendered text omits the asterisks.
+      expect(find.text('bold word', findRichText: true), findsOneWidget);
+      expect(find.text('**bold word**', findRichText: true), findsNothing);
+    });
+
+    testWidgets('agent bubble strips SSML lang wrappers', (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [
+          _event(
+            id: 'a1',
+            role: EventRole.agent,
+            content: 'Use the <lang xml:lang="en-US">API</lang> endpoint',
+          ),
+        ];
+      await _pumpScreen(tester, repository: repo);
+
+      expect(
+        find.text('Use the API endpoint', findRichText: true),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('knowledge items hidden by default and toggle reveals them',
         (tester) async {
       final repo = _StubRepository()
