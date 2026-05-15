@@ -189,10 +189,43 @@ void main() {
         ..eventsResult = [_event(id: 'a1', role: EventRole.agent, content: 'Agent replies')];
       await _pumpScreen(tester, repository: repo);
 
-      expect(find.text('Agent replies'), findsOneWidget);
+      expect(find.text('Agent replies', findRichText: true), findsOneWidget);
     });
 
-    testWidgets('shows record badges after last agent bubble', (tester) async {
+    testWidgets('agent bubble renders markdown (asterisks stripped)',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [
+          _event(id: 'a1', role: EventRole.agent, content: '**bold word**'),
+        ];
+      await _pumpScreen(tester, repository: repo);
+
+      // Markdown processed: rendered text omits the asterisks.
+      expect(find.text('bold word', findRichText: true), findsOneWidget);
+      expect(find.text('**bold word**', findRichText: true), findsNothing);
+    });
+
+    testWidgets('agent bubble strips SSML lang wrappers', (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [
+          _event(
+            id: 'a1',
+            role: EventRole.agent,
+            content: 'Use the <lang xml:lang="en-US">API</lang> endpoint',
+          ),
+        ];
+      await _pumpScreen(tester, repository: repo);
+
+      expect(
+        find.text('Use the API endpoint', findRichText: true),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('knowledge items hidden by default and toggle reveals them',
+        (tester) async {
       final repo = _StubRepository()
         ..conversationResult = _conv()
         ..eventsResult = [_event(id: 'a1', role: EventRole.agent, content: 'Reply')]
@@ -200,7 +233,27 @@ void main() {
       await _pumpScreen(tester, repository: repo);
 
       expect(find.byKey(const Key('thread-record-badges')), findsOneWidget);
+      expect(find.byKey(const Key('thread-knowledge-toggle')), findsOneWidget);
+      expect(find.text('1 knowledge item'), findsOneWidget);
+      expect(find.text('Decision badge'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('thread-knowledge-toggle')));
+      await tester.pumpAndSettle();
+
       expect(find.text('Decision badge'), findsOneWidget);
+    });
+
+    testWidgets('toggle pluralises label for multiple items', (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(id: 'a1', role: EventRole.agent)]
+        ..recordsResult = [
+          _record(id: 'rec-a', subjectRef: 'A'),
+          _record(id: 'rec-b', subjectRef: 'B'),
+        ];
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.text('2 knowledge items'), findsOneWidget);
     });
 
     testWidgets('record badge shows empty star when not endorsed', (tester) async {
@@ -209,6 +262,9 @@ void main() {
         ..eventsResult = [_event(id: 'a1', role: EventRole.agent)]
         ..recordsResult = [_record(id: 'rec-1', endorsed: false)];
       await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.byKey(const Key('thread-knowledge-toggle')));
+      await tester.pumpAndSettle();
 
       final starIcon = find.byKey(const Key('badge-star-rec-1'));
       expect(starIcon, findsOneWidget);
@@ -223,6 +279,9 @@ void main() {
         ..recordsResult = [_record(id: 'rec-2', endorsed: true)];
       await _pumpScreen(tester, repository: repo);
 
+      await tester.tap(find.byKey(const Key('thread-knowledge-toggle')));
+      await tester.pumpAndSettle();
+
       final icon = tester.widget<Icon>(find.byKey(const Key('badge-star-rec-2')));
       expect(icon.icon, Icons.star);
     });
@@ -233,6 +292,9 @@ void main() {
         ..eventsResult = [_event(id: 'a1', role: EventRole.agent)]
         ..recordsResult = [_record(id: 'rec-tap')];
       await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.byKey(const Key('thread-knowledge-toggle')));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('badge-rec-tap')));
       await tester.pumpAndSettle();
