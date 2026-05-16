@@ -1,6 +1,10 @@
 # Proposal 039 — OpenTelemetry Dev-Flavor Telemetry
 
-## Status: Draft
+## Status: Implementation in progress — paused at T5b verification (2026-05-16)
+
+T0 / T1 / T3 / T5b landed on main. **T5b is unverified on a real
+device** — that gate must clear before T2 / T4 / T5a / T6 / T7 / T8
+proceed. See §Implementation status below.
 
 ## Origin
 
@@ -759,3 +763,219 @@ All five land in the same `039/proposal` branch as the proposal text
 If T1 pivots to the lightweight protocol the ADR-OBS-001 text adapts
 (transport changes from OTLP/HTTP to a custom REST endpoint) but the
 singleton + dev-gate + hot-path + flush-exemption decisions stand.
+
+## Implementation status (paused 2026-05-16)
+
+Implementation was driven autonomously through the full review cycle
+plus four of the eight tasks. **Pausing here** because the next gate
+is an on-device verification the user has to run; everything past
+that depends on its outcome.
+
+### Landed on `main`
+
+| Task | PR | Verified | Notes |
+|---|---|---|---|
+| Proposal + 5 ADRs | #292 | n/a (docs) | Primary review + Codex second-opinion + architectural review; all P0/P1/P2 resolved. |
+| T0 — minimal Collector | #293 | local docker compose round-trip (HTTP 200, span visible in `debug` exporter) | `ops/dev/collector-only.docker-compose.yml`. |
+| T1 — viability spike | #294 | end-to-end against the T0 Collector | **GO decision** recorded in `docs/spikes/p039-t1-otel-viability.md`. iOS App.framework size delta: **466 KB** dev vs stable; `strings opentelemetry` hits: dev=46, stable=0. |
+| T3 — facade + flavor entrypoints | #295 | `flutter test` 956/956 + `./ops/scripts/verify-stable-tree-shake.sh` PASS (160 KB delta, 0 stable hits) | `lib/main_stable.dart` / `lib/main_dev.dart` / `lib/app_main.dart` / `lib/core/observability/{telemetry,telemetry_otel}.dart` + 6 facade tests. |
+| T5b — hands-free instrumentation | #296 | unit tests only — see "What the gate is" below | `lib/features/recording/data/hands_free_orchestrator.dart` + `…/presentation/hands_free_controller.dart` + 3 diagnosis tests in `hands_free_telemetry_test.dart`. Behaviour unchanged; `cancelOnError: true` and `_emitError → stop()` preserved per ADR-AUDIO-011 §3. |
+
+### Pending
+
+| Task | Why not yet | Estimated effort |
+|---|---|---|
+| **T5b on-device verification** | the resume gate, see below | 30 min on a real session |
+| T2 — full backend stack on `laptop.lan` | `laptop.lan` does not resolve from the dev machine where this work happened; can be deployed wherever the home-monitor host already runs | half a day |
+| T4 — `DurableSpanProcessor` + outbox | pure Dart, well-scoped; deferred because mic-silent live observation already works with the T3 `SimpleSpanProcessor` — durability AC #4 is a separate concern | half a day |
+| T5a — native `EventChannel` bridges | requires Swift + Kotlin work that needs on-device verification, plus the iOS observers currently live on `MediaButtonBridge` — must be extended carefully | half a day |
+| T6 — STT / sync / TTS / lifecycle / hardware-button | mechanical instrumentation across multiple features; risk of silent behaviour change is the reason it didn't ship autonomously | half a day, splittable per feature |
+| T7 — Grafana dashboard JSON | depends on T2 (needs a Tempo data source) | a couple of hours |
+| T8 — `docs/observability.md` runbook | depends on T2 to document the "what to click in Grafana" half | a couple of hours |
+
+### The gate: verify T5b on a real device first
+
+Before touching T2/T4/T5a/T6/T7/T8, prove the diagnosis chain works
+on the user's actual hardware. The cycle:
+
+```bash
+# (1) Bring up the spike Collector — on this machine or laptop.lan.
+cd ops/dev && docker compose -f collector-only.docker-compose.yml up -d
+
+# (2) Build / run the dev flavor pointed at the Collector.
+#     Default endpoint is http://laptop.lan:4318. Override locally:
+flutter run --flavor dev --target lib/main_dev.dart \
+    --dart-define=OTEL_COLLECTOR=http://localhost:4318 \
+    -d <device-id>
+# Use `flutter devices` for the id. The wireless iPhone works for
+# `flutter run` even without a paid Apple Developer account because
+# Xcode is the codesigner here, not `flutter build`.
+
+# (3) Provoke or wait for a mic-silent recurrence; force-quit when
+#     it happens.
+
+# (4) Inspect the Collector's debug output.
+docker logs voice-agent-otel-spike | \
+    grep -E "hf.attach_stream|hf.stream_error|hf.stream_done|hf.gate_changed|hf.chunk_received"
+```
+
+**Pass criteria for the gate:**
+- An `app.boot` event lands in the Collector within ~5 s of app
+  launch (proves `lib/main_dev.dart` boot wiring).
+- `hf.attach_stream` span starts when the user engages.
+- `hf.chunk_received` counter ticks while engaged (heartbeat alive).
+- A mic-silent event leaves *either* `hf.stream_error` /
+  `hf.stream_done` *or* a flatlined `hf.chunk_received` counter
+  while `hf.gate_changed` is open. Both shapes are diagnosable.
+- `hf.gate_changed` events fire with the correct `reason` on
+  user-toggle, TTS suspend/resume, and one-shot disengage.
+
+**Fail / surprise paths and what they mean:**
+
+- **No events at all in the Collector.** Likely the
+  `--dart-define=OTEL_COLLECTOR=…` did not propagate to
+  `lib/main_dev.dart`'s `String.fromEnvironment`, or the device
+  cannot reach the Collector. Verify with
+  `curl -X POST http://localhost:4318/v1/traces` from the device's
+  network.
+- **`app.boot` lands but `hf.attach_stream` never starts.**
+  The orchestrator's `_doStart` is not running the new
+  instrumentation path. Check that the dev build picked up the
+  T3+T5b code (rebuild from clean if needed).
+- **Counter flatlines but `hf.stream_error` / `hf.stream_done`
+  fired.** Expected — the hard-error path is engaged, the kill
+  semantics in ADR-AUDIO-011 §3 are doing exactly what they say.
+  This is the data the follow-up ADR-AUDIO-011 amendment needs.
+- **Counter flatlines and *no* error event.** Soft starvation —
+  the recorder stream is alive but iOS / Android is not delivering
+  chunks. This is a *different* bug than the suspected one and
+  changes the priority of T5a's native bridges (we'd want to see
+  `audio.session.interruption_began` to explain it).
+
+### How to resume each pending task
+
+Each task below can be resumed by a fresh session from `main`. They
+are roughly in dependency order; T2 and T4 can land in parallel.
+
+#### T2 — laptop.lan full stack
+
+1. Branch from main: `git checkout -b 039/t2-laptop-stack`.
+2. Replace `ops/dev/collector-only.docker-compose.yml` with
+   `ops/dev/telemetry.docker-compose.yml` that adds:
+   - `otel/opentelemetry-collector-contrib` (carry over the existing
+     receiver block; add an OTLP→Tempo exporter on the trace
+     pipeline and an OTLP→Prometheus-remote-write exporter on the
+     metrics pipeline).
+   - `grafana/tempo` (single-binary mode, persistent volume,
+     retention 7 days).
+   - **No Loki** — v1 emits logs as span events.
+3. Add Grafana data source provisioning under
+   `ops/dev/grafana/provisioning/datasources/voice-agent.yml`
+   pointing at the new Tempo and at the existing
+   home-monitor Prometheus on `laptop.lan:9090`.
+4. The home-monitor stack on `laptop.lan` already runs Prometheus +
+   Grafana + Alertmanager (see reference memory). Slot the new
+   compose alongside, not on top.
+5. Acceptance: `curl -X POST http://laptop.lan:4318/v1/traces ...`
+   returns 200 from any LAN device, and a span posted shows up in
+   Grafana's Tempo data source within 30 s.
+
+#### T4 — `DurableSpanProcessor` + outbox
+
+1. Branch: `039/t4-durable-outbox`.
+2. New SQLite migration in `lib/core/storage/` adding
+   `telemetry_outbox` per §Offline buffering. Bump the schema
+   version.
+3. Custom `SpanProcessor` in `lib/core/observability/` that
+   serialises each span to OTLP/JSON on `onEnd` and inserts a row
+   synchronously.
+4. Flush worker (also in `lib/core/observability/`) with the
+   transactional claim, stale-claim recovery, per-status retry
+   classification (delegate to `ApiClient.classifyStatusCode`).
+5. Wire from `telemetry_otel.dart` (replace `SimpleSpanProcessor`).
+6. Tests in `test/core/observability/`: persist-on-end, force-quit
+   simulation, single-flight, per-status classification, per-kind
+   retention. Use `sqflite_common_ffi` for in-memory DB.
+
+#### T5a — native EventChannel bridges
+
+1. Branch: `039/t5a-native-bridges`.
+2. iOS: extend `ios/Runner/MediaButtonBridge.swift`'s existing
+   `interruptionObserver` (line 138) and `routeChangeObserver`
+   (line 163). **Do not register new observers.** Add a shared
+   `TelemetryEventEmitter` singleton with a single `EventChannel`
+   named `com.voiceagent/telemetry_native_events`. Post from
+   inside the existing observer closures.
+3. Android: new `BroadcastReceiver` for
+   `AudioManager.ACTION_AUDIO_BECOMING_NOISY` in
+   `android/app/src/main/kotlin/.../`, registered in
+   `MainActivity.onCreate` guarded by `BuildConfig.ENABLE_TELEMETRY`
+   (set by the dev flavor's `buildConfigField`). New `EventChannel`
+   on the Kotlin side mirroring iOS.
+4. Dart-side `TelemetryNativeBridge` in
+   `lib/core/observability/` subscribes once at boot from
+   `lib/main_dev.dart`. Turns each native event into a span event
+   on the live `hf.attach_stream` span when one exists, else a
+   stand-alone event.
+5. Update ADR-PLATFORM-005's channel registry (already in
+   docs/decisions/ — just confirm the entry).
+6. Verification needs the device (no paid Apple Developer means
+   physical iPhone is via Xcode's free-cert sideload only, which
+   expires every 7 days; iOS Simulator is the steady-state target).
+
+#### T5b on-device verification (the gate)
+
+See §The gate above. No code work — just a real-world test run.
+Capture the Collector output as evidence and either close the
+gate or open a follow-up to fix what went wrong.
+
+#### T6 — remaining instrumentation
+
+One PR per feature (STT, sync, TTS, app lifecycle, hardware-button
+input). Each follows the T5b pattern: call-site additions, three
+tests per area minimum. Includes the `traceparent` dio interceptor
+that injects W3C trace context into outbound personal-agent
+requests.
+
+#### T7 — Grafana dashboard
+
+JSON file at `ops/grafana/voice-agent-dev.json`. Panels per §Tasks
+T7 in the proposal. Provision via the Grafana sidecar config that
+T2 sets up.
+
+#### T8 — runbook
+
+`docs/observability.md`. Audience: future-you, six months from
+now. Sections: running the stack, reading the dashboard, adding a
+new instrumentation point, clearing a stuck SQLite buffer,
+recognising "telemetry itself is broken."
+
+### Cross-resumption state to know
+
+- **`Telemetry.instance` defaults to `NoopTelemetry`** at static
+  init. Tests inherit this; no `setUp` required. Production tests
+  that want to assert telemetry emissions swap in a recording
+  subtype (see `test/core/observability/telemetry_test.dart` for
+  the pattern and `test/features/recording/data/hands_free_telemetry_test.dart`
+  for a feature-level example).
+- **Default Collector endpoint** is hard-coded in `lib/main_dev.dart`
+  as `http://laptop.lan:4318` and can be overridden at build with
+  `--dart-define=OTEL_COLLECTOR=…`. The `stable` flavor never reads
+  this define.
+- **Per-flavor `--target` wiring** is not yet automated in the
+  Xcode schemes or Gradle flavor build args. Today the user passes
+  `--target lib/main_dev.dart` / `--target lib/main_stable.dart`
+  explicitly to `flutter build` / `flutter run`. T5a (when it
+  wires the Android `buildConfigField`) is the right moment to
+  fold this into the scheme/Gradle configs and the `Makefile`
+  targets.
+- **`ops/scripts/verify-stable-tree-shake.sh`** is the AC #2
+  acceptance gate. It runs `flutter build ios --release` twice
+  and asserts the size delta + zero-strings invariants. Add it to
+  any future CI on this branch family.
+- **The 2026-05-07 mic-silent regression remains an open bug.**
+  P039 makes it observable; the ADR-AUDIO-011 amendment that
+  decides between (a) classifying transient vs terminal errors
+  and (b) keeping kill semantics + adding a UI recovery affordance
+  is a *separate* follow-up proposal triggered by what the
+  telemetry actually shows.
