@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
+import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/vad_service.dart';
 
@@ -74,6 +75,11 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   final List<Uint8List> _chunkQueue = [];
   bool _processingChunks = false;
 
+  // P039 T5b — long-lived span around the entire active engagement.
+  // Span events from the controller (gate_changed) and from native
+  // bridges (audio.session.*) attach to this span. Ended on stop().
+  TelemetrySpan? _attachSpan;
+
   // ── HandsFreeEngine interface ────────────────────────────────────────────────
 
   @override
@@ -119,6 +125,11 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
     _inCooldown = false;
+
+    // P039 T5b — close the long-lived attach span if it's still open
+    // (orchestrator stopped by something other than an error path).
+    _attachSpan?.end(status: SpanStatus.ok);
+    _attachSpan = null;
 
     await _audioSub?.cancel();
     _audioSub = null;
@@ -213,6 +224,15 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
       if (_phase == _Phase.idle) return; // stop() called during init
 
+      // P039 T5b — long-lived span around the active engagement.
+      _attachSpan = Telemetry.instance.span('hf.attach_stream', attrs: {
+        'sample_rate': _sampleRate,
+        'frame_ms': _msPerFrame,
+        'pre_roll_ms': config.preRollMs,
+        'hangover_ms': config.hangoverMs,
+        'min_speech_ms': config.minSpeechMs,
+      });
+
       _emit(const EngineListening());
       _audioSub = audioStream.listen(
         _enqueueChunk,
@@ -232,6 +252,12 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   // ── Chunk queue (ensures sequential async frame processing) ─────────────────
 
   void _enqueueChunk(Uint8List chunk) {
+    // P039 T5b — heartbeat counter. Distinguishes a closed-gate
+    // listening window from a dead-mic incident. Per ADR-OBS-001
+    // hot-path rule, this is a counter, not a span.
+    Telemetry.instance.counter('hf.chunk_received', attrs: {
+      'gate_open': _captureGateOpen,
+    });
     if (!_captureGateOpen) return; // gate closed: discard, mic still warm
     _chunkQueue.add(chunk);
     if (!_processingChunks) _drainQueue();
@@ -399,6 +425,8 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     }
 
     if (wavPath != null) {
+      // P039 T5b — segment-emitted counter.
+      Telemetry.instance.counter('hf.segment_emitted');
       _emit(EngineSegmentReady(wavPath));
     } else if (writeError != null) {
       // WAV write failed — rejected segment, stay running.
@@ -476,12 +504,30 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   }
 
   void _emitError(String message, {bool requiresSettings = false}) {
+    // P039 T5b — annotate the long-lived attach span with the error
+    // and emit a stand-alone event for ease of querying. Best-effort
+    // extraction of a native code prefix.
+    Telemetry.instance.event('hf.stream_error', attrs: {
+      'message': message,
+      'requires_settings': requiresSettings,
+    });
+    _attachSpan?.addEvent('hf.stream_error', attrs: {
+      'message': message,
+    });
+    _attachSpan?.end(status: SpanStatus.error, message: message);
+    _attachSpan = null;
     _controller?.add(EngineError(message, requiresSettings: requiresSettings));
     unawaited(stop());
   }
 
   void _onStreamDone() {
     if (_phase != _Phase.idle) {
+      // P039 T5b — diagnose stream-done as a distinct event from
+      // stream-error, so the dashboard can tell the difference between
+      // "iOS interrupted us" (often onDone) and "iOS reported an
+      // error" (onError).
+      Telemetry.instance.event('hf.stream_done');
+      _attachSpan?.addEvent('hf.stream_done');
       _emitError('Audio stream ended unexpectedly');
     }
   }

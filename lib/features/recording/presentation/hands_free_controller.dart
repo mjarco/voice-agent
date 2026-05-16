@@ -11,6 +11,7 @@ import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/session_control/hands_free_control_port.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
@@ -197,6 +198,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // engage doesn't have to re-acquire the I/O unit (which iOS
     // rejects on a locked screen).
     await _engine?.setCaptureGate(open: false);
+    Telemetry.instance.event('hf.gate_changed',
+        attrs: const {'open': false, 'reason': 'user_disengage'});
     _engagement.disengage();
     state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
@@ -262,6 +265,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // session alive — tearing them down would force a re-acquisition
     // on resume that iOS rejects on a locked screen.
     await _engine?.setCaptureGate(open: false);
+    Telemetry.instance.event('hf.gate_changed',
+        attrs: const {'open': false, 'reason': 'tts_suspend'});
     _engagement.disengage();
     state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
   }
@@ -306,6 +311,13 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       // Gate-only path: engine + recorder still alive after a
       // suspend that used setCaptureGate (suspendByUser / TTS).
       unawaited(_engine!.setCaptureGate(open: true));
+      // The reason here depends on which path resumed us. Best
+      // proxy from controller state is _pendingConversationResume:
+      // true → tts_resume, false → user_engage.
+      Telemetry.instance.event('hf.gate_changed', attrs: {
+        'open': true,
+        'reason': _pendingConversationResume ? 'tts_resume' : 'user_engage',
+      });
     } else {
       _startEngine(_ref.read(appConfigProvider).vadConfig);
     }
@@ -399,6 +411,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       // restart, no audio session re-acquisition. iOS lock-screen
       // recording requires the I/O unit to stay attached.
       await _engine!.setCaptureGate(open: true);
+      Telemetry.instance.event('hf.gate_changed',
+          attrs: const {'open': true, 'reason': 'user_engage'});
     } else {
       _startEngine(_ref.read(appConfigProvider).vadConfig);
     }
@@ -489,6 +503,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // audio I/O unit to remain attached across disengage, so we
     // deliberately skip stopService / engine.stop here.
     await _engine?.setCaptureGate(open: false);
+    Telemetry.instance.event('hf.gate_changed',
+        attrs: const {'open': false, 'reason': 'one_shot'});
     _engagement.disengage();
     if (!mounted) return;
     _phase = HandsFreeListeningPhase.listening;
