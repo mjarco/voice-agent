@@ -1,41 +1,11 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voice_agent/app/app.dart';
-import 'package:voice_agent/core/background/flutter_foreground_task_service.dart';
-import 'package:voice_agent/core/notifications/come_back_notifier.dart';
-import 'package:voice_agent/core/session_control/session_control_provider.dart';
-import 'package:voice_agent/core/session_control/toaster.dart';
-import 'package:voice_agent/core/storage/sqlite_storage_service.dart';
-import 'package:voice_agent/core/storage/storage_provider.dart';
-import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
+// Default entrypoint, used by `flutter run` / `flutter test` when no
+// explicit `--target` is passed. Delegates to `main_stable.dart` so the
+// safe (no-telemetry) path is always the default.
+//
+// The dev-flavor build invokes `lib/main_dev.dart` directly via its
+// Xcode scheme / Gradle flavor; see ADR-OBS-001 §2 and the build
+// configs in `android/app/build.gradle.kts` and `ios/Flutter/*.xcconfig`.
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+import 'package:voice_agent/main_stable.dart' as stable;
 
-  FlutterForegroundTaskService.initForegroundTask();
-
-  await ComeBackNotifier.instance.init();
-
-  final storage = await SqliteStorageService.initialize();
-
-  final recovered = await storage.recoverStaleSending();
-  if (kDebugMode && recovered > 0) {
-    debugPrint('Recovered $recovered stale sending items');
-  }
-
-  final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-
-  runApp(
-    ProviderScope(
-      overrides: [
-        storageServiceProvider.overrideWithValue(storage),
-        toasterProvider.overrideWithValue(Toaster(scaffoldMessengerKey)),
-        handsFreeControlPortProvider.overrideWith(
-          (ref) => ref.watch(handsFreeControllerProvider.notifier),
-        ),
-      ],
-      child: App(scaffoldMessengerKey: scaffoldMessengerKey),
-    ),
-  );
-}
+Future<void> main() => stable.main();
