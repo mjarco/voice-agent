@@ -4,7 +4,9 @@
 
 T0 / T1 / T3 / T5b landed on main. **T5b is unverified on a real
 device** — that gate must clear before T2 / T4 / T5a / T6 / T7 / T8
-proceed. See §Implementation status below.
+proceed. T5c (runtime kill-switch + endpoint override) was added to
+the task list on 2026-05-16 and is mergeable in parallel; it does
+not block the gate. See §Implementation status below.
 
 ## Origin
 
@@ -465,6 +467,90 @@ abstraction over coincidence; revisit at the fourth channel or at the
 first cross-channel concern (e.g. shared lifecycle, shared error
 reporting). The deferral is recorded in the ADR-PLATFORM-005 update.
 
+### Runtime config (T5c) — kill-switch + endpoint override
+
+The build-time flavor gate (§Dev/stable gate) keeps telemetry out of
+the `stable` AOT entirely. On the `dev` flavor it is then *always
+on* with a hard-coded Collector endpoint, which is the wrong default
+for two real situations:
+
+1. **Off the home LAN.** When `laptop.lan` is unreachable, every span
+   triggers an HTTP timeout. Spans are not lost (the durable outbox
+   buffers them), but the request loop is wasteful battery / CPU.
+2. **Sensitive moment.** The user may want a temporary kill switch
+   for privacy without having to rebuild the app or downgrade to the
+   stable flavor.
+
+T5c adds two persisted settings to `AppConfig`:
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `devTelemetryEnabled` | `bool` | `true` | When `false`, `main_dev.dart` leaves the no-op default in place. |
+| `otelCollectorUrl` | `String` | first match of (a) build-time `--dart-define=OTEL_COLLECTOR`, (b) `http://laptop.lan:4318` | Validated as a parseable URL on save. Empty or invalid → treated as "telemetry off" until corrected. |
+
+**Boot read pattern (in `lib/main_dev.dart`):**
+
+1. `WidgetsFlutterBinding.ensureInitialized()` — current.
+2. `SqliteStorageService.initialize()` — current.
+3. `AppConfigService.load()` — current; returns the persisted
+   `AppConfig`.
+4. If `appConfig.devTelemetryEnabled && appConfig.otelCollectorUrl`
+   parses to a valid URI → `Telemetry.instance =
+   OtelTelemetry.boot(...)`. Otherwise leave the no-op default.
+5. Emit the first `app.boot` event (no-op if disabled).
+6. `runApp(...)`.
+
+Changes only take effect on the next launch. The Settings UI surfaces
+this with a `Restart required to apply` banner that appears after a
+toggle or URL edit, and stays visible until the app is relaunched.
+We deliberately do not implement live `Telemetry.instance` swap:
+in-flight spans would either need teardown semantics that match
+shutdown-flush, or would simply leak — both worse than asking for a
+restart in a dev-only feature.
+
+**UI placement.** `Settings → Advanced → Telemetry` section:
+
+- `[✓] Enable telemetry` — bound to `devTelemetryEnabled`
+- `Collector URL` — text field bound to `otelCollectorUrl`, with
+  inline validation (red border + helper text on parse failure)
+- `Clear telemetry buffer` — button that purges the SQLite
+  `telemetry_outbox` (no-op when T4 has not landed). One-tap with no
+  extra confirmation; the Advanced screen already has "experimental"
+  framing.
+- `Restart required to apply` banner — visible if current runtime
+  config differs from persisted config
+
+The entire section is rendered only when `appFlavor == 'dev'`. The
+stable build does not compile the section's widgets (`if (kIsDev)`
+guard around the include, where `kIsDev` is `appFlavor == 'dev'`).
+
+**Pause semantics with the outbox (T4 interaction).** When T4 ships,
+`devTelemetryEnabled = false` means:
+
+- New spans are not generated (no-op subtype is installed).
+- The `telemetry_outbox` table is **not purged automatically** —
+  rows from before the toggle remain durable.
+- The flush worker continues running because it is part of the
+  observability infrastructure, not the OTel SDK; it drains existing
+  rows to the configured Collector. If you want everything gone,
+  hit `Clear telemetry buffer`.
+- On the next restart with telemetry re-enabled, behaviour resumes
+  as if nothing had been turned off (including replay of buffered
+  rows the worker hasn't sent yet).
+
+This matches the user mental model of "pause" rather than "erase."
+
+**What T5c does *not* do:**
+
+- No per-signal toggles (e.g. "traces but not metrics"). Single
+  global kill-switch only.
+- No live runtime swap of `Telemetry.instance`. Restart required.
+- No sampling rate control. Dev flavor is 100% sampled by design.
+- No effect on the stable flavor — that build has no telemetry code
+  to gate.
+- No "incognito for next N minutes" timer. If the privacy mental
+  model needs that, it goes in a follow-up.
+
 ### Backend stack on `laptop.lan`
 
 Three new processes via docker-compose alongside the existing
@@ -565,6 +651,7 @@ checked into `ops/grafana/voice-agent-dev.json`.
 | T4 | **`DurableSpanProcessor` + `OtlpDurableExporter` + flush worker** | `lib/core/storage/`, `lib/core/observability/` | New `telemetry_outbox` migration per §Offline buffering. `DurableSpanProcessor` writes on `onEnd` (no in-memory batching). Flush worker with transactional claim, stale-claim recovery on boot, per-status retry classification (drop on 400/401/403/404/422; retry on 408/425/429/5xx/network; back-off cap 5 min; drop after 10 attempts), per-kind retention (3 000 trace / 2 000 metric / 7 days). Tests: persist-on-end, force-quit simulation, single-flight (concurrent ticks → unique payloads), per-status classification, per-kind retention, restart durability. |
 | T5a | **Native event bridges** | `ios/`, `android/`, `lib/core/observability/` | New `EventChannel` `com.voiceagent/telemetry_native_events`. iOS: extend the existing `MediaButtonBridge` observer closures (no new observers — avoids duplication of `interruption`/`routeChange`). Shared `TelemetryEventEmitter` posts to the channel. Android: shared `TelemetryEventEmitter` + a `BroadcastReceiver` for `ACTION_AUDIO_BECOMING_NOISY` gated by `BuildConfig.ENABLE_TELEMETRY`. Dart-side `TelemetryNativeBridge` consumes the stream and turns each event into a span event on the active `hf.attach_stream` span. Update ADR-PLATFORM-005 channel-name registry. Note that this PR includes ADR delta — group with the proposal/ADR PR if T5a is the first ADR-PLATFORM-005 touch. |
 | T5b | **Instrumentation: hands-free pipeline (diagnosis core)** | `lib/features/recording/` | Wire span + counter + event call-sites in `hands_free_orchestrator.dart` and `hands_free_controller.dart`: `hf.attach_stream` (long-lived span), `hf.gate_changed` (event with structured `reason` enum — wire from all four close paths the controller has today: user disengage, TTS suspend, one-shot, terminal error), `hf.stream_error` (event with native code from `onError` — best-effort parse of `Object e`), `hf.stream_done` (event), `hf.chunk_received` (counter; this is the heartbeat that disambiguates closed-gate from dead-mic), `hf.segment_emitted` (counter), `hf.controller_state` (event on every state transition). **Does not change `cancelOnError` behaviour** — see ADR-AUDIO-011 collision note in §Are We Solving the Right Problem? |
+| T5c | **Runtime kill-switch + endpoint override (dev flavor)** | `lib/core/config/`, `lib/features/settings/`, `lib/main_dev.dart` | Two persisted settings: `devTelemetryEnabled` (bool, default `true`) and `otelCollectorUrl` (string, default `http://laptop.lan:4318` or the build-time `--dart-define=OTEL_COLLECTOR` if set). New "Telemetry" section at the bottom of `Settings → Advanced` with the toggle, the editable URL, and a `Restart required to apply` banner that appears after a change. `lib/main_dev.dart` reads both at boot and only calls `OtelTelemetry.boot` when enabled; when disabled the no-op default stays in place. The Settings section is rendered only when `appFlavor == 'dev'` (stable build does not compile any of T5c's UI either). After T4 lands, the toggle implies **pause semantics** on the outbox: stop persisting new spans, leave existing rows alone, flush worker keeps trying — a `Clear telemetry buffer` button does an explicit purge when needed. See §Runtime config (T5c) below. |
 | T6 | **Instrumentation: STT, sync, TTS, lifecycle, hardware-button** | multiple features | Remaining call-sites from the v1 table. Includes `traceparent` header injection on the dio interceptor that talks to personal-agent, and `input.media_button` / `input.volume_button` event emission piggybacking the existing `MediaButtonBridge` Dart consumer. May land as one PR or split per feature. |
 | T7 | **Grafana dashboard** | `ops/grafana/` | JSON checked into `ops/grafana/voice-agent-dev.json`. Panels: mic-silent timeline (gate state over time, overlaid with `hf.stream_error` events and `hf.chunk_received` rate — the rate going to zero while gate is open is the diagnosis), STT latency histogram, sync queue depth, audio session interruption rate. Provisioned via Grafana sidecar config so it reloads from disk on restart. |
 | T8 | **Documentation + runbook** | docs | `docs/observability.md` — how to run the stack locally, how to read the dashboard, how to add a new instrumentation point, how to clear local SQLite buffer if it gets stuck, how to know if telemetry is itself broken. |
@@ -576,7 +663,12 @@ lightweight protocol per the alternative below.
 
 **Task order** is strict: T0 → T1 → (T2 || T3) → T4 → T5a → T5b →
 T6 → T7 → T8. T2 and T3 can land in parallel; everything after T4
-needs the durable exporter.
+needs the durable exporter. **T5c is parallel-mergeable any time
+after T3 lands** — it depends only on the facade and `main_dev.dart`,
+not on T4/T5a/T5b. T5c is a recommended pre-cursor to long-lived
+day-to-day use of the dev flavor (the kill switch matters for
+sensitive moments), but it does not block the T5b on-device
+verification gate that decides whether the rest of P039 proceeds.
 
 ## Test Impact / Verification
 
@@ -786,6 +878,7 @@ that depends on its outcome.
 | Task | Why not yet | Estimated effort |
 |---|---|---|
 | **T5b on-device verification** | the resume gate, see below | 30 min on a real session |
+| T5c — runtime kill-switch + endpoint override | added to the proposal after T5b landed (2026-05-16) when we noticed the dev build has no runtime off-switch — see §Runtime config (T5c) | ~30 min Dart + UI + one acceptance test; parallel-mergeable any time after T3 |
 | T2 — full backend stack on `laptop.lan` | `laptop.lan` does not resolve from the dev machine where this work happened; can be deployed wherever the home-monitor host already runs | half a day |
 | T4 — `DurableSpanProcessor` + outbox | pure Dart, well-scoped; deferred because mic-silent live observation already works with the T3 `SimpleSpanProcessor` — durability AC #4 is a separate concern | half a day |
 | T5a — native `EventChannel` bridges | requires Swift + Kotlin work that needs on-device verification, plus the iOS observers currently live on `MediaButtonBridge` — must be extended carefully | half a day |
@@ -928,6 +1021,47 @@ are roughly in dependency order; T2 and T4 can land in parallel.
 See §The gate above. No code work — just a real-world test run.
 Capture the Collector output as evidence and either close the
 gate or open a follow-up to fix what went wrong.
+
+#### T5c — runtime kill-switch + endpoint override
+
+1. Branch: `039/t5c-runtime-flag`.
+2. Extend `AppConfig` in `lib/core/config/app_config.dart` with two
+   fields: `bool devTelemetryEnabled` (default `true`) and
+   `String otelCollectorUrl` (default: build-time
+   `String.fromEnvironment('OTEL_COLLECTOR',
+   defaultValue: 'http://laptop.lan:4318')`). Update `copyWith`,
+   `fromMap`, `toMap`. Mind the persistence migration if AppConfig
+   uses a versioned schema — these are additive fields with safe
+   defaults, so on first read after upgrade existing users get the
+   defaults transparently.
+3. Update `lib/main_dev.dart` to read both fields from the loaded
+   `AppConfig` and only call `OtelTelemetry.boot(...)` when
+   `devTelemetryEnabled` is `true` *and* the URL parses to a valid
+   `Uri`. When disabled, do not even emit the `app.boot` event —
+   the contract is "telemetry off means telemetry off."
+4. Add a `Telemetry` section to
+   `lib/features/settings/advanced_settings_screen.dart`, rendered
+   only when `appFlavor == 'dev'`. Three controls per
+   §Runtime config (T5c). Hook the toggle and the URL field to
+   `appConfigProvider`'s notifier. Show the `Restart required` banner
+   whenever the in-memory config differs from the value the
+   process booted with (capture the boot-time snapshot in a
+   provider).
+5. Add `Clear telemetry buffer` button. When T4 has not landed, this
+   is a no-op with a debug toast; when T4 ships, it issues
+   `DELETE FROM telemetry_outbox`.
+6. Tests under `test/features/settings/`:
+   - Toggle off + restart → next-launch `Telemetry.instance` is
+     `NoopTelemetry` (drive via a recording subtype counter check —
+     the no-op never emits).
+   - Invalid URL → save is blocked, helper text shown.
+   - Visibility of the section is conditional on flavor — write the
+     test using a build-time `--dart-define` or by stubbing
+     `appFlavor`.
+7. Acceptance: `flutter run --flavor dev`, toggle off, restart,
+   confirm Collector receives no spans. Toggle on, restart, confirm
+   spans resume. Edit URL to `http://localhost:4318`, restart against
+   a local Collector, confirm spans land there.
 
 #### T6 — remaining instrumentation
 
