@@ -26,6 +26,11 @@ class AppConfigService {
   static const _ttsEnabledKey = 'tts_enabled';
   static const _audioFeedbackEnabledKey = 'audio_feedback_enabled';
 
+  // Cross-isolate-safe scalar config per ADR-ARCH-005 (P040 amendment).
+  // Read by the foreground staleness check on app resume and by the
+  // background isolate's 50-min skip guard (workmanager periodic task).
+  static const _lastAgendaFetchAtKey = 'last_agenda_fetch_at';
+
   static const _vadPositiveThresholdKey = 'vad_positive_threshold';
   static const _vadNegativeThresholdKey = 'vad_negative_threshold';
   static const _vadHangoverMsKey = 'vad_hangover_ms';
@@ -173,5 +178,19 @@ class AppConfigService {
   Future<void> saveAudioFeedbackEnabled(bool value) async {
     final prefs = await _preferences;
     await prefs.setBool(_audioFeedbackEnabledKey, value);
+  }
+
+  /// Last successful agenda fetch timestamp (ISO-8601). Null when never
+  /// fetched. See ADR-ARCH-005 (P040 amendment).
+  Future<DateTime?> getLastAgendaFetchAt() async {
+    final prefs = await _preferences;
+    final iso = prefs.getString(_lastAgendaFetchAtKey);
+    if (iso == null) return null;
+    return DateTime.tryParse(iso);
+  }
+
+  Future<void> setLastAgendaFetchAt(DateTime when) async {
+    final prefs = await _preferences;
+    await prefs.setString(_lastAgendaFetchAtKey, when.toUtc().toIso8601String());
   }
 }
