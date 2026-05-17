@@ -1,12 +1,22 @@
 # Proposal 039 — OpenTelemetry Dev-Flavor Telemetry
 
-## Status: Implementation in progress — paused at T5b verification (2026-05-16)
+## Status: T5b verified on iOS Simulator (2026-05-17)
 
-T0 / T1 / T3 / T5b landed on main. **T5b is unverified on a real
-device** — that gate must clear before T2 / T4 / T5a / T6 / T7 / T8
-proceed. T5c (runtime kill-switch + endpoint override) was added to
-the task list on 2026-05-16 and is mergeable in parallel; it does
-not block the gate. See §Implementation status below.
+T0 / T1 / T3 / T5b landed on main and the **T5b verification gate
+cleared green on iOS Simulator** today. The full diagnosis chain
+(`app.boot`, `hf.chunk_received` with `gate_open` attr,
+`hf.gate_changed` with structured `reason`, `hf.segment_emitted`)
+ships data to the local Collector as designed.
+
+The verification surfaced two real instrumentation gaps and one
+unrelated boot bug. All recorded in §Findings from T5b verification
+below. **Bug fixed in PR #301**; the two telemetry gaps are tracked
+as T5b follow-ups that can land in parallel with T2 / T4 / T5a /
+T6 / T7 / T8.
+
+T2 / T4 / T5a / T6 / T7 / T8 are now unblocked. T5c (runtime
+kill-switch + endpoint override) was added to the task list on
+2026-05-16 and is mergeable in parallel.
 
 ## Origin
 
@@ -1113,3 +1123,90 @@ recognising "telemetry itself is broken."
   and (b) keeping kill semantics + adding a UI recovery affordance
   is a *separate* follow-up proposal triggered by what the
   telemetry actually shows.
+
+## Findings from T5b verification (2026-05-17)
+
+Runbook: `docs/manual-tests/p039-t5b-handsfree-telemetry.md`.
+Conducted on iOS Simulator (iPhone 17, iOS 26.x), Collector on
+localhost:4318 with `--dart-define=OTEL_COLLECTOR=http://localhost:4318`.
+
+### What worked
+
+| Test | Evidence in Collector |
+|---|---|
+| T1 — `app.boot` | 1× event, `service.name=voice-agent`, `deployment.environment=dev`, `phase=pre_runapp`, ~700 ms after process start. |
+| T2 — heartbeat | 2 052× `hf.chunk_received` counter across two engagements, `gate_open: true` while engaged, `gate_open: false` after disengage. |
+| T3 — gate close | `hf.gate_changed` with `open: false, reason: user_disengage` on user mic-tap-off. |
+| T3 — warm re-engage | `hf.gate_changed` with `open: true, reason: user_engage` on the **second** engage (warm path through `setCaptureGate(open: true)`). |
+| T3 — one-shot | `hf.gate_changed` with `open: false, reason: one_shot` after a captured utterance. |
+| T4 — segment | `hf.segment_emitted` counter fired 1× on WAV write success. Independent of Groq STT outcome (which failed downstream with the fake key, as expected). |
+
+### Findings — telemetry gaps to address
+
+#### F1 — `hf.controller_state` not implemented
+
+The T5b call-site table in §Instrumentation call-sites (v1) listed
+`hf.controller_state` (event on every state transition). It was not
+wired in PR #296. Consequence visible today: when
+`HandsFreeController.startSession` aborted with
+`HandsFreeSessionError(message: 'Groq API key not set.')`, zero
+telemetry events fired — the failure happened *upstream* of the
+orchestrator instrumentation.
+
+**Impact:** any controller-side pre-flight failure (missing Groq
+key, missing API URL, missing mic permission, manual recording
+collision) is currently invisible. The diagnosis chain catches
+*post*-engine failures cleanly; it misses *pre*-engine ones.
+
+**Fix:** instrument `state =` in `hands_free_controller.dart` with
+`Telemetry.instance.event('hf.controller_state', attrs: { from:
+…, to: …, cause: … })`. ~10 LOC, ~3 tests, parallel-mergeable.
+
+#### F2 — `hf.gate_changed(reason: user_engage)` missing on cold-engage
+
+Today's test showed `user_engage` only on the **second** engagement.
+Reason: on first engage, `startSession` calls `_startEngine`
+(spinning up the engine + opening the gate via `engine.start()`),
+not `setCaptureGate(open: true)`. My T5b instrumentation lives on
+the latter call-site only. The orchestrator's own
+`EngineListening` emit is not yet routed through `Telemetry`.
+
+**Impact:** every cold engagement looks like an unannounced start
+in telemetry — you see chunks arriving without a preceding
+gate_changed event. Distinguishable from a bug because
+`hf.attach_stream` span (when it gets exported at end) will pin
+the start time. But the live timeline misses the cleanest signal.
+
+**Fix:** either (a) add a `hf.gate_changed(open: true, reason:
+user_engage)` event inside the orchestrator at the point where
+`_emit(const EngineListening())` is called (alongside the existing
+`_attachSpan = …` start), or (b) add it at the controller's
+`startSession → _startEngine` call-site. (a) is more cohesive
+(state-emitter co-located). ~5 LOC, ~1 test, parallel-mergeable.
+
+### Findings — unrelated bug fixed in-session
+
+#### F3 — boot crash on iOS Simulator from workmanager (FIXED)
+
+`Workmanager.registerPeriodicTask` (introduced by P040 in PRs
+#299 / #300) throws `PlatformException(unhandledMethod(...))` on
+iOS Simulator and any physical iOS without
+`BGTaskSchedulerPermittedIdentifiers` configured. The exception
+escaped `appMain` and caused a white-screen boot.
+
+**Fixed in PR #301** by wrapping `registerAgendaRefresh()` in a
+defensive try/catch with `kDebugMode` debugPrint. Background
+agenda refresh is best-effort; failing to register must not block
+boot. Proper iOS BGTaskScheduler wiring stays a P040 concern.
+
+This is independent of P039 but worth recording here because the
+manual verification surfaced it.
+
+### Conclusion
+
+T5b verification gate is **closed green**. Future mic-silent
+recurrences on a dev build are now diagnosable end-to-end (modulo
+F2's cold-engage cosmetic — the `hf.attach_stream` span still pins
+the start when it exports). The two telemetry gaps (F1, F2) are
+real but small, parallel-mergeable, and do not block T2 / T4 / T5a
+/ T6 / T7 / T8.
