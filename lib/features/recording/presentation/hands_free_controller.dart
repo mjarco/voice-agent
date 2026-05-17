@@ -139,6 +139,28 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   /// [EngagementController] state without leaking the controller itself.
   EngagementState get engagementState => _engagement.state;
 
+  // P039 T5b F1 — emit `hf.controller_state` on every transition.
+  // Overriding the StateNotifier setter is intentional: it catches the
+  // ~24 in-class `state = …` assignments automatically, including the
+  // pre-engine validator paths (e.g. `state = HandsFreeSessionError`
+  // on missing Groq key) that the original T5b instrumentation missed.
+  @override
+  set state(HandsFreeSessionState value) {
+    final previous = super.state;
+    if (previous.runtimeType != value.runtimeType) {
+      final attrs = <String, Object?>{
+        'from': previous.runtimeType.toString(),
+        'to': value.runtimeType.toString(),
+      };
+      if (value is HandsFreeSessionError) {
+        attrs['error_message'] = value.message;
+        attrs['requires_app_settings'] = value.requiresAppSettings;
+      }
+      Telemetry.instance.event('hf.controller_state', attrs: attrs);
+    }
+    super.state = value;
+  }
+
   // ── Public API: legacy compatibility surface ─────────────────────────────
 
   /// Interrupts the active VAD segment and releases the microphone so that
@@ -425,6 +447,12 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   // ── Helpers — engine lifecycle ────────────────────────────────────────────
 
   void _startEngine(VadConfig config) {
+    // P039 T5b F2 — cold-engage gate_changed. Pairs with the existing
+    // `hf.gate_changed(user_engage)` emission on the warm re-engage path
+    // (setCaptureGate(open: true)). Without this, every cold engagement
+    // looks like an unannounced start in the live telemetry timeline.
+    Telemetry.instance.event('hf.gate_changed',
+        attrs: const {'open': true, 'reason': 'user_engage', 'path': 'cold'});
     final engine = _ref.read(handsFreeEngineProvider);
     _engine = engine;
     final stream = engine.start(config: config);
