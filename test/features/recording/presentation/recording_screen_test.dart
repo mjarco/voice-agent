@@ -33,8 +33,11 @@ import 'package:voice_agent/features/recording/presentation/recording_controller
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 
+import 'package:timezone/data/latest_all.dart' as tz_data;
+
 import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
+import '../../../helpers/stub_notifications.dart';
 import '../../../helpers/stub_session_control.dart';
 
 class _StubStorage implements StorageService {
@@ -105,10 +108,14 @@ List<Override> get _baseOverrides => [
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
   mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
+  ...notificationStubOverrides(),
   ...sessionControlTestOverrides,
 ];
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();
+
   testWidgets('Record screen shows mic button in idle state', (tester) async {
     await tester.pumpWidget(
       ProviderScope(

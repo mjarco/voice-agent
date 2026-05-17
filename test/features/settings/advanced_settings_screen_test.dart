@@ -26,8 +26,11 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/media_button/media_button_provider.dart';
 
+import 'package:timezone/data/latest_all.dart' as tz_data;
+
 import '../../helpers/stub_background_service.dart';
 import '../../helpers/stub_media_button.dart';
+import '../../helpers/stub_notifications.dart';
 import '../../helpers/stub_session_control.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 
@@ -115,6 +118,7 @@ List<Override> _baseOverrides({AppConfigService? configService}) => [
     appConfigServiceProvider.overrideWithValue(configService),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
   mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
+  ...notificationStubOverrides(),
   ...sessionControlTestOverrides,
 ];
 
@@ -145,6 +149,9 @@ Future<void> _pumpAdvanced(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();
+
   group('SettingsScreen — Advanced VAD navigation', () {
     testWidgets(
         'tapping Advanced (VAD) tile in settings navigates to AdvancedSettingsScreen',

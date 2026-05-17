@@ -14,6 +14,11 @@ import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
+import 'package:voice_agent/core/notifications/domain/notification_service.dart';
+import 'package:voice_agent/core/notifications/notification_providers.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
@@ -105,20 +110,52 @@ class _StubAgendaRepository implements AgendaRepository {
     String routineId, String occurrenceId, OccurrenceStatus status) async {}
 }
 
-List<Override> get _baseOverrides => [
-  storageServiceProvider.overrideWithValue(_StubStorage()),
-  connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
-  handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
-  appConfigServiceProvider.overrideWithValue(
-    _FixedConfigService(const AppConfig(groqApiKey: 'test-key', apiUrl: 'https://test.example.com/api')),
-  ),
-  ttsServiceProvider.overrideWithValue(_StubTtsService()),
-  audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedback()),
-  backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
-  mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
-  agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
-  ...sessionControlTestOverrides,
-];
+/// Minimal in-memory NotificationService for widget tests.
+class _StubNotificationService implements NotificationService {
+  final Map<int, ScheduledNotification> _snapshot = {};
+  @override
+  Future<void> init() async {}
+  @override
+  Future<bool> requestPermission() async => true;
+  @override
+  Future<bool> isPermitted() async => true;
+  @override
+  Future<void> schedule(ScheduledNotification n) async => _snapshot[n.id] = n;
+  @override
+  Future<void> cancel(int id) async => _snapshot.remove(id);
+  @override
+  Future<Map<int, ScheduledNotification>> currentlyScheduled() async =>
+      Map.unmodifiable(_snapshot);
+  @override
+  Future<void> cancelAll() async => _snapshot.clear();
+}
+
+List<Override> get _baseOverrides {
+  final notifications = _StubNotificationService();
+  return [
+    storageServiceProvider.overrideWithValue(_StubStorage()),
+    connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
+    handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
+    appConfigServiceProvider.overrideWithValue(
+      _FixedConfigService(const AppConfig(
+          groqApiKey: 'test-key', apiUrl: 'https://test.example.com/api')),
+    ),
+    ttsServiceProvider.overrideWithValue(_StubTtsService()),
+    audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedback()),
+    backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+    mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
+    agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
+    notificationServiceProvider.overrideWithValue(notifications),
+    agendaNotificationSchedulerProvider.overrideWithValue(
+      AgendaNotificationScheduler(
+        service: notifications,
+        location: tz.local,
+        clock: DateTime.now,
+      ),
+    ),
+    ...sessionControlTestOverrides,
+  ];
+}
 
 // ── Tracking HandsFreeController stubs ───────────────────────────────────────
 
@@ -163,6 +200,9 @@ class _SlowStopHfController extends _TrackingHfController {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();
+
   // Finder for the Record icon inside the NavigationBar (avoids ambiguity with
   // the mic icon on the RecordingScreen itself).
   final recordNavIcon = find.descendant(

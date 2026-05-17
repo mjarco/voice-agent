@@ -35,6 +35,9 @@ import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+
+import '../../../helpers/stub_notifications.dart';
 import '../../../helpers/stub_session_control.dart';
 
 // ── Stubs ────────────────────────────────────────────────────────────────────
@@ -173,6 +176,7 @@ List<Override> get _baseOverrides => [
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
   mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
+  ...notificationStubOverrides(),
   ...sessionControlTestOverrides,
 ];
 
@@ -209,6 +213,7 @@ Future<_SpyTtsService> _pumpAppWithSpyTts(WidgetTester tester) async {
         audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
         backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
         mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
+        ...notificationStubOverrides(),
         ...sessionControlTestOverrides,
       ],
       child: const App(),
@@ -221,6 +226,9 @@ Future<_SpyTtsService> _pumpAppWithSpyTts(WidgetTester tester) async {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();
+
   setUpAll(() => WidgetsFlutterBinding.ensureInitialized());
 
   group('tap-to-engage (P038 — hands-free via mic button)', () {

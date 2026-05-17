@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
+import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
@@ -25,6 +27,11 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
   // Matches Branch 2 in router.dart's StatefulShellRoute.
   static const _recordTabIndex = 2;
 
+  /// P040 §Reconciler Triggers #2: kick a refresh on app resume if the last
+  /// successful agenda fetch was >1h ago. Compensates for iOS BGAppRefresh
+  /// being opportunistic.
+  static const _stalenessThreshold = Duration(hours: 1);
+
   @override
   void initState() {
     super.initState();
@@ -41,12 +48,41 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     ref.read(appForegroundedProvider.notifier).state =
         state == AppLifecycleState.resumed;
+
+    // P040 §Reconciler Triggers #2: staleness-driven foreground refresh.
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_kickRefreshIfStale());
+    }
+  }
+
+  Future<void> _kickRefreshIfStale() async {
+    try {
+      final configService = ref.read(appConfigServiceProvider);
+      final last = await configService.getLastAgendaFetchAt();
+      if (last == null ||
+          DateTime.now().difference(last) > _stalenessThreshold) {
+        // Reading the notifier instantiates it if it wasn't already — but
+        // it IS already, because `ref.watch(agendaNotifierProvider)` in
+        // build() promotes it to app scope per ADR-ARCH-009.
+        unawaited(ref.read(agendaNotifierProvider.notifier).refresh());
+      }
+    } catch (_) {
+      // Staleness check is best-effort; never crash the resume path.
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     ref.watch(syncWorkerProvider);
     ref.watch(handsFreeControllerProvider);
+
+    // P040 §Reconciler Triggers preamble: promote `agendaNotifierProvider`
+    // to app scope per ADR-ARCH-009 (criteria 1-3 satisfied: cross-feature
+    // event listening, negligible idle cost, screen-level behavior
+    // preserved). The notifier listens to `sessionActiveProvider` edges
+    // and reacts to app-lifecycle staleness even when the Agenda tab has
+    // not been visited.
+    ref.watch(agendaNotifierProvider);
 
     ref.listen<AsyncValue<ConnectivityStatus>>(
       connectivityStatusProvider,

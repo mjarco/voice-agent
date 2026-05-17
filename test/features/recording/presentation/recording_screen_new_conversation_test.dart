@@ -35,8 +35,11 @@ import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
+import 'package:timezone/data/latest_all.dart' as tz_data;
+
 import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
+import '../../../helpers/stub_notifications.dart';
 
 // ── Stubs ────────────────────────────────────────────────────────────────────
 
@@ -248,6 +251,7 @@ List<Override> _baseOverrides({
           toaster ?? _SpyToaster()),
       hapticServiceProvider
           .overrideWithValue(hapticService ?? _SpyHapticService()),
+      ...notificationStubOverrides(),
     ];
 
 class _StubHandsFreeControlPort implements HandsFreeControlPort {
@@ -261,6 +265,9 @@ class _StubHandsFreeControlPort implements HandsFreeControlPort {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();
+
   setUpAll(() => WidgetsFlutterBinding.ensureInitialized());
 
   group('New conversation button', () {

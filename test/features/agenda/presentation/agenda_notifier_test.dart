@@ -1,10 +1,20 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
+import 'package:voice_agent/core/notifications/domain/notification_service.dart';
+import 'package:voice_agent/core/notifications/notification_providers.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_state.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_notifier.dart';
+import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 
 class _MockRepository implements AgendaRepository {
   AgendaResponse? nextFetchResult;
@@ -89,18 +99,84 @@ AgendaResponse _responseWithItems() => AgendaResponse(
       ],
     );
 
+/// Minimal in-memory NotificationService for tests (mirrors the production
+/// snapshot semantics so the scheduler diff behaves realistically).
+class _FakeNotificationService implements NotificationService {
+  final Map<int, ScheduledNotification> _snapshot = {};
+  bool permitted = true;
+
+  @override
+  Future<void> init() async {}
+  @override
+  Future<bool> requestPermission() async => permitted;
+  @override
+  Future<bool> isPermitted() async => permitted;
+  @override
+  Future<void> schedule(ScheduledNotification n) async => _snapshot[n.id] = n;
+  @override
+  Future<void> cancel(int id) async => _snapshot.remove(id);
+  @override
+  Future<Map<int, ScheduledNotification>> currentlyScheduled() async =>
+      Map.unmodifiable(_snapshot);
+  @override
+  Future<void> cancelAll() async => _snapshot.clear();
+}
+
+/// Build a ProviderContainer with all deps needed by `agendaNotifierProvider`.
+/// Returns the container; tests read `agendaNotifierProvider.notifier` to get
+/// the notifier (same path production code uses).
+ProviderContainer _buildContainer(AgendaRepository repo) {
+  final notifications = _FakeNotificationService();
+  final scheduler = AgendaNotificationScheduler(
+    service: notifications,
+    location: tz.local,
+    clock: DateTime.now,
+  );
+  // AppConfigService writes to SharedPreferences; for unit tests we use the
+  // mock channel registered in setUpAll().
+  final configService = AppConfigService();
+  return ProviderContainer(
+    overrides: [
+      agendaRepositoryProvider.overrideWithValue(repo),
+      notificationServiceProvider.overrideWithValue(notifications),
+      agendaNotificationSchedulerProvider.overrideWithValue(scheduler),
+      appConfigServiceProvider.overrideWithValue(configService),
+    ],
+  );
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() {
+    tz_data.initializeTimeZones();
+  });
+
+  setUp(() {
+    // Mock SharedPreferences (no platform plugin in the unit harness).
+    SharedPreferences.setMockInitialValues({});
+  });
+
   late _MockRepository repo;
+  late ProviderContainer container;
 
   setUp(() {
     repo = _MockRepository();
+    container = _buildContainer(repo);
   });
+
+  tearDown(() {
+    container.dispose();
+  });
+
+  AgendaNotifier buildNotifier() =>
+      container.read(agendaNotifierProvider.notifier);
 
   group('AgendaNotifier', () {
     test('constructor triggers loadAgenda and transitions to loaded',
         () async {
       repo.nextFetchResult = _responseWithItems();
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
 
       // Wait for async load
       await Future<void>.delayed(Duration.zero);
@@ -113,7 +189,7 @@ void main() {
 
     test('transitions to error on fetch failure', () async {
       repo.fetchError = Exception('Network error');
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
 
       await Future<void>.delayed(Duration.zero);
 
@@ -128,7 +204,7 @@ void main() {
       );
       repo.nextCachedResult = cached;
       repo.fetchError = Exception('Offline');
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
 
       await Future<void>.delayed(Duration.zero);
 
@@ -139,7 +215,7 @@ void main() {
     });
 
     test('selectDate changes date and triggers reload', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       repo.fetchCount = 0;
@@ -151,7 +227,7 @@ void main() {
     });
 
     test('previousDay moves back one day', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       final before = notifier.selectedDate;
@@ -165,7 +241,7 @@ void main() {
     });
 
     test('nextDay moves forward one day', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       final before = notifier.selectedDate;
@@ -179,7 +255,7 @@ void main() {
     });
 
     test('goToToday resets to current date', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       notifier.selectDate(DateTime(2025, 1, 1));
@@ -192,7 +268,7 @@ void main() {
     });
 
     test('markDone calls repository and returns true on success', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       final result = await notifier.markDone('rec-1');
@@ -202,7 +278,7 @@ void main() {
     });
 
     test('markDone returns false on failure', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       repo.actionError = Exception('Server error');
@@ -212,7 +288,7 @@ void main() {
     });
 
     test('skipOccurrence calls repository with skipped status', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       final result = await notifier.skipOccurrence('rtn-1', 'occ-1');
@@ -224,7 +300,7 @@ void main() {
     });
 
     test('completeOccurrence calls repository with done status', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       final result = await notifier.completeOccurrence('rtn-1', 'occ-1');
@@ -234,7 +310,7 @@ void main() {
     });
 
     test('skipOccurrence returns false on failure', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       repo.actionError = Exception('Offline');
@@ -244,7 +320,7 @@ void main() {
     });
 
     test('refresh reloads data', () async {
-      final notifier = AgendaNotifier(repo);
+      final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       repo.fetchCount = 0;
