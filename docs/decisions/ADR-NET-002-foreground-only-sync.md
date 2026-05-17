@@ -2,7 +2,7 @@
 
 Status: Accepted
 Proposed in: P005
-Amended in: P027, P039 (dev-flavor telemetry flusher exception)
+Amended in: P027, P039 (dev-flavor telemetry flusher exception), P040 (workmanager for agenda notification reconciliation)
 
 ## Context
 
@@ -102,3 +102,60 @@ Justified by:
 **This exception does not authorise other features to add background
 sync without ADR-level justification.** It is narrowly scoped to
 dev-flavor observability traffic. See ADR-OBS-001 for the full rule.
+
+## P040 amendment — workmanager for agenda notification reconciliation
+
+A `workmanager` periodic task may fetch today's agenda and update the OS
+notification queue while the app is not in any of the previously-authorized
+states (not foregrounded, no hands-free session active). The task is
+limited to one job — agenda reconciliation — and to one network call —
+`GET /agenda` for today's date.
+
+The task is scheduled via `Workmanager().registerPeriodicTask(...)` with a
+1-hour frequency hint and `Constraints(networkType: connected)`. iOS routes
+this through `BGAppRefreshTask`, which is opportunistic and not guaranteed
+to honor the cadence; the proposal accepts that flakiness explicitly. The
+foreground "fetch if last sync >1h ago" trigger compensates whenever the
+user opens the app.
+
+Justified by:
+
+- **Reconciler freshness requirement.** ADR-NOTIF-001 governs how the app
+  maintains an OS-side notification schedule. Without periodic refresh,
+  items added through the personal-agent web UI between app opens would
+  never produce reminders — defeating the purpose of the feature.
+- **Single network surface.** `GET /agenda` is read-only, idempotent, and
+  small. No write traffic flows over this path; the carve-out cannot be
+  used to drain the sync queue or to do anything other than reconcile.
+- **No new entitlements on iOS.** `UIBackgroundModes: fetch` is the only
+  addition; the existing `UIBackgroundModes: audio` (P027) remains for
+  hands-free capture.
+- **Battery-bounded.** WorkManager respects device constraints (network,
+  charging-only opt-in available, etc.); the task runs at most once per
+  hour and skips when `now - lastAgendaFetchAt < 50 min`.
+
+Consequences:
+
+- `workmanager: ^0.5.2` enters the dependency tree. **This ADR is its
+  sole authorization.** Any other use case for `workmanager` (background
+  sync, telemetry flush, etc.) requires a separate amendment with
+  independent justification.
+- Background isolate dependency construction is governed by
+  ADR-PLATFORM-007 (shared core boot helper). The reconciler invoked in
+  the isolate is the same code path invoked in the foreground; see
+  ADR-NOTIF-001.
+- `SyncWorker` is **not** affected by this amendment. Transcript sync
+  continues to require either foregrounded state or an active hands-free
+  session.
+- Future features that want background work for **non-agenda** reasons
+  still require separate ADR-level justification — the workmanager
+  package being present in the project does not generalize the carve-out.
+
+**Third amendment caveat.** This is the third amendment to ADR-NET-002
+(P027 session-active, P039 dev-telemetry, P040 workmanager-for-agenda).
+If a fourth use case arises, the maintainer should consider restructuring
+this ADR — for example, splitting it into a general "sync policy"
+statement plus a registered list of approved background exceptions —
+rather than adding a fourth narrow carve-out. Each carve-out individually
+is justified; collectively they erode the ADR's original "foreground-only"
+clarity.
