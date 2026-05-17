@@ -23,7 +23,7 @@ import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/api_config.dart';
 import 'package:voice_agent/features/api_sync/sync_worker.dart';
 
-class FakeStorageService implements StorageService {
+class FakeStorageService with TelemetryStorageNoop implements StorageService {
   final List<Transcript> transcripts = [];
   final List<SyncQueueItem> queueItems = [];
   final List<String> calls = [];

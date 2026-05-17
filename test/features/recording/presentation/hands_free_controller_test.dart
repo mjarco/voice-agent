@@ -180,7 +180,7 @@ class _SlowSttService implements SttService {
 // ── FakeStorageService ────────────────────────────────────────────────────────
 
 /// Controllable [StorageService] for T3b persist/rollback tests.
-class FakeStorageService implements StorageService {
+class FakeStorageService with TelemetryStorageNoop implements StorageService {
   final List<Transcript> savedTranscripts = [];
   final List<String> enqueuedIds = [];
   final List<String> deletedIds = [];

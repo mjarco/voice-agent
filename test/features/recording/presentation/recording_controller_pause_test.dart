@@ -97,7 +97,7 @@ class _FakeSttService implements SttService {
   }
 }
 
-class _FakeStorageService implements StorageService {
+class _FakeStorageService with TelemetryStorageNoop implements StorageService {
   final List<Transcript> savedTranscripts = [];
   final List<String> enqueuedIds = [];
 

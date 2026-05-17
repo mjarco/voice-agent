@@ -40,7 +40,7 @@ import '../../../helpers/stub_media_button.dart';
 import '../../../helpers/stub_notifications.dart';
 import '../../../helpers/stub_session_control.dart';
 
-class _StubStorage implements StorageService {
+class _StubStorage with TelemetryStorageNoop implements StorageService {
   @override Future<String> getDeviceId() async => 'test';
   @override Future<List<TranscriptWithStatus>> getTranscriptsWithStatus({int limit = 20, int offset = 0}) async => [];
   @override Future<void> saveTranscript(Transcript t) async {}

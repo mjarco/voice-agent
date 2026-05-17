@@ -18,7 +18,7 @@ import '../helpers/stub_background_service.dart';
 import '../helpers/stub_notifications.dart';
 import '../helpers/stub_session_control.dart';
 
-class _StubStorageService implements StorageService {
+class _StubStorageService with TelemetryStorageNoop implements StorageService {
   @override
   Future<String> getDeviceId() async => 'test-device';
   @override

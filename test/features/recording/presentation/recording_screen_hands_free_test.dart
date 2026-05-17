@@ -55,7 +55,7 @@ class _StubAudioFeedbackService implements AudioFeedbackService {
   @override void dispose() {}
 }
 
-class _StubStorage implements StorageService {
+class _StubStorage with TelemetryStorageNoop implements StorageService {
   @override Future<String> getDeviceId() async => 'test-device';
   @override Future<List<TranscriptWithStatus>> getTranscriptsWithStatus(
       {int limit = 20, int offset = 0}) async => [];

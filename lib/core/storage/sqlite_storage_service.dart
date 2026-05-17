@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -6,6 +8,7 @@ import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/models/sync_status.dart';
 import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/observability/telemetry_outbox_row.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 
 class SqliteStorageService implements StorageService {
@@ -25,7 +28,7 @@ class SqliteStorageService implements StorageService {
     final db = await factory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -65,14 +68,36 @@ class SqliteStorageService implements StorageService {
     await db.execute(
       'CREATE INDEX idx_sync_queue_status ON sync_queue(status)',
     );
+
+    await _createTelemetryOutbox(db);
+  }
+
+  /// P039 T4 — durable OTLP outbox. One row = one OTLP/JSON envelope
+  /// the flush worker will POST. See `lib/core/observability/telemetry_outbox_row.dart`.
+  static Future<void> _createTelemetryOutbox(Database db) async {
+    await db.execute('''
+      CREATE TABLE telemetry_outbox (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        signal_kind      TEXT NOT NULL CHECK (signal_kind IN ('trace','metric')),
+        payload          BLOB NOT NULL,
+        created_at       INTEGER NOT NULL,
+        attempts         INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at  INTEGER NOT NULL DEFAULT 0,
+        claimed_at       INTEGER,
+        last_error       TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX telemetry_outbox_due
+        ON telemetry_outbox (signal_kind, next_attempt_at, id)
+    ''');
   }
 
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     for (var v = oldVersion + 1; v <= newVersion; v++) {
       switch (v) {
-        // Future migrations go here:
-        // case 2:
-        //   await _migrateV1ToV2(db);
+        case 2:
+          await _createTelemetryOutbox(db);
         default:
           break;
       }
@@ -284,6 +309,146 @@ class SqliteStorageService implements StorageService {
       await prefs.setString(_deviceIdKey, deviceId);
     }
     return deviceId;
+  }
+
+  // -- Telemetry outbox (P039 T4) --
+
+  @override
+  Future<int> appendTelemetryRow({
+    required TelemetrySignalKind signalKind,
+    required Uint8List payload,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return _db.transaction((txn) async {
+      // Retention: drop rows older than the age cap, regardless of count.
+      final ageCutoff = now - kTelemetryMaxAge.inMilliseconds;
+      await txn.delete(
+        'telemetry_outbox',
+        where: 'created_at < ?',
+        whereArgs: [ageCutoff],
+      );
+
+      // Retention: per-kind cap. Count current rows of this kind; if
+      // the insert would exceed the cap, drop oldest by id until we
+      // are one below the cap (room for the new row).
+      final cap = kTelemetryRetentionByKind[signalKind] ?? 1000;
+      final countRow = await txn.rawQuery(
+        'SELECT COUNT(*) AS c FROM telemetry_outbox WHERE signal_kind = ?',
+        [signalKind.dbValue],
+      );
+      final count = countRow.first['c']! as int;
+      if (count >= cap) {
+        final toDrop = (count - cap) + 1;
+        final oldest = await txn.query(
+          'telemetry_outbox',
+          columns: ['id'],
+          where: 'signal_kind = ?',
+          whereArgs: [signalKind.dbValue],
+          orderBy: 'id ASC',
+          limit: toDrop,
+        );
+        final ids = oldest.map((r) => r['id']! as int).toList();
+        if (ids.isNotEmpty) {
+          final placeholders = List.filled(ids.length, '?').join(',');
+          await txn.delete(
+            'telemetry_outbox',
+            where: 'id IN ($placeholders)',
+            whereArgs: ids,
+          );
+        }
+      }
+
+      return txn.insert('telemetry_outbox', {
+        'signal_kind': signalKind.dbValue,
+        'payload': payload,
+        'created_at': now,
+        'attempts': 0,
+        'next_attempt_at': 0,
+        'claimed_at': null,
+        'last_error': null,
+      });
+    });
+  }
+
+  @override
+  Future<List<TelemetryOutboxRow>> claimDueTelemetryRows({int limit = 50}) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return _db.transaction((txn) async {
+      // Find due, unclaimed rows. Use the index
+      // (signal_kind, next_attempt_at, id).
+      final due = await txn.rawQuery('''
+        SELECT id FROM telemetry_outbox
+        WHERE claimed_at IS NULL AND next_attempt_at <= ?
+        ORDER BY id ASC
+        LIMIT ?
+      ''', [now, limit]);
+      if (due.isEmpty) return <TelemetryOutboxRow>[];
+
+      final ids = due.map((r) => r['id']! as int).toList();
+      final placeholders = List.filled(ids.length, '?').join(',');
+
+      // Claim them atomically.
+      await txn.rawUpdate(
+        'UPDATE telemetry_outbox SET claimed_at = ? '
+        'WHERE id IN ($placeholders)',
+        [now, ...ids],
+      );
+
+      // Re-read the now-claimed rows (full row data).
+      final rows = await txn.query(
+        'telemetry_outbox',
+        where: 'id IN ($placeholders)',
+        whereArgs: ids,
+        orderBy: 'id ASC',
+      );
+      return rows.map(TelemetryOutboxRow.fromMap).toList();
+    });
+  }
+
+  @override
+  Future<int> deleteTelemetryRows(List<int> ids) async {
+    if (ids.isEmpty) return 0;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    return _db.delete(
+      'telemetry_outbox',
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
+  }
+
+  @override
+  Future<void> markTelemetryRetry({
+    required int id,
+    required DateTime nextAttemptAt,
+    required String lastError,
+  }) async {
+    await _db.rawUpdate(
+      '''UPDATE telemetry_outbox
+         SET attempts = attempts + 1,
+             next_attempt_at = ?,
+             last_error = ?,
+             claimed_at = NULL
+         WHERE id = ?''',
+      [nextAttemptAt.millisecondsSinceEpoch, lastError, id],
+    );
+  }
+
+  @override
+  Future<int> releaseStaleTelemetryClaims({Duration? staleThreshold}) async {
+    final threshold = staleThreshold ?? kTelemetryClaimTtl;
+    final cutoff =
+        DateTime.now().subtract(threshold).millisecondsSinceEpoch;
+    return _db.rawUpdate(
+      '''UPDATE telemetry_outbox
+         SET claimed_at = NULL
+         WHERE claimed_at IS NOT NULL AND claimed_at < ?''',
+      [cutoff],
+    );
+  }
+
+  @override
+  Future<int> clearTelemetryOutbox() async {
+    return _db.delete('telemetry_outbox');
   }
 }
 

@@ -6,7 +6,7 @@ import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/features/history/history_notifier.dart';
 
-class FakeStorageService implements StorageService {
+class FakeStorageService with TelemetryStorageNoop implements StorageService {
   List<TranscriptWithStatus> fakeItems = [];
   final List<String> deletedIds = [];
   final List<String> reactivatedIds = [];
