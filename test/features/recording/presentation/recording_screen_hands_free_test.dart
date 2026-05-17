@@ -31,8 +31,11 @@ import 'package:voice_agent/core/media_button/media_button_provider.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 
+import 'package:timezone/data/latest_all.dart' as tz_data;
+
 import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
+import '../../../helpers/stub_notifications.dart';
 import '../../../helpers/stub_session_control.dart';
 
 // ── Stubs ─────────────────────────────────────────────────────────────────────
@@ -145,6 +148,7 @@ List<Override> baseOverrides(FakeHfEngine engine) => [
       audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
       backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
       mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
+      ...notificationStubOverrides(),
       ...sessionControlTestOverrides,
     ];
 
@@ -182,6 +186,9 @@ Future<void> pumpRecordScreen(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();
+
   setUpAll(() => WidgetsFlutterBinding.ensureInitialized());
 
   group('auto-start (P037 v2: removed)', () {

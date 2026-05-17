@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/notifications/notification_providers.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/features/agenda/data/api_agenda_repository.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
@@ -12,6 +14,10 @@ final agendaRepositoryProvider = Provider<AgendaRepository>((ref) {
 
 final agendaNotifierProvider =
     StateNotifierProvider<AgendaNotifier, AgendaState>((ref) {
-  final repository = ref.watch(agendaRepositoryProvider);
-  return AgendaNotifier(repository);
+  return AgendaNotifier(
+    ref.watch(agendaRepositoryProvider),
+    scheduler: ref.watch(agendaNotificationSchedulerProvider),
+    configService: ref.watch(appConfigServiceProvider),
+    ref: ref,
+  );
 });

@@ -2,12 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
+import 'package:voice_agent/core/notifications/domain/notification_service.dart';
+import 'package:voice_agent/core/notifications/notification_providers.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
+
+/// Minimal in-memory NotificationService for widget tests.
+class _StubNotificationService implements NotificationService {
+  final Map<int, ScheduledNotification> _snapshot = {};
+  @override
+  Future<void> init() async {}
+  @override
+  Future<bool> requestPermission() async => true;
+  @override
+  Future<bool> isPermitted() async => true;
+  @override
+  Future<void> schedule(ScheduledNotification n) async => _snapshot[n.id] = n;
+  @override
+  Future<void> cancel(int id) async => _snapshot.remove(id);
+  @override
+  Future<Map<int, ScheduledNotification>> currentlyScheduled() async =>
+      Map.unmodifiable(_snapshot);
+  @override
+  Future<void> cancelAll() async => _snapshot.clear();
+}
 
 class _StubRepository implements AgendaRepository {
   AgendaResponse? response;
@@ -69,10 +97,21 @@ Future<void> _pumpScreen(
     ],
   );
 
+  // Wire the deps the new P040 agendaNotifierProvider chain needs.
+  final notifications = _StubNotificationService();
+  final scheduler = AgendaNotificationScheduler(
+    service: notifications,
+    location: tz.local,
+    clock: DateTime.now,
+  );
+
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         agendaRepositoryProvider.overrideWithValue(repo),
+        notificationServiceProvider.overrideWithValue(notifications),
+        agendaNotificationSchedulerProvider.overrideWithValue(scheduler),
+        appConfigServiceProvider.overrideWithValue(AppConfigService()),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -81,6 +120,16 @@ Future<void> _pumpScreen(
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() {
+    tz_data.initializeTimeZones();
+  });
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('AgendaScreen', () {
     testWidgets('renders AppBar with title', (tester) async {
       await _pumpScreen(tester);

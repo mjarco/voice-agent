@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
@@ -20,6 +21,7 @@ import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 
 import '../../helpers/stub_background_service.dart';
+import '../../helpers/stub_notifications.dart';
 import '../../helpers/stub_session_control.dart';
 
 class _StubStorage implements StorageService {
@@ -86,6 +88,7 @@ List<Override> _baseOverrides() => [
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
   audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
   backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+  ...notificationStubOverrides(),
   ...sessionControlTestOverrides,
 ];
 
@@ -95,6 +98,9 @@ Future<void> _navigateToSettings(WidgetTester tester) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();
+
   group('SettingsScreen', () {
     testWidgets('Groq API Key field appears in Transcription section',
         (tester) async {

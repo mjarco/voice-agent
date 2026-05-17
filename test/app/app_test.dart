@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript.dart';
@@ -16,6 +17,7 @@ import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 
 import '../helpers/stub_background_service.dart';
+import '../helpers/stub_notifications.dart';
 import '../helpers/stub_session_control.dart';
 
 class _StubStorageService implements StorageService {
@@ -88,10 +90,14 @@ List<Override> get _testOverrides => [
       connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
       backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
       agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
+      ...notificationStubOverrides(),
       ...sessionControlTestOverrides,
     ];
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  tz_data.initializeTimeZones();
+
   testWidgets('App renders with shell and 5 tabs', (tester) async {
     await tester.pumpWidget(
       ProviderScope(overrides: _testOverrides, child: const App()),

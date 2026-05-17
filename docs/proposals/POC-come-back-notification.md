@@ -4,7 +4,11 @@
 > what we tried, why, and what we learned. Do not run `/proposal-review` on it.
 > If the PoC graduates into real work, write a proper proposal then.
 
-## Status: PoC implemented (PR #288). Local notification on iOS only; not yet promoted to a full proposal.
+## Status: Superseded by P040.
+
+The PoC's notification plumbing graduated into P040 (agenda notifications & background refresh). The PoC code (`lib/core/notifications/come_back_notifier.dart` and the lifecycle hook in `lib/app/app.dart`) was removed in P040 T3. This doc is kept as historical record of the PoC discipline that informed the real proposal.
+
+Original status (preserved below for context): PoC implemented (PR #288). Local notification on iOS only; not yet promoted to a full proposal.
 
 ## Goal
 
