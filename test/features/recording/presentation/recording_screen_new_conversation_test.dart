@@ -43,7 +43,7 @@ import '../../../helpers/stub_notifications.dart';
 
 // ── Stubs ────────────────────────────────────────────────────────────────────
 
-class _StubStorage implements StorageService {
+class _StubStorage with TelemetryStorageNoop implements StorageService {
   @override
   Future<String> getDeviceId() async => 'test-device';
   @override

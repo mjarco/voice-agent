@@ -134,7 +134,7 @@ class _NullSttService implements SttService {
       Completer<TranscriptResult>().future; // never completes
 }
 
-class _FakeStorageService implements StorageService {
+class _FakeStorageService with TelemetryStorageNoop implements StorageService {
   @override
   Future<String> getDeviceId() async => 'test-device';
   @override

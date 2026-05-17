@@ -36,7 +36,7 @@ import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 
 // ── Stubs ─────────────────────────────────────────────────────────────────────
 
-class _StubStorage implements StorageService {
+class _StubStorage with TelemetryStorageNoop implements StorageService {
   @override Future<String> getDeviceId() async => 'test';
   @override Future<List<TranscriptWithStatus>> getTranscriptsWithStatus({int limit = 20, int offset = 0}) async => [];
   @override Future<void> saveTranscript(Transcript t) async {}
