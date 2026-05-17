@@ -1,22 +1,20 @@
 # Proposal 039 — OpenTelemetry Dev-Flavor Telemetry
 
-## Status: T5b verified on iOS Simulator (2026-05-17)
+## Status: T5b verified + gaps closed + T4a landed (2026-05-17 evening)
 
-T0 / T1 / T3 / T5b landed on main and the **T5b verification gate
-cleared green on iOS Simulator** today. The full diagnosis chain
-(`app.boot`, `hf.chunk_received` with `gate_open` attr,
-`hf.gate_changed` with structured `reason`, `hf.segment_emitted`)
-ships data to the local Collector as designed.
+T0 / T1 / T3 / T4a / T5b on main. **T5b verification gate is
+closed green** on iOS Simulator. Today's session also closed F1,
+F2 (the two gaps surfaced by verification) and shipped T4a (the
+SQLite layer that T4b's DurableSpanProcessor will hang off).
 
-The verification surfaced two real instrumentation gaps and one
-unrelated boot bug. All recorded in §Findings from T5b verification
-below. **Bug fixed in PR #301**; the two telemetry gaps are tracked
-as T5b follow-ups that can land in parallel with T2 / T4 / T5a /
-T6 / T7 / T8.
+**Remaining on the T4 track:** T4b — `DurableSpanProcessor` +
+`TelemetryFlushWorker` + wiring into `OtelTelemetry.boot` (the swap
+from `SimpleSpanProcessor` to the durable variant). Sized at
+~500 LOC code + ~200 LOC tests; carries real swap risk (mis-wiring
+silently breaks the verified diagnostic chain), so it gets its
+own session rather than tail-ending today's work.
 
-T2 / T4 / T5a / T6 / T7 / T8 are now unblocked. T5c (runtime
-kill-switch + endpoint override) was added to the task list on
-2026-05-16 and is mergeable in parallel.
+**Other unblocked tracks:** T2 / T5a / T5c / T6 / T7 / T8.
 
 ## Origin
 
@@ -1210,3 +1208,29 @@ F2's cold-engage cosmetic — the `hf.attach_stream` span still pins
 the start when it exports). The two telemetry gaps (F1, F2) are
 real but small, parallel-mergeable, and do not block T2 / T4 / T5a
 / T6 / T7 / T8.
+
+### Follow-up wave (2026-05-17 evening session)
+
+After the verification cleared green, the same session shipped
+four more PRs:
+
+| PR | What | Status |
+|---|---|---|
+| #301 | F3 fix — `registerAgendaRefresh` graceful failure on iOS Simulator | Merged |
+| #302 | iOS Podfile.lock sync (workmanager + flutter_timezone pods) | Merged |
+| #303 | F1 + F2 — `hf.controller_state` + cold-engage `hf.gate_changed` | Merged |
+| #304 | T4a — `telemetry_outbox` SQLite layer + `TelemetryStorageNoop` mixin | Merged |
+
+F1 + F2 close the two instrumentation gaps surfaced by the
+verification. T4a is the storage primitive on which T4b will hang
+`DurableSpanProcessor` + `TelemetryFlushWorker` in a follow-up
+session. T4a alone has no runtime effect — it just adds the table
+and the API surface; production telemetry still uses
+`SimpleSpanProcessor` from T3.
+
+**Why T4b didn't ship today.** T4b swaps the live span-export
+path on the dev flavor. Mis-wiring silently breaks the just-verified
+diagnostic chain. The risk of a quiet regression after a long
+session of incremental edits is high enough that T4b deserves a
+fresh attempt with its own test cycle. The state on `main` is
+clean.
