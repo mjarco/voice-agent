@@ -58,7 +58,19 @@ Future<void> appMain() async {
 
   // Register the periodic agenda-refresh task. Idempotent (KEEP policy).
   // Per ADR-NET-002 P040 amendment.
-  await registerAgendaRefresh();
+  //
+  // Best-effort: on iOS Simulator (and on physical iOS without
+  // `BGTaskSchedulerPermittedIdentifiers` in Info.plist) workmanager throws
+  // `unhandledMethod("registerPeriodicTask")`. Background agenda refresh
+  // simply will not run there — that's the expected platform behaviour. Boot
+  // must not depend on it.
+  try {
+    await registerAgendaRefresh();
+  } catch (e, st) {
+    if (kDebugMode) {
+      debugPrint('registerAgendaRefresh failed (continuing): $e\n$st');
+    }
+  }
 
   final recovered = await core.storage.recoverStaleSending();
   if (kDebugMode && recovered > 0) {
