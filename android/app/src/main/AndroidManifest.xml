@@ -5,6 +5,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- P040: WorkManager periodic agenda-refresh task + exact-alarm scheduling
+         for routine occurrence reminders. RECEIVE_BOOT_COMPLETED is required
+         so WorkManager re-registers the periodic task after device reboot;
+         without it the schedule resumes only when the user opens the app
+         post-reboot. USE_EXACT_ALARM is granted by default for alarm/reminder
+         apps under Play's policy (P040 §Permission Flow). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
