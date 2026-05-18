@@ -78,4 +78,22 @@ class AppConfigNotifier extends StateNotifier<AppConfig> {
     await _service.saveAudioFeedbackEnabled(value);
     state = state.copyWith(audioFeedbackEnabled: value);
   }
+
+  // P039 T5c — dev-flavor runtime telemetry config.
+
+  Future<void> updateDevTelemetryEnabled(bool value) async {
+    await _service.saveDevTelemetryEnabled(value);
+    state = state.copyWith(devTelemetryEnabled: value);
+  }
+
+  Future<void> updateOtelCollectorUrl(String value) async {
+    await _service.saveOtelCollectorUrl(value);
+    state = state.copyWith(otelCollectorUrl: value);
+  }
 }
+
+/// Flips to `true` the first time the user changes a telemetry-related
+/// setting in this session. The Settings UI uses it to render the
+/// "Restart required to apply" banner. Resets naturally on the next
+/// process start.
+final telemetryRestartRequiredProvider = StateProvider<bool>((_) => false);
