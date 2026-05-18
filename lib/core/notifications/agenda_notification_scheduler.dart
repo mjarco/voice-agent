@@ -3,6 +3,7 @@ import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
+import 'package:voice_agent/core/observability/telemetry.dart';
 
 /// Pure reconciler — turns an [AgendaResponse] into a desired set of OS
 /// notifications and diffs against the [NotificationService] snapshot.
@@ -38,37 +39,77 @@ class AgendaNotificationScheduler {
   ///
   /// [sessionActive] gates routine-occurrence reminders (suppressed while a
   /// hands-free session is running). Summaries are scheduled regardless.
+  ///
+  /// Emits `agenda.reconcile` span (dev-flavor telemetry per ADR-OBS-001)
+  /// with events for permission short-circuit, revocation cancelAll, and
+  /// the diff sizes. Counter `agenda.notifications.scheduled` /
+  /// `.cancelled` for histogram-friendly aggregation. Stable flavor:
+  /// NoopTelemetry — zero cost.
   Future<void> reconcile(
     AgendaResponse response, {
     required bool sessionActive,
   }) async {
-    final permitted = await _service.isPermitted();
+    final span = Telemetry.instance.span('agenda.reconcile', attrs: {
+      'session_active': sessionActive,
+      'response_date': response.date,
+      'items_count': response.items.length,
+      'routines_count': response.routineItems.length,
+    });
+    try {
+      final permitted = await _service.isPermitted();
 
-    // Revocation edge: if we were permitted before and now we aren't, scrub
-    // the OS queue once so it doesn't diverge from our in-memory snapshot.
-    if (_previouslyPermitted == true && !permitted) {
-      await _service.cancelAll();
-    }
-    _previouslyPermitted = permitted;
+      // Revocation edge: if we were permitted before and now we aren't, scrub
+      // the OS queue once so it doesn't diverge from our in-memory snapshot.
+      if (_previouslyPermitted == true && !permitted) {
+        span.addEvent('agenda.reconcile.revocation');
+        await _service.cancelAll();
+      }
+      _previouslyPermitted = permitted;
 
-    if (!permitted) return;
+      if (!permitted) {
+        span.addEvent('agenda.reconcile.permission_denied');
+        span.end(status: SpanStatus.ok);
+        return;
+      }
 
-    final now = tz.TZDateTime.from(_clock(), _location);
-    final desired = _computeDesired(response, now, sessionActive);
-    final current = await _service.currentlyScheduled();
+      final now = tz.TZDateTime.from(_clock(), _location);
+      final desired = _computeDesired(response, now, sessionActive);
+      final current = await _service.currentlyScheduled();
 
-    final desiredIds = desired.map((n) => n.id).toSet();
-    final toCancel =
-        current.keys.where((id) => !desiredIds.contains(id)).toList();
-    final toSchedule = desired
-        .where((n) => current[n.id] == null || current[n.id] != n)
-        .toList();
+      final desiredIds = desired.map((n) => n.id).toSet();
+      final toCancel =
+          current.keys.where((id) => !desiredIds.contains(id)).toList();
+      final toSchedule = desired
+          .where((n) => current[n.id] == null || current[n.id] != n)
+          .toList();
 
-    for (final id in toCancel) {
-      await _service.cancel(id);
-    }
-    for (final n in toSchedule) {
-      await _service.schedule(n);
+      span.addEvent('agenda.reconcile.diff', attrs: {
+        'desired': desired.length,
+        'current': current.length,
+        'to_cancel': toCancel.length,
+        'to_schedule': toSchedule.length,
+      });
+
+      for (final id in toCancel) {
+        await _service.cancel(id);
+      }
+      for (final n in toSchedule) {
+        await _service.schedule(n);
+      }
+
+      if (toCancel.isNotEmpty) {
+        Telemetry.instance.counter('agenda.notifications.cancelled',
+            delta: toCancel.length);
+      }
+      if (toSchedule.isNotEmpty) {
+        Telemetry.instance.counter('agenda.notifications.scheduled',
+            delta: toSchedule.length);
+      }
+
+      span.end(status: SpanStatus.ok);
+    } catch (e) {
+      span.end(status: SpanStatus.error, message: e.toString());
+      rethrow;
     }
   }
 

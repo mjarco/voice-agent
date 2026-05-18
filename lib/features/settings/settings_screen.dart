@@ -1,4 +1,5 @@
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -281,6 +282,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/usage'),
           ),
+          // P040 test-infra: debug entry for inspecting pending OS
+          // notifications + firing one in 2 s. Debug-mode only — the
+          // tile is invisible on release builds.
+          if (kDebugMode) _buildSectionHeader('Debug'),
+          if (kDebugMode)
+            ListTile(
+              key: const Key('notifications-debug-tile'),
+              title: const Text('Notifications (debug)'),
+              subtitle: const Text('Inspect pending notifications + fire-now'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  context.push('/settings/notifications-debug'),
+            ),
           _buildSectionHeader('About'),
           ListTile(
             title: const Text('Version'),
