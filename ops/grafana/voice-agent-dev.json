@@ -1,0 +1,169 @@
+{
+  "title": "voice-agent dev",
+  "uid": "voice-agent-dev",
+  "tags": ["voice-agent", "p039"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-30m", "to": "now" },
+  "timepicker": {},
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Mic-silent diagnosis",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "hf.chunk_received rate (per 30s)",
+      "description": "Per the P039 mic-silent diagnosis chain — flatline while gate_open is true ⇒ dead mic; nonzero while gate_open is false ⇒ chunks delivered after disengage (expected, mic stays warm).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "voice-agent-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (gate_open) (rate(traces_spanmetrics_calls_total{service_name=\"voice-agent\",span_name=\"hf.chunk_received\"}[1m]))",
+          "legendFormat": "gate_open={{gate_open}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "stacking": { "mode": "none" } }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table" } }
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "hf.stream_error / hf.stream_done events (last 30m)",
+      "description": "Each row is one error / done event. If you ever see hf.stream_error appear, this is the smoking gun for a mic-silent recurrence.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "datasource": { "type": "tempo", "uid": "voice-agent-tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{service.name=\"voice-agent\" && (name=\"hf.stream_error\" || name=\"hf.stream_done\")}"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "footer": { "show": false, "reducer": ["sum"], "fields": "" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Last hf.gate_changed transitions",
+      "description": "Reason-attribute distinguishes legitimate gate closes (user_disengage / tts_suspend / one_shot) from any anomalous pattern around a mic-silent event.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 9 },
+      "datasource": { "type": "tempo", "uid": "voice-agent-tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{service.name=\"voice-agent\" && name=\"hf.gate_changed\"}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "STT + sync + TTS",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "stt.request latency (p50 / p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "voice-agent-prometheus" },
+      "targets": [
+        {
+          "refId": "p50",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(traces_spanmetrics_latency_bucket{service_name=\"voice-agent\",span_name=\"stt.request\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{service_name=\"voice-agent\",span_name=\"stt.request\"}[5m])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "sync.failure count (last 30m)",
+      "description": "Split by kind. A persistent transient count > 0 means the personal-agent endpoint is flaky from this device's perspective.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "datasource": { "type": "tempo", "uid": "voice-agent-tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{service.name=\"voice-agent\" && name=\"sync.failure\"} | count()"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "tts.speak rate by status",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "voice-agent-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status_code) (rate(traces_spanmetrics_calls_total{service_name=\"voice-agent\",span_name=\"tts.speak\"}[5m]))",
+          "legendFormat": "status={{status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "App lifecycle + hardware buttons",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 }
+    },
+    {
+      "id": 10,
+      "type": "state-timeline",
+      "title": "App foreground timeline",
+      "description": "Cross-reference with the hf.chunk_received panel above. If chunks flatline while the app was foregrounded, that's a real mic regression — not a legitimate backgrounding.",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 35 },
+      "datasource": { "type": "tempo", "uid": "voice-agent-tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{service.name=\"voice-agent\" && (name=\"app.foreground\" || name=\"app.background\" || name=\"app.terminate\")}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Recent hardware-button presses",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 41 },
+      "datasource": { "type": "tempo", "uid": "voice-agent-tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{service.name=\"voice-agent\" && (name=\"input.volume_button\" || name=\"input.media_button\")}"
+        }
+      ]
+    }
+  ]
+}

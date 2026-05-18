@@ -1,0 +1,46 @@
+# P039 T2 — Grafana data sources for voice-agent dev telemetry.
+#
+# Copy or symlink this file into the home Grafana's
+# /etc/grafana/provisioning/datasources/ (or the analogous directory
+# in your home-monitor compose) and restart Grafana once. Existing
+# Prometheus + other data sources are untouched — Grafana merges
+# provisioning by uid.
+#
+# After the restart, the dashboard JSON in
+# `ops/grafana/voice-agent-dev.json` imports cleanly because its
+# queries reference the uids declared below.
+
+apiVersion: 1
+
+datasources:
+  # New: Tempo for traces. Adjust the URL if Tempo runs on a host
+  # other than `laptop.lan`.
+  - name: voice-agent-tempo
+    uid: voice-agent-tempo
+    type: tempo
+    access: proxy
+    url: http://laptop.lan:3200
+    isDefault: false
+    jsonData:
+      httpMethod: GET
+      tracesToMetrics:
+        datasourceUid: voice-agent-prometheus
+        tags:
+          - { key: 'service.name', value: 'service' }
+      serviceMap:
+        datasourceUid: voice-agent-prometheus
+      nodeGraph:
+        enabled: true
+
+  # Reference to the EXISTING home Prometheus. If your Prometheus is
+  # already provisioned under a different name or uid, change the
+  # `tracesToMetrics.datasourceUid` and `serviceMap.datasourceUid`
+  # above to point at it and delete this entry.
+  - name: voice-agent-prometheus
+    uid: voice-agent-prometheus
+    type: prometheus
+    access: proxy
+    url: http://laptop.lan:9090
+    isDefault: false
+    jsonData:
+      httpMethod: GET

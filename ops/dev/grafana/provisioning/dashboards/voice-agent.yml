@@ -1,0 +1,26 @@
+# P039 T7 — Grafana dashboard provider for voice-agent.
+#
+# Copy this file into the home Grafana's
+# /etc/grafana/provisioning/dashboards/ and ensure the path under
+# `options.path` resolves to where you cloned this repo on the home
+# host (or use a bind mount). Restart Grafana once; the dashboard at
+# ops/grafana/voice-agent-dev.json appears under the "Voice Agent"
+# folder.
+#
+# An alternative without provisioning: import the JSON manually in
+# Grafana UI → Dashboards → New → Import. Both paths work; the
+# provisioning path keeps the dashboard in sync with this repo.
+
+apiVersion: 1
+
+providers:
+  - name: voice-agent
+    orgId: 1
+    folder: Voice Agent
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      # Adjust to wherever this repo is checked out on the Grafana host.
+      path: /var/lib/grafana/dashboards/voice-agent
