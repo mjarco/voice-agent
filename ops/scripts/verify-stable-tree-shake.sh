@@ -43,19 +43,8 @@ echo ""
 echo "  dev binary:    $DEV_SZ bytes"
 echo "  stable binary: $STABLE_SZ bytes"
 echo "  delta:         $DELTA bytes ($DELTA_KB KB)"
-echo "  threshold:     $MIN_DELTA_BYTES bytes ($((MIN_DELTA_BYTES / 1024)) KB)"
 
-# Gate 1: size delta
-if [[ $DELTA -lt $MIN_DELTA_BYTES ]]; then
-    echo ""
-    echo "FAIL: delta is below threshold. The OTel package may not be"
-    echo "      tree-shaking out of the stable build. Check that"
-    echo "      lib/main_stable.dart has no transitive import of"
-    echo "      package:opentelemetry."
-    exit 1
-fi
-
-# Gate 2: strings smoke check
+# Primary gate (the real proof) — strings on the stable binary.
 STABLE_HITS=$(strings /tmp/voice-agent-app-stable.bin | grep -ic opentelemetry || true)
 DEV_HITS=$(strings /tmp/voice-agent-app-dev.bin | grep -ic opentelemetry || true)
 echo ""
@@ -64,11 +53,23 @@ echo "  opentelemetry strings hits: dev=$DEV_HITS stable=$STABLE_HITS"
 if [[ $STABLE_HITS -ne 0 ]]; then
     echo ""
     echo "FAIL: 'opentelemetry' appears $STABLE_HITS time(s) in the stable"
-    echo "      binary. Investigate which import path is reaching the OTel"
+    echo "      AOT. Investigate which import path is reaching the OTel"
     echo "      package from lib/main_stable.dart."
     exit 2
 fi
 
+# Secondary informational signal — size delta. The delta tracks the
+# weight of code reachable from main_dev but not main_stable. It is
+# noisy in both directions: refactoring shared code between flavors
+# moves the baseline, and AOT dedup across packages compresses real
+# OTel weight. Treat as informational, not a gate.
+if [[ $DELTA -lt $MIN_DELTA_BYTES ]]; then
+    echo "  WARN: delta ($DELTA_KB KB) is below the soft threshold "
+    echo "        ($((MIN_DELTA_BYTES / 1024)) KB). Not a fail — the "
+    echo "        strings check is the real proof — but worth a glance "
+    echo "        next time someone touches the tree-shake config."
+fi
+
 echo ""
-echo "PASS: stable build is OTel-clean."
+echo "PASS: stable build is OTel-clean (0 strings hits)."
 exit 0

@@ -31,10 +31,19 @@ import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/session_control/toaster.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
-Future<void> appMain() async {
+/// Optional hook for the dev flavor to wire telemetry between the
+/// storage init and `runApp`. The hook receives the live
+/// [StorageService] (which the dev-flavor telemetry's durable
+/// processor needs) and is awaited before any subsequent boot step,
+/// so the very first telemetry event lands before any other layer
+/// starts emitting.
+typedef AfterStorageInit = Future<void> Function(StorageService storage);
+
+Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterForegroundTaskService.initForegroundTask();
@@ -44,6 +53,13 @@ Future<void> appMain() async {
   // wireAgendaForBackground(). See ADR-PLATFORM-007.
   final core = await coreBoot();
   final agenda = wireAgendaForBackground(core);
+
+  // P039 T4b — dev-flavor entrypoint hooks in here to boot the durable
+  // telemetry pipeline once the storage layer is up. No-op on the
+  // stable flavor (hook is null).
+  if (afterStorageInit != null) {
+    await afterStorageInit(core.storage);
+  }
 
   // Read the cold-start deep-link payload BEFORE runApp, per ADR-PLATFORM-008.
   // The plugin discards this after the warm-path callback is registered, so
