@@ -1,6 +1,6 @@
 # Proposal 039 — OpenTelemetry Dev-Flavor Telemetry
 
-## Status: T4 + T5c on main (2026-05-18)
+## Status: T4 + T5c + T6 on main (2026-05-18)
 
 T0 / T1 / T3 / T4 / T5b on main. T4 wrapped in two halves:
 - **T4a (PR #304)** — `telemetry_outbox` SQLite schema + CRUD on
@@ -33,7 +33,22 @@ in `AppConfig`, gate in `lib/main_dev.dart`, Settings → Advanced
 section visible on dev flavor only (via new `isDevFlavorProvider`).
 Six widget tests. Tree-shake still PASS (0 OTel hits in stable AOT).
 
-**Remaining tracks:** T2 / T5a / T6 / T7 / T8.
+**T6 complete (PRs #310–#315):** instrumentation table from §v1 fully
+wired:
+- T6-STT (#310) — `stt.request` span around Groq HTTP round-trip
+- T6-sync (#311) — `sync.batch` span + `sync.failure` event
+- T6-TTS (#313) — `tts.speak` span + `tts.interrupt` event
+  (gated on actually-playing)
+- T6-lifecycle (#314) — `app.foreground` / `app.background` /
+  `app.terminate` events from `AppShellScaffold`
+- T6-hardware-button (#315) — `input.volume_button` +
+  `input.media_button` events from `RecordingScreen`
+
+**Remaining tracks:** T2 / T5a / T7 / T8.
+- T2 (laptop.lan full stack) — ops work; needs deployment on the
+  home host. T7 and T8 depend on it.
+- T5a (native EventChannel bridges) — Swift + Kotlin work; needs
+  on-device verification.
 
 ## Origin
 
