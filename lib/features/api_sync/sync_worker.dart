@@ -5,6 +5,7 @@ import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/local_commands/local_command_matcher.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/session_control/haptic_service.dart';
 import 'package:voice_agent/core/session_control/session_control_dispatcher.dart';
 import 'package:voice_agent/core/session_control/session_control_signal.dart';
@@ -191,18 +192,40 @@ class SyncWorker {
         unawaited(hapticService.lightImpact());
       }
 
+      // P039 T6 — span around the personal-agent POST round-trip.
+      // SpanKind.client; carries the dispatch + reply-handling outcome.
+      final span = Telemetry.instance.span('sync.batch',
+          kind: SpanKind.client,
+          attrs: {
+            'sync.transcript_id': item.transcriptId,
+            'sync.queue_attempts': item.attempts,
+          });
+      final stopwatch = Stopwatch()..start();
       final result = await apiClient.post(
         transcript,
         url: url,
         token: apiConfig.token,
       );
+      stopwatch.stop();
+      span.setAttr('duration_ms', stopwatch.elapsedMilliseconds);
 
       switch (result) {
         case ApiSuccess(:final body):
+          span.setAttr('outcome', 'success');
+          span.end(status: SpanStatus.ok);
           await storageService.markSent(item.id);
           unawaited(audioFeedbackService.playSuccess());
           await _handleReply(body);
-        case ApiPermanentFailure(:final message):
+        case ApiPermanentFailure(:final message, :final statusCode):
+          Telemetry.instance.event('sync.failure', attrs: {
+            'kind': 'permanent',
+            'http.status_code': statusCode,
+            'message': message,
+            'transcript_id': item.transcriptId,
+          });
+          span.setAttr('outcome', 'permanent_failure');
+          span.setAttr('http.status_code', statusCode);
+          span.end(status: SpanStatus.error, message: message);
           // Exhaust retry budget — permanent failures should never be auto-retried
           await storageService.markFailed(
             item.id, message, overrideAttempts: _maxRetries,
@@ -210,6 +233,14 @@ class SyncWorker {
           unawaited(audioFeedbackService.playError());
           await _speakError(message);
         case ApiTransientFailure(:final reason):
+          Telemetry.instance.event('sync.failure', attrs: {
+            'kind': 'transient',
+            'reason': reason,
+            'transcript_id': item.transcriptId,
+            'attempts': item.attempts + 1,
+          });
+          span.setAttr('outcome', 'transient_failure');
+          span.end(status: SpanStatus.error, message: reason);
           final attempts = item.attempts + 1; // markSending already incremented
           if (attempts >= _maxRetries) {
             await storageService.markFailed(
@@ -222,6 +253,8 @@ class SyncWorker {
           unawaited(audioFeedbackService.playError());
           await _speakError(reason);
         case ApiNotConfigured():
+          span.setAttr('outcome', 'not_configured');
+          span.end();
           break;
       }
     } finally {
