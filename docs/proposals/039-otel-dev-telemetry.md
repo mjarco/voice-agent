@@ -1,20 +1,36 @@
 # Proposal 039 — OpenTelemetry Dev-Flavor Telemetry
 
-## Status: T5b verified + gaps closed + T4a landed (2026-05-17 evening)
+## Status: T4 complete — durable path live on dev flavor (2026-05-18)
 
-T0 / T1 / T3 / T4a / T5b on main. **T5b verification gate is
-closed green** on iOS Simulator. Today's session also closed F1,
-F2 (the two gaps surfaced by verification) and shipped T4a (the
-SQLite layer that T4b's DurableSpanProcessor will hang off).
+T0 / T1 / T3 / T4 / T5b on main. T4 wrapped in two halves:
+- **T4a (PR #304)** — `telemetry_outbox` SQLite schema + CRUD on
+  `StorageService` + `TelemetryStorageNoop` mixin.
+- **T4b-1 (PR #305)** — `OtlpEncoder` + `DurableSpanProcessor` +
+  `TelemetryFlushWorker` modules with 13 new unit tests, **not**
+  wired into the live export path yet.
+- **T4b-2 (PR #306)** — swap wiring in `OtelTelemetry.boot`.
+  Dev-flavor span emission now goes through the SQLite outbox.
 
-**Remaining on the T4 track:** T4b — `DurableSpanProcessor` +
-`TelemetryFlushWorker` + wiring into `OtelTelemetry.boot` (the swap
-from `SimpleSpanProcessor` to the durable variant). Sized at
-~500 LOC code + ~200 LOC tests; carries real swap risk (mis-wiring
-silently breaks the verified diagnostic chain), so it gets its
-own session rather than tail-ending today's work.
+`verify-stable-tree-shake.sh` updated: strings check (0 OTel hits
+in stable AOT) is the hard gate per ADR-OBS-001 §3; size delta is
+informational since T4a's CRUD methods are reachable from both
+flavors.
 
-**Other unblocked tracks:** T2 / T5a / T5c / T6 / T7 / T8.
+**AC #4 (force-quit durability) closed.** Spans now persist to
+SQLite synchronously on `onEnd` before the call returns — the
+10s flush window from the old `SimpleSpanProcessor` model is gone.
+
+The dev-flavor diagnostic chain verified end-to-end on Simulator
+on 2026-05-17 used the T3 `SimpleSpanProcessor` path. The swap to
+the durable path was code-gated only — a short manual re-run is
+the lightweight way to confirm parity. Update
+`docs/manual-tests/p039-t5b-handsfree-telemetry.md` Expected
+column for one detail: spans now land in the Collector with up to
+~10 s delay (the flush interval) instead of synchronously.
+
+**Remaining tracks:** T2 / T5a / T5c / T6 / T7 / T8. T5c
+(runtime kill-switch) is the smallest user-visible win — sized
+at ~30 min + tests per the proposal's task entry.
 
 ## Origin
 

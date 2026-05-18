@@ -51,6 +51,8 @@ docker logs -f voice-agent-otel-spike
 
 **Why:** confirms `lib/main_dev.dart` wired `Telemetry.instance = OtelTelemetry.boot(...)` and the OTLP/HTTP pipeline reaches the Collector.
 
+**Note (after T4b-2):** spans now land in the Collector with up to ~10 s delay (the flush worker's foreground interval) instead of synchronously. T1's "~5 s" target holds for foreground operation; backgrounded launches may take up to a minute.
+
 **Expected (in Collector logs within ~5 s of launch):**
 ```
 Name           : app.boot
