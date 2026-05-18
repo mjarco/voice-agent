@@ -82,7 +82,19 @@ Per [[no_apple_developer_account]]: iOS testing is always personal-cert + physic
 
 **Status:** pending
 
-- **iOS:** `xcrun simctl push` is irrelevant here (we're testing local notifications). Use Xcode's "Notifications" tab in Devices window to view delivered notifications. For schedule inspection, add a temporary debug screen reading `FlutterLocalNotificationsPlugin().pendingNotificationRequests()` — OR just observe delivery times.
+**Built-in P040 test infra (added in PR #318 — debug builds only):**
+
+- **In-app debug screen at `/settings/notifications-debug`**. Lists the in-memory snapshot of currently scheduled notifications (id, title, body, fireAt). Per-row **"Fire in 2s"** button cancels + re-schedules the entry near-instant — use it for T3 / T4 to avoid waiting until the next 09:00 summary fires naturally. Reached via `Settings → Debug → Notifications (debug)`.
+- **`scripts/seed-agenda.sh`** — bash + curl. Reads `API_URL` + `API_TOKEN` from `.env.mobile`. Subcommands:
+  - `--list` (default): prints today's existing action items + routine occurrences.
+  - `--seed-items`: posts 3 action-item utterances via `/conversations/append`. ~2-5 s each (one LLM round-trip per item).
+  - `--all`: `--list` followed by `--seed-items`.
+  Does NOT seed routines — those require the approval flow; create once via web UI and reuse.
+- **Dev-flavor telemetry on the reconciler.** `AgendaNotificationScheduler.reconcile()` is wrapped in a `Telemetry.span('agenda.reconcile', ...)` with events (`agenda.reconcile.diff`, `.permission_denied`, `.revocation`) + counters (`agenda.notifications.scheduled` / `.cancelled`). Run with `make run-ios-dev` against the local Collector (`ops/dev/collector-only.docker-compose.yml`) to observe every reconcile fire — useful for T2 / T5 / T11 / T12 where you'd otherwise wonder "did the reconciler actually run just now?".
+
+**External OS tools:**
+
+- **iOS:** Xcode's "Devices and Simulators" notifications tab to view delivered notifications. The in-app debug screen above is faster for schedule inspection (no Xcode required).
 - **Android:** `adb logcat | grep -E "WM-WorkSpec|FlutterLocalNotifications"` for WorkManager + plugin diagnostics. Notification shade gives delivery confirmation.
 
 ---
@@ -115,7 +127,7 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 **Do:**
 1. Tap the **Agenda** tab (calendar icon, leftmost).
 2. Wait for the screen to populate (status: Loaded).
-3. From a debug build (or temporary debug widget): inspect `pendingNotificationRequests()` count.
+3. Navigate to `Settings → Debug → Notifications (debug)` and confirm the list shows ≥ 4 entries with IDs 1000-1003.
 
 **Why:** verifies P040 §Reconciler Triggers #1 — foreground fetch fires the reconciler, which schedules at least the 4 summary IDs (1000–1003).
 
@@ -130,9 +142,10 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 **Status:** pending
 
 **Do:**
-1. Force-quit the app (swipe up in app switcher).
-2. From Xcode Devices → trigger a test notification, OR wait for a real scheduled summary to fire.
-3. Tap the delivered notification banner.
+1. With the app open and the Agenda tab populated, navigate to `Settings → Debug → Notifications (debug)`.
+2. Tap **"Fire in 2s"** next to one of the entries (any summary or routine reminder works).
+3. **Immediately** force-quit the app (swipe up in app switcher) before the 2 s elapse.
+4. When the notification fires, tap the banner.
 
 **Why:** verifies ADR-PLATFORM-008 cold-start deep-link. The app should open directly on the Agenda screen, NOT default to the Record tab.
 
@@ -147,8 +160,9 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 **Status:** pending
 
 **Do:**
-1. With the app running on a non-Agenda tab (e.g. Record), trigger a notification (wait for next summary at 09/12/15/19, or use Xcode Devices to deliver a custom one).
-2. Tap the banner / notification shade entry.
+1. Navigate to `Settings → Debug → Notifications (debug)`, tap **"Fire in 2s"** on one of the summaries.
+2. Switch the app to a non-Agenda tab (e.g. Record). Keep the app foregrounded.
+3. When the banner fires (~2 s later), tap it.
 
 **Why:** ADR-PLATFORM-008 warm-path channel (`notificationTapStreamProvider`). Routes via `_router.go('/agenda')` from `app.dart` listener.
 
@@ -272,9 +286,10 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 **Do:**
 1. Open Agenda tab (loads, sets `lastAgendaFetchAt`).
 2. Background the app (home button). Wait **>1 hour**.
-3. During the wait, add an action item via the personal-agent web UI for today.
+3. During the wait, run `bash scripts/seed-agenda.sh --seed-items` to add 3 action items via the API (faster than clicking through web UI).
 4. Foreground the app — do NOT manually pull-to-refresh.
-5. Open the Agenda tab. Is the new item visible without an explicit user action?
+5. Open the Agenda tab. Are the new items visible without an explicit user action?
+6. **Dev-flavor only:** confirm in the Collector logs that `agenda.reconcile` span fired with `to_schedule > 0` after the foreground resume.
 
 **Why:** verifies `AppShellScaffold.didChangeAppLifecycleState(resumed)` staleness check — the only mechanism that guarantees agenda freshness on iOS when BGAppRefresh declines to run. This is P040's primary user-facing reliability guarantee.
 
