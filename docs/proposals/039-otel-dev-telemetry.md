@@ -1,6 +1,6 @@
 # Proposal 039 — OpenTelemetry Dev-Flavor Telemetry
 
-## Status: T4 complete — durable path live on dev flavor (2026-05-18)
+## Status: T4 + T5c on main (2026-05-18)
 
 T0 / T1 / T3 / T4 / T5b on main. T4 wrapped in two halves:
 - **T4a (PR #304)** — `telemetry_outbox` SQLite schema + CRUD on
@@ -28,9 +28,12 @@ the lightweight way to confirm parity. Update
 column for one detail: spans now land in the Collector with up to
 ~10 s delay (the flush interval) instead of synchronously.
 
-**Remaining tracks:** T2 / T5a / T5c / T6 / T7 / T8. T5c
-(runtime kill-switch) is the smallest user-visible win — sized
-at ~30 min + tests per the proposal's task entry.
+**T5c landed (PR #308):** `devTelemetryEnabled` + `otelCollectorUrl`
+in `AppConfig`, gate in `lib/main_dev.dart`, Settings → Advanced
+section visible on dev flavor only (via new `isDevFlavorProvider`).
+Six widget tests. Tree-shake still PASS (0 OTel hits in stable AOT).
+
+**Remaining tracks:** T2 / T5a / T6 / T7 / T8.
 
 ## Origin
 
