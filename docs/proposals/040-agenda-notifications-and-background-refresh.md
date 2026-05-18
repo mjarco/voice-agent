@@ -1,6 +1,16 @@
 # Proposal 040 — Agenda Notifications & Hourly Background Refresh
 
-## Status: Draft (Revision 3 — addresses /proposal-architectural-review findings 2026-05-17)
+## Status: **Implemented (manual device verification pending)** — 2026-05-18
+
+Code shipped across PRs **#297** (proposal + ADRs), **#298** (T1 notification service + reconciler), **#299** (T2 coreBoot + workmanager + parity gate), **#300** (T3 PoC removal + wiring + deep-link), **#307** (close-out: ordering fix + missing notifier tests), **#309** (chore unblocking `make verify`).
+
+Review gates clean: `/proposal-review` (R0→R1→R2), `/proposal-architectural-review` (two passes), `/proposal-implementation-review` with fixes applied. `make verify` green. 1030 unit tests passing.
+
+**Manual device verification:** see [`docs/manual-tests/p040-agenda-notifications.md`](../manual-tests/p040-agenda-notifications.md) for the 11-case verification plan covering timezone correctness, BG refresh delivery, permission flows, deep-link routing, session gating, and platform-specific OEM behavior. Per CLAUDE.md "Close Out" workflow, the proposal is marked **Implemented** after review gates pass; device-only verification cases are tracked separately and do not block the merged code from being considered done.
+
+---
+
+*Draft history preserved below. The body documents what was intended and decided during design; the status block above is the canonical close-out summary.*
 
 ## Prerequisites
 
