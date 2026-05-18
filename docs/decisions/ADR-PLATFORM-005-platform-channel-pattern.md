@@ -2,7 +2,7 @@
 
 Status: Accepted
 Proposed in: P019
-Amended in: P026 (activation IPC removed), P039 (EventChannel sibling + telemetry channel registry + registry-extraction deferred)
+Amended in: P026 (activation IPC removed), P039 (EventChannel sibling + telemetry channel registry + registry-extraction deferred), P039 T5a (channel registered on iOS via `TelemetryEventEmitter.swift`; Dart consumer in `lib/core/observability/telemetry_native_bridge.dart`)
 
 ## Context
 
