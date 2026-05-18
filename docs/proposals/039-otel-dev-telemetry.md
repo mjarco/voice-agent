@@ -1,6 +1,6 @@
 # Proposal 039 — OpenTelemetry Dev-Flavor Telemetry
 
-## Status: T4 + T5c + T6 on main (2026-05-18)
+## Status: T2 + T4 + T5c + T6 + T7 + T8 on main (2026-05-18) — only T5a remaining
 
 T0 / T1 / T3 / T4 / T5b on main. T4 wrapped in two halves:
 - **T4a (PR #304)** — `telemetry_outbox` SQLite schema + CRUD on
@@ -44,11 +44,17 @@ wired:
 - T6-hardware-button (#315) — `input.volume_button` +
   `input.media_button` events from `RecordingScreen`
 
-**Remaining tracks:** T2 / T5a / T7 / T8.
-- T2 (laptop.lan full stack) — ops work; needs deployment on the
-  home host. T7 and T8 depend on it.
-- T5a (native EventChannel bridges) — Swift + Kotlin work; needs
-  on-device verification.
+**T2 + T7 + T8 landed (PR #317):** full backend stack
+(`telemetry.docker-compose.yml` with Collector + Tempo), Grafana
+dashboard JSON (`ops/grafana/voice-agent-dev.json`, 11 panels in 3
+sections), runbook (`docs/observability.md`). Verified locally end
+to end — POST OTLP → Collector → Tempo search returns the trace.
+Home-host deployment is the user's last manual step; the runbook
+walks through it.
+
+**Only remaining track:** T5a (native EventChannel bridges, Swift +
+Kotlin). Manual test plan ready in
+`docs/manual-tests/p039-t5a-native-bridges.md`.
 
 ## Origin
 
