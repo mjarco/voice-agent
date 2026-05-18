@@ -1,9 +1,42 @@
 # Manual test: P040 — Agenda notifications & background refresh
 
 **Proposal:** [`docs/proposals/040-agenda-notifications-and-background-refresh.md`](../proposals/040-agenda-notifications-and-background-refresh.md)
+**Overall status:** **pending** — no case yet executed on a physical device.
 **Why now:** P040 is code-complete and review-clean, but 11 contracts can only be verified on physical devices (notification delivery, OS-level scheduling, permission prompts, BGAppRefresh, WorkManager). This plan exists so the device pass can be run cold by anyone — no archaeology required.
 **Time budget:** ~90 min total (60 min iOS + 30 min Android). Steps independent: skip any case the device can't exercise (e.g. Android-only on iPhone) without losing the rest.
 **What we are testing:** the **delivery chain** — does the OS fire what the reconciler scheduled, does the tap route correctly, does the permission flow degrade gracefully. Unit tests already cover the reconciler logic (1030 cases on main); this plan only covers what unit tests can't.
+
+## Status legend
+
+Each step below has a `**Status:** ...` line. Allowed values:
+
+- **`pending`** — not yet attempted.
+- **`in-progress`** — execution started, not yet decided.
+- **`passed (YYYY-MM-DD, <device + OS>)`** — verified green.
+- **`failed (YYYY-MM-DD, <device + OS>): <one-line reason>`** — verified red. File issue.
+- **`skipped (<reason>)`** — case not applicable on the device (e.g. Android-only on iPhone).
+
+Update statuses **in-place during execution** and commit when the plan is fully run. The proposal's `Implemented (manual device verification pending)` disclaimer comes off once every must-pass case is `passed`.
+
+## Status summary
+
+| # | Case | Status |
+|---|---|---|
+| S1 | Backend & accounts | pending |
+| S2 | Install on device | pending |
+| S3 | Inspector tools | pending |
+| T1 | First-launch permission prompt fires once | pending |
+| T2 | Open Agenda tab → 4 daily summaries scheduled | pending |
+| T3 | Tap notification → app launches on `/agenda` | pending |
+| T4 | Warm tap → routes to `/agenda` | pending |
+| T5 | Routine occurrence reminder fires at `start_time` | pending |
+| T6 | Timezone correctness in non-UTC zone | pending |
+| T7 | Permission denial path | pending |
+| T8 | Permission revocation between sessions | pending |
+| T9 | Workmanager BG task registers on Android | pending |
+| T10 | iOS BGTask registration succeeds | pending |
+| T11 | Foreground >1h staleness trigger | pending |
+| T12 | Session gating end-to-end | pending |
 
 ---
 
@@ -11,11 +44,15 @@
 
 ### S1 — Backend & accounts
 
+**Status:** pending
+
 **Do:** make sure your personal-agent has at least one **routine occurrence with `start_time`** scheduled for today plus 2–3 action items for today. Use the web UI to create these if not already present. Routine occurrences without `start_time` are *expected* not to produce per-occurrence reminders — they only show up in summaries (P040 §Time Resolution).
 
 **Why:** without a today routine with `start_time`, you can't verify T5 / T11 (per-occurrence reminder firing).
 
 ### S2 — Install on device
+
+**Status:** pending
 
 **iOS:**
 ```bash
@@ -43,6 +80,8 @@ Per [[no_apple_developer_account]]: iOS testing is always personal-cert + physic
 
 ### S3 — Inspector tools
 
+**Status:** pending
+
 - **iOS:** `xcrun simctl push` is irrelevant here (we're testing local notifications). Use Xcode's "Notifications" tab in Devices window to view delivered notifications. For schedule inspection, add a temporary debug screen reading `FlutterLocalNotificationsPlugin().pendingNotificationRequests()` — OR just observe delivery times.
 - **Android:** `adb logcat | grep -E "WM-WorkSpec|FlutterLocalNotifications"` for WorkManager + plugin diagnostics. Notification shade gives delivery confirmation.
 
@@ -53,6 +92,8 @@ Per [[no_apple_developer_account]]: iOS testing is always personal-cert + physic
 The cases below are ordered "fastest first" — quick smoke checks at top, longer waits at the bottom. Mark each `[ ] PASS / FAIL / N/A` as you go.
 
 ### T1 — First-launch permission prompt fires once (both platforms, ~2 min)
+
+**Status:** pending
 
 **Do:**
 1. Delete the app if previously installed (clean state).
@@ -69,6 +110,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 
 ### T2 — Open Agenda tab → 4 daily summaries scheduled (both platforms, ~2 min)
 
+**Status:** pending
+
 **Do:**
 1. Tap the **Agenda** tab (calendar icon, leftmost).
 2. Wait for the screen to populate (status: Loaded).
@@ -83,6 +126,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 ---
 
 ### T3 — Tap notification → app launches on `/agenda` (iOS + Android, ~3 min)
+
+**Status:** pending
 
 **Do:**
 1. Force-quit the app (swipe up in app switcher).
@@ -99,6 +144,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 
 ### T4 — Warm tap → routes to `/agenda` (both platforms, ~2 min)
 
+**Status:** pending
+
 **Do:**
 1. With the app running on a non-Agenda tab (e.g. Record), trigger a notification (wait for next summary at 09/12/15/19, or use Xcode Devices to deliver a custom one).
 2. Tap the banner / notification shade entry.
@@ -112,6 +159,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 ---
 
 ### T5 — Routine occurrence reminder fires at `start_time` (iOS + Android, time-of-day-dependent)
+
+**Status:** pending
 
 **Do:**
 1. Schedule (via personal-agent web UI) a routine occurrence for today at **3 minutes from now**, with `start_time` set.
@@ -130,6 +179,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 
 ### T6 — Timezone correctness in non-UTC zone (both platforms, ~5 min)
 
+**Status:** pending
+
 **Do:**
 1. With device set to a non-UTC zone (e.g. Europe/Warsaw, currently CEST = UTC+2): verify above tests fired at the *local* wall-clock time.
 2. Optional: change device timezone to America/New_York, reopen Agenda tab to re-reconcile, observe new summaries scheduled at the NEW zone's 09/12/15/19.
@@ -143,6 +194,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 ---
 
 ### T7 — Permission denial path (both platforms, ~3 min)
+
+**Status:** pending
 
 **Do:**
 1. Delete the app. Reinstall.
@@ -163,6 +216,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 
 ### T8 — Permission revocation between sessions (iOS, ~5 min)
 
+**Status:** pending
+
 **Do:**
 1. With permission GRANTED, open Agenda tab to schedule notifications.
 2. Confirm at least one item is in `pendingNotificationRequests()`.
@@ -180,6 +235,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 
 ### T9 — Workmanager BG task registers on Android (Android only, ~3 min)
 
+**Status:** pending
+
 **Do:**
 1. Launch the app on a real Android device.
 2. From shell: `adb logcat | grep -E "WM-(WorkSpec|WorkContinuationImpl|GreedyScheduler)"`.
@@ -194,6 +251,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 
 ### T10 — iOS BGTask registration succeeds (iOS only, ~3 min)
 
+**Status:** pending
+
 **Do:**
 1. Launch the app on a real iPhone (NOT Simulator — Simulator doesn't support BGTaskScheduler).
 2. Watch `flutter logs` or Xcode console.
@@ -207,6 +266,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 ---
 
 ### T11 — Foreground >1h staleness trigger (both platforms, requires 1h+ wait, ~5 min active)
+
+**Status:** pending
 
 **Do:**
 1. Open Agenda tab (loads, sets `lastAgendaFetchAt`).
@@ -224,6 +285,8 @@ The cases below are ordered "fastest first" — quick smoke checks at top, longe
 ---
 
 ### T12 — Session gating end-to-end (iOS preferred, ~10 min)
+
+**Status:** pending
 
 **Do:**
 1. Schedule a routine occurrence for **8 minutes from now** with `start_time` set. Open Agenda tab to register the reminder.
