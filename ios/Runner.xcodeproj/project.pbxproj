@@ -11,6 +11,7 @@
 		320352C92F923962006B5EB7 /* AudioSessionBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 320352C82F923962006B5EB7 /* AudioSessionBridge.swift */; };
 		320352CA2F923963006B5EB7 /* MediaButtonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 320352CB2F923963006B5EB7 /* MediaButtonBridge.swift */; };
 		320352CC2F923964006B5EB7 /* VolumeButtonBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 320352CD2F923964006B5EB7 /* VolumeButtonBridge.swift */; };
+		320352CE2F923965006B5EB7 /* TelemetryEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 320352CF2F923965006B5EB7 /* TelemetryEventEmitter.swift */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
@@ -53,6 +54,7 @@
 		320352C82F923962006B5EB7 /* AudioSessionBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSessionBridge.swift; sourceTree = "<group>"; };
 		320352CB2F923963006B5EB7 /* MediaButtonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaButtonBridge.swift; sourceTree = "<group>"; };
 		320352CD2F923964006B5EB7 /* VolumeButtonBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeButtonBridge.swift; sourceTree = "<group>"; };
+		320352CF2F923965006B5EB7 /* TelemetryEventEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryEventEmitter.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		33FFD1A0B6824BC28CA22801 /* Profile.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Profile.xcconfig; path = Flutter/Profile.xcconfig; sourceTree = "<group>"; };
@@ -180,6 +182,7 @@
 				320352C82F923962006B5EB7 /* AudioSessionBridge.swift */,
 				320352CB2F923963006B5EB7 /* MediaButtonBridge.swift */,
 				320352CD2F923964006B5EB7 /* VolumeButtonBridge.swift */,
+				320352CF2F923965006B5EB7 /* TelemetryEventEmitter.swift */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */,
@@ -454,6 +457,7 @@
 				320352C92F923962006B5EB7 /* AudioSessionBridge.swift in Sources */,
 				320352CA2F923963006B5EB7 /* MediaButtonBridge.swift in Sources */,
 				320352CC2F923964006B5EB7 /* VolumeButtonBridge.swift in Sources */,
+				320352CE2F923965006B5EB7 /* TelemetryEventEmitter.swift in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

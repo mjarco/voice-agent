@@ -23,5 +23,12 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "VolumeButtonBridge") {
       VolumeButtonBridge.shared.configure(with: registrar.messenger())
     }
+    // P039 T5a — register the telemetry native-event channel. Idle
+    // until `TelemetryNativeBridge` (Dart, dev flavour only)
+    // subscribes; stable builds never subscribe so this stays a
+    // no-op despite the registration.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "TelemetryEventEmitter") {
+      TelemetryEventEmitter.shared.configure(with: registrar.messenger())
+    }
   }
 }

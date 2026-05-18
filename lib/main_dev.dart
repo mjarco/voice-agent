@@ -13,6 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:voice_agent/app_main.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/observability/telemetry.dart';
+import 'package:voice_agent/core/observability/telemetry_native_bridge.dart';
 import 'package:voice_agent/core/observability/telemetry_otel.dart';
 
 Future<void> main() async {
@@ -43,5 +44,9 @@ Future<void> main() async {
     Telemetry.instance.event('app.boot', attrs: const {
       'phase': 'post_storage_init',
     });
+    // P039 T5a — subscribe the native EventChannel that emits
+    // `audio.session.*` and `audio.becoming_noisy`. Idempotent.
+    // Process-scoped lifetime; nothing tears it down.
+    TelemetryNativeBridge().start();
   });
 }

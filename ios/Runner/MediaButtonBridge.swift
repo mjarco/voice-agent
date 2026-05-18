@@ -167,6 +167,19 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
             ) { [weak self] note in
                 let reasonValue = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt) ?? 0
                 NSLog("[MediaButtonDbg] routeChange reason=\(reasonValue) — refreshing nowPlayingInfo")
+                // P039 T5a — surface route changes for the dev-flavor telemetry pipeline.
+                // No-op when no Dart subscriber is attached (stable flavour). The
+                // existing nowPlayingInfo refresh is unchanged.
+                let previousRoute = note.userInfo?[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
+                let currentRoute = AVAudioSession.sharedInstance().currentRoute
+                TelemetryEventEmitter.shared.post(
+                    type: "audio.session.route_changed",
+                    attrs: [
+                        "reason": reasonValue,
+                        "previous_outputs": previousRoute?.outputs.map { $0.portName } ?? [],
+                        "current_outputs": currentRoute.outputs.map { $0.portName },
+                    ]
+                )
                 self?.refreshNowPlayingInfo()
             }
         }
@@ -188,10 +201,22 @@ class MediaButtonBridge: NSObject, FlutterStreamHandler {
         switch type {
         case .began:
             NSLog("[MediaButtonDbg] interruption began")
+            // P039 T5a — telemetry surface. Reason key was added in iOS 14.5;
+            // older deployments report reason 0 (unspecified).
+            let reasonValue = (userInfo[AVAudioSessionInterruptionReasonKey] as? UInt) ?? 0
+            TelemetryEventEmitter.shared.post(
+                type: "audio.session.interruption_began",
+                attrs: ["reason": reasonValue]
+            )
         case .ended:
             let optsRaw = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) ?? 0
             let opts = AVAudioSession.InterruptionOptions(rawValue: optsRaw)
             NSLog("[MediaButtonDbg] interruption ended (shouldResume=\(opts.contains(.shouldResume)))")
+            // P039 T5a — pair end with begin so the dashboard shows duration.
+            TelemetryEventEmitter.shared.post(
+                type: "audio.session.interruption_ended",
+                attrs: ["shouldResume": opts.contains(.shouldResume)]
+            )
             // Only call setActive(true) when iOS hands back the
             // session via .shouldResume. Forcing reactivation in
             // every case races with the recorder/ambient player and
