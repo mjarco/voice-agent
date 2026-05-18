@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
+import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/features/recording/domain/stt_exception.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 
@@ -41,6 +42,18 @@ class GroqSttService implements SttService {
     }
 
     final language = config.language;
+    const model = 'whisper-large-v3-turbo';
+
+    // P039 T6 — span around the Groq HTTP round-trip. SpanKind.client
+    // because we are the outbound side of an HTTP call.
+    final span = Telemetry.instance.span('stt.request',
+        kind: SpanKind.client,
+        attrs: {
+          'stt.provider': 'groq',
+          'stt.model': model,
+          'stt.language': language,
+        });
+    final stopwatch = Stopwatch()..start();
 
     try {
       final formData = FormData.fromMap({
@@ -48,7 +61,7 @@ class GroqSttService implements SttService {
           audioFilePath,
           filename: 'audio.wav',
         ),
-        'model': 'whisper-large-v3-turbo',
+        'model': model,
         'response_format': 'verbose_json',
         if (language != 'auto') 'language': language,
       });
@@ -62,9 +75,28 @@ class GroqSttService implements SttService {
       );
 
       final body = response.data!;
-      return _parseResponse(body);
+      final result = _parseResponse(body);
+      stopwatch.stop();
+      span.setAttr('stt.audio_duration_ms', result.audioDurationMs);
+      span.setAttr('stt.detected_language', result.detectedLanguage);
+      span.setAttr('stt.segment_count', result.segments.length);
+      span.setAttr('http.status_code', response.statusCode ?? 0);
+      span.setAttr('duration_ms', stopwatch.elapsedMilliseconds);
+      span.end(status: SpanStatus.ok);
+      return result;
     } on DioException catch (e) {
-      throw _mapDioException(e);
+      stopwatch.stop();
+      span.setAttr('http.status_code', e.response?.statusCode ?? 0);
+      span.setAttr('error.kind', e.type.name);
+      span.setAttr('duration_ms', stopwatch.elapsedMilliseconds);
+      final mapped = _mapDioException(e);
+      span.end(status: SpanStatus.error, message: mapped.message);
+      throw mapped;
+    } catch (e) {
+      stopwatch.stop();
+      span.setAttr('duration_ms', stopwatch.elapsedMilliseconds);
+      span.end(status: SpanStatus.error, message: e.toString());
+      rethrow;
     } finally {
       try {
         await File(audioFilePath).delete();
