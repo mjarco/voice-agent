@@ -291,6 +291,83 @@ test/
 - Platform behavior that can only be verified on a physical device (mark those
   acceptance criteria as "manual verification" in proposals).
 
+### Manual Test Plans
+
+When a proposal contains contracts that can only be verified on a physical
+device — push/local notification delivery, BGTask / WorkManager scheduling,
+permission prompts, deep-link routing, audio session ownership, OEM-specific
+Android behavior, hardware media buttons — write a **manual test plan**
+that captures the verification cold so anyone can run it without archaeology.
+
+**Location and naming**
+
+- One file per proposal slice that needs device verification.
+- Path: `docs/manual-tests/p{NNN}-{short-description}.md`
+- Reference it from the proposal's Status block once the proposal is marked
+  Implemented but device verification is still pending.
+
+**Required structure**
+
+Mirror the existing templates ([`p040-agenda-notifications.md`](docs/manual-tests/p040-agenda-notifications.md),
+[`p039-t5b-handsfree-telemetry.md`](docs/manual-tests/p039-t5b-handsfree-telemetry.md))
+so readers can pick up any plan without re-learning the format.
+
+1. **Header block** — proposal link, **Overall status** (`pending` /
+   `in-progress` / `passed` / `failed`), "Why now", time budget, "What we
+   are testing".
+2. **Status legend** — define the per-step status vocabulary (see below).
+   Newer plans link to the canonical legend in `p040-agenda-notifications.md`
+   rather than copying it.
+3. **Status summary table** — one row per case, current status.
+4. **Setup section** — `S1`, `S2`, … numbered prerequisites (backend state,
+   install command, inspector tools). Each gets its own `**Status:**`.
+5. **Test cases** — `T1`, `T2`, … each with:
+   - **Status:** marker (see legend).
+   - **Do:** numbered steps the runner executes verbatim.
+   - **Why:** which proposal/ADR contract this case actually verifies.
+     Without this, future readers will skip the case without realising what
+     they're skipping.
+   - **Expected:** the concrete observable outcome. Reference specific
+     log lines, OS UI elements, or `pendingNotificationRequests()` counts —
+     not vague "should work".
+   - **On failure:** the most likely root cause(s) and where to look first.
+     This is the diff between a usable runbook and a re-read of the source.
+6. **"When this plan is done" closing section** — clarify which cases are
+   must-pass (any failure blocks shipping) vs OEM-conditional (failures
+   acceptable when scoped to a documented device limitation).
+
+**Per-case status vocabulary**
+
+- `pending` — not yet attempted.
+- `in-progress` — execution started, not yet decided.
+- `passed (YYYY-MM-DD, <device + OS>)` — verified green; record the device
+  (e.g. `iPhone 12 Pro, iOS 18.3`) so future runs know the coverage baseline.
+- `failed (YYYY-MM-DD, <device + OS>): <one-line reason>` — verified red.
+  File a GitHub issue and reference both the case and this file.
+- `skipped (<reason>)` — case not applicable on the device (Android-only on
+  iPhone) or deliberately deferred (real-device stretch after Simulator pass).
+
+Update statuses **in-place during execution** and commit when the plan is
+fully run. Avoid re-running silently — the on-disk record is the source of
+truth for whether a contract has been verified.
+
+**When the proposal can drop the verification disclaimer**
+
+A proposal marked `Implemented (manual device verification pending)`
+becomes fully `Implemented` once every must-pass case in its manual plan
+is `passed`. OEM-conditional failures get documented in the proposal's
+§Risks rather than re-opening the proposal status.
+
+**When NOT to write a manual test plan**
+
+- Unit-testable contracts (covered by `make test`).
+- Behavior-preserving refactors (no new device contract introduced).
+- Docs / config / build changes that don't touch runtime behavior.
+
+If a Tier 2/3 proposal has *zero* device-only contracts, say so explicitly
+in the proposal's §Test Impact rather than leaving the reader wondering
+whether the plan was forgotten.
+
 ---
 
 ## Git Conventions

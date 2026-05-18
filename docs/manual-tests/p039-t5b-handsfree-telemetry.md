@@ -1,15 +1,34 @@
 # Manual test: P039 T5b — hands-free telemetry chain
 
 **Proposal:** [`docs/proposals/039-otel-dev-telemetry.md`](../proposals/039-otel-dev-telemetry.md) — T5b verification gate.
+**Overall status:** **passed** — all setup + 4 test cases executed green on iOS Simulator. T5b gate cleared; T2 / T4 / T5a / T6 / T7 / T8 unblocked (and most have since landed on main).
 **Why now:** This gate must clear before T2 / T4 / T5a / T6 / T7 / T8 proceed.
 **Time budget:** ~20 min.
 **What we are testing:** that the telemetry *plumbing* works on real Flutter — events, counters, spans reach the Collector. We are **not** trying to reproduce the mic-silent regression itself (that's iOS-device-specific and may not even fire today). If the plumbing works, we have an instrument that will catch the regression when it next happens.
+
+## Status legend
+
+Each step below has a `**Status:** ...` line. Allowed values: `pending` / `in-progress` / `passed (YYYY-MM-DD, <device + OS>)` / `failed (YYYY-MM-DD, <device + OS>): <reason>` / `skipped (<reason>)`. See [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legend) for the canonical definition.
+
+## Status summary
+
+| # | Case | Status |
+|---|---|---|
+| S1 | Bring up the Collector locally | passed |
+| S2 | Run the dev flavor on iOS Simulator | passed |
+| T1 | `app.boot` lands within seconds | passed |
+| T2 | `hf.attach_stream` span + `hf.chunk_received` ticks | passed |
+| T3 | `hf.gate_changed` events with structured `reason` | passed |
+| T4 | `hf.segment_emitted` / no spurious errors | passed |
+| S3 | Re-run on the real iPhone (stretch) | skipped (iOS Simulator pass sufficient; real-device session deferred) |
 
 ---
 
 ## Setup (2 commands, ~2 min)
 
 ### S1 — Bring up the Collector locally
+
+**Status:** passed
 
 **Do:**
 ```bash
@@ -21,6 +40,8 @@ cd ops/dev && docker compose -f collector-only.docker-compose.yml up -d
 **Expected:** `docker ps` shows `voice-agent-otel-spike` as `Up`. `curl -X POST -o /dev/null -w "%{http_code}" http://localhost:4318/v1/traces -H 'Content-Type: application/json' -d '{}'` returns `200`.
 
 ### S2 — Run the dev flavor on iOS Simulator
+
+**Status:** passed
 
 **Do:**
 ```bash
@@ -47,6 +68,8 @@ docker logs -f voice-agent-otel-spike
 
 ### T1 — `app.boot` lands within seconds of launch
 
+**Status:** passed
+
 **Do:** nothing — this fires automatically on app start.
 
 **Why:** confirms `lib/main_dev.dart` wired `Telemetry.instance = OtelTelemetry.boot(...)` and the OTLP/HTTP pipeline reaches the Collector.
@@ -65,6 +88,8 @@ Name           : app.boot
 
 ### T2 — Engage hands-free → `hf.attach_stream` span starts + `hf.chunk_received` counter ticks
 
+**Status:** passed
+
 **Do:** in the Record tab, tap to engage hands-free. Let the mic run for ~5 s.
 
 **Why:** verifies the orchestrator-level instrumentation (T5b's diagnosis core). The long-lived attach span is the parent of every subsequent diagnosis event; the chunk counter is the heartbeat that, if it ever flatlines while the gate is open, means a dead mic.
@@ -78,6 +103,8 @@ Name           : app.boot
 **If chunks have `gate_open: false`:** capture failed; check microphone permissions in Simulator's Settings.
 
 ### T3 — Toggle the gate → `hf.gate_changed` events with structured `reason`
+
+**Status:** passed
 
 **Do:** while engaged, suspend by user (mic button tap to disengage), then re-engage.
 
@@ -98,6 +125,8 @@ Name : hf.gate_changed
 
 ### T4 — Provoke a teardown → segment_emitted counter / no spurious errors
 
+**Status:** passed
+
 **Do:** speak a short utterance, wait for it to be captured (you'll hear the audio-feedback chirp / see the segment in the UI). Then disengage cleanly.
 
 **Why:** confirms the happy-path emitters and that we are **not** producing `hf.stream_error` events during normal operation (false-positives would make the dashboard useless).
@@ -114,6 +143,8 @@ Name : hf.gate_changed
 ## Stretch (~5 min, only if everything above is green)
 
 ### S3 — Re-run on the real iPhone if Xcode signing works
+
+**Status:** skipped (iOS Simulator pass sufficient; real-device session deferred)
 
 **Do:** disconnect Simulator, plug in the wireless iPhone, accept any Xcode trust dialogs, re-run S2's flutter command with `-d 00008101-00025D103606001E` (the iPhone's id). On a fresh dev cert provisioning may need an Xcode "Run" first.
 
