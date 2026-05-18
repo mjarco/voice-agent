@@ -1,6 +1,6 @@
 # Proposal 039 — OpenTelemetry Dev-Flavor Telemetry
 
-## Status: T2 + T4 + T5c + T6 + T7 + T8 on main (2026-05-18) — only T5a remaining
+## Status: Implemented (2026-05-18). T5a manual verification passed on iOS Simulator + physical iPhone. Deployment of the T2 stack onto `laptop.lan` and a one-day dwell test (AC #3) are the only operational steps remaining; the code track is closed.
 
 T0 / T1 / T3 / T4 / T5b on main. T4 wrapped in two halves:
 - **T4a (PR #304)** — `telemetry_outbox` SQLite schema + CRUD on
@@ -52,9 +52,23 @@ to end — POST OTLP → Collector → Tempo search returns the trace.
 Home-host deployment is the user's last manual step; the runbook
 walks through it.
 
-**Only remaining track:** T5a (native EventChannel bridges, Swift +
-Kotlin). Manual test plan ready in
-`docs/manual-tests/p039-t5a-native-bridges.md`.
+**T5a landed (PR #319):** iOS-only ship — Swift extension of the
+existing `MediaButtonBridge` interruption + route-change observers
+(no new observers, proposal's #1 risk neutralised), new
+`TelemetryEventEmitter.swift` exposing
+`EventChannel('com.voiceagent/telemetry_native_events')`, Dart-side
+`TelemetryNativeBridge` consumer, wiring from `lib/main_dev.dart`,
+5 widget tests. Verified end-to-end on physical iPhone iOS 26.4.2 —
+5× `audio.session.route_changed` events captured including a real
+Garmin watch trying to take audio routing (reason=8). Android
+scaffolding deferred until NDK fix on the dev host.
+
+**Remaining operational steps (no code):**
+- Deploy the T2 stack on `agent.jarco.casa` (Collector + Tempo
+  + Grafana data source + dashboard provisioning per
+  `docs/observability.md`).
+- One-day dwell test in normal use, per the proposal's AC #3
+  (mic-silent scenario reproducible end-to-end in Grafana).
 
 ## Origin
 
