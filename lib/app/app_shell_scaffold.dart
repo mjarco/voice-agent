@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
@@ -48,6 +49,25 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     ref.read(appForegroundedProvider.notifier).state =
         state == AppLifecycleState.resumed;
+
+    // P039 T6 — emit lifecycle events so the Grafana timeline can
+    // correlate audio/sync activity with foreground/background
+    // transitions. Inactive/paused/hidden are background-ish; we
+    // collapse them into `app.background` for the dashboard with
+    // the precise state as an attr.
+    switch (state) {
+      case AppLifecycleState.resumed:
+        Telemetry.instance.event('app.foreground');
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        Telemetry.instance.event('app.background', attrs: {
+          'state': state.name,
+        });
+      case AppLifecycleState.detached:
+        // Best-effort terminate notification before the engine tears down.
+        Telemetry.instance.event('app.terminate');
+    }
 
     // P040 §Reconciler Triggers #2: staleness-driven foreground refresh.
     if (state == AppLifecycleState.resumed) {
