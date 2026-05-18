@@ -36,7 +36,9 @@ OS notification scheduling in voice-agent is governed by six rules.
    - `2_000_000–2_999_999` — reserved for per-item action-item reminders (P041 follow-up).
    - `3_000_000+` — routine-occurrence reminders, ID = `3_000_000 + (crc32(occurrenceId) & 0x7FFFFFFF)`.
    Future kinds claim a new range and amend this ADR.
-6. **Permission revocation handling.** On every reconcile, `LocalNotificationService.isPermitted()` is checked. If it returns false after previously returning true (revocation observed), the service calls `cancelAll()` once to clean the OS queue and clears the in-memory snapshot. Subsequent reconciles short-circuit until permission is re-granted.
+6. **Permission revocation handling.** On every reconcile, `LocalNotificationService.isPermitted()` is checked. If it returns false after previously returning true (revocation observed), `cancelAll()` is called once to clean the OS queue and clear the in-memory snapshot. Subsequent reconciles short-circuit until permission is re-granted.
+
+   *Implementation note:* the revocation-edge tracking (`previouslyPermitted` flag) lives in `AgendaNotificationScheduler`, not in `LocalNotificationService`. The scheduler observes `isPermitted()` and triggers `service.cancelAll()` upon detecting the false-after-true edge. The service remains the sole writer that *executes* the cancel; the scheduler is the sole writer of write *intent*. This split keeps `LocalNotificationService` stateless beyond its snapshot map.
 
 Session gating (`sessionActiveProvider == true` suppresses per-occurrence reminders; summaries always fire) is part of the reconciler's desired-set computation, not a separate writer. See P027 for the `sessionActiveProvider` contract.
 

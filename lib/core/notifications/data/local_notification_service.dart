@@ -28,6 +28,25 @@ class LocalNotificationService implements NotificationService {
   /// (`notificationTapStreamProvider`) by the provider layer in T3.
   Stream<String> get tapStream => _tapController.stream;
 
+  /// Reads the cold-start launch payload, if the app was launched by a
+  /// notification tap. Per ADR-PLATFORM-008, this MUST be called BEFORE
+  /// [init] (which registers the warm-path callback) to preserve the
+  /// "exactly one channel" invariant.
+  ///
+  /// Safe to call without prior [init] — `getNotificationAppLaunchDetails`
+  /// queries the platform channel directly and does not require the plugin
+  /// to be initialized.
+  static Future<String?> readColdStartPayload() async {
+    try {
+      final details = await FlutterLocalNotificationsPlugin()
+          .getNotificationAppLaunchDetails();
+      if (details?.didNotificationLaunchApp != true) return null;
+      return details!.notificationResponse?.payload;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Future<void> init() async {
     if (_initialized) return;

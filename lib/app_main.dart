@@ -16,7 +16,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/app/background/register_agenda_refresh.dart';
@@ -46,6 +45,13 @@ typedef AfterStorageInit = Future<void> Function(StorageService storage);
 Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Read the cold-start deep-link payload BEFORE coreBoot() — per
+  // ADR-PLATFORM-008, the warm-path callback (registered inside
+  // LocalNotificationService.init() which coreBoot triggers) must NOT
+  // observe the launch tap. `getNotificationAppLaunchDetails` queries
+  // the platform channel directly and does not require plugin initialize.
+  final cold = await LocalNotificationService.readColdStartPayload();
+
   FlutterForegroundTaskService.initForegroundTask();
 
   // P040: single source of truth for core dep construction. Both this
@@ -60,12 +66,6 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
   if (afterStorageInit != null) {
     await afterStorageInit(core.storage);
   }
-
-  // Read the cold-start deep-link payload BEFORE runApp, per ADR-PLATFORM-008.
-  // The plugin discards this after the warm-path callback is registered, so
-  // ordering is critical: read first, callback registered inside `init()`
-  // which already happened in coreBoot().
-  final cold = await _readColdStartDeepLink();
 
   // Prompt for notification permission once. Idempotent on subsequent
   // launches — OS handles the "already resolved" case. Fire-and-forget; the
@@ -131,16 +131,5 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
       child: App(scaffoldMessengerKey: scaffoldMessengerKey),
     ),
   );
-}
-
-Future<String?> _readColdStartDeepLink() async {
-  try {
-    final details = await FlutterLocalNotificationsPlugin()
-        .getNotificationAppLaunchDetails();
-    if (details?.didNotificationLaunchApp != true) return null;
-    return details!.notificationResponse?.payload;
-  } catch (_) {
-    return null;
-  }
 }
 
