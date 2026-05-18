@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/tts/ssml_lang_splitter.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 
@@ -82,6 +83,16 @@ class FlutterTtsService implements TtsService {
     final segments = SsmlLangSplitter.split(text);
     if (segments.isEmpty) return;
 
+    // P039 T6 — span around the whole TTS utterance (potentially
+    // multi-segment with SSML language tags). SpanStatus.error if
+    // interrupted; SpanStatus.ok on natural completion.
+    final span = Telemetry.instance.span('tts.speak', attrs: {
+      'tts.segment_count': segments.length,
+      'tts.text_length': text.length,
+      'tts.language': languageCode ?? 'auto',
+    });
+    final stopwatch = Stopwatch()..start();
+
     // P034 follow-up: acquire .playback session BEFORE the first speak so
     // hardware media buttons route to MPRemoteCommand during the entire
     // utterance. Released on completion / cancel / error / stop().
@@ -90,7 +101,16 @@ class FlutterTtsService implements TtsService {
     // Single segment with no explicit language override: follow the original
     // path exactly (zero behavior change for untagged replies).
     if (segments.length == 1 && segments.first.languageCode == null) {
-      return _speakSingle(segments.first.text, languageCode);
+      try {
+        await _speakSingle(segments.first.text, languageCode);
+        span.setAttr('duration_ms', stopwatch.elapsedMilliseconds);
+        span.end(status: SpanStatus.ok);
+      } catch (e) {
+        span.setAttr('duration_ms', stopwatch.elapsedMilliseconds);
+        span.end(status: SpanStatus.error, message: e.toString());
+        rethrow;
+      }
+      return;
     }
 
     // Multi-segment (or single segment with explicit language): queue path.
@@ -107,6 +127,12 @@ class FlutterTtsService implements TtsService {
     try {
       await _speakSegment(queue, 0);
       await queue.doneCompleter.future;
+      span.setAttr('duration_ms', stopwatch.elapsedMilliseconds);
+      span.end(status: SpanStatus.ok);
+    } catch (e) {
+      span.setAttr('duration_ms', stopwatch.elapsedMilliseconds);
+      span.end(status: SpanStatus.error, message: e.toString());
+      rethrow;
     } finally {
       // Invariant: _speaking transitions true -> false exactly once here.
       if (_activeQueue?.generation == generation) {
@@ -205,6 +231,13 @@ class FlutterTtsService implements TtsService {
 
   @override
   Future<void> stop() async {
+    // P039 T6 — emit interrupt event only when something is actually
+    // playing. stop() is also called speculatively (e.g. before each
+    // engage to clear any stale TTS); those calls do not represent
+    // a user-meaningful interrupt.
+    if (_speaking.value || _activeQueue != null) {
+      Telemetry.instance.event('tts.interrupt');
+    }
     debugPrint('[TtsDbg] stop() called speaking=${_speaking.value} hasActiveQueue=${_activeQueue != null}');
     // (1) Clear the queue so any racing completion handler sees null.
     final queue = _activeQueue;
