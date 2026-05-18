@@ -17,7 +17,6 @@ import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
-import 'package:voice_agent/features/recording/domain/engagement_controller.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';

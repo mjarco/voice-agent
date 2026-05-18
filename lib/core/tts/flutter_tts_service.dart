@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:voice_agent/core/tts/ssml_lang_splitter.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
@@ -11,11 +10,8 @@ class FlutterTtsService implements TtsService {
   FlutterTtsService({
     FlutterTts? tts,
     bool? isIOS,
-    MethodChannel? audioSessionChannel,
   })  : _tts = tts ?? FlutterTts(),
-        _isIOS = isIOS ?? Platform.isIOS,
-        _audioSession = audioSessionChannel ??
-            const MethodChannel('com.voiceagent/audio_session') {
+        _isIOS = isIOS ?? Platform.isIOS {
     _tts.setStartHandler(_onStart);
     _tts.setCompletionHandler(_onCompletion);
     _tts.setCancelHandler(_onCancel);
@@ -43,7 +39,6 @@ class FlutterTtsService implements TtsService {
 
   final FlutterTts _tts;
   final bool _isIOS;
-  final MethodChannel _audioSession;
   final ValueNotifier<bool> _speaking = ValueNotifier(false);
 
   /// P034 follow-up: switch the iOS audio session to .playback for the

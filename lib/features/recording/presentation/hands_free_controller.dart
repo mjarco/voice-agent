@@ -5,7 +5,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
-import 'package:voice_agent/core/background/background_service.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
@@ -538,21 +537,6 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _phase = HandsFreeListeningPhase.listening;
     _pendingConversationResume = true;
     state = HandsFreeIdle(jobs: List.unmodifiable(_jobs));
-  }
-
-  Future<void> _closeEngagement({
-    required AudioSessionTarget toAmbientFor,
-  }) async {
-    _ref.read(sessionActiveProvider.notifier).state = false;
-    await _ref
-        .read(backgroundServiceProvider)
-        .stopService(target: toAmbientFor);
-    _engagement.disengage();
-    await _engineSub?.cancel();
-    _engineSub = null;
-    await _engine?.stop();
-    _engine = null;
-    _phase = HandsFreeListeningPhase.listening;
   }
 
   @override
