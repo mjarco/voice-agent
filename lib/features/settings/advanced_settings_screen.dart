@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
+import 'package:voice_agent/core/providers/flavor_provider.dart';
+import 'package:voice_agent/core/storage/storage_provider.dart';
 
 class AdvancedSettingsScreen extends ConsumerStatefulWidget {
   const AdvancedSettingsScreen({super.key});
@@ -122,9 +126,161 @@ class _AdvancedSettingsScreenState
               child: const Text('Reset to defaults'),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
+          // P039 T5c — telemetry section is rendered only on the dev
+          // flavor. Conditional on a runtime check is fine here because
+          // the dev/stable gate is at the BUILD level (different
+          // entrypoints, see ADR-OBS-001 §2); this conditional is just
+          // for UI cleanliness. Test-overridable via [isDevFlavorProvider].
+          if (ref.watch(isDevFlavorProvider))
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: _TelemetrySection(),
+            ),
         ],
       ),
+    );
+  }
+}
+
+class _TelemetrySection extends ConsumerStatefulWidget {
+  const _TelemetrySection();
+
+  @override
+  ConsumerState<_TelemetrySection> createState() => _TelemetrySectionState();
+}
+
+class _TelemetrySectionState extends ConsumerState<_TelemetrySection> {
+  late final TextEditingController _urlController;
+  String? _urlError;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlController = TextEditingController(
+      text: ref.read(appConfigProvider).otelCollectorUrl,
+    );
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  void _markRestartRequired() {
+    ref.read(telemetryRestartRequiredProvider.notifier).state = true;
+  }
+
+  void _onToggle(bool value) {
+    // Flip the banner flag synchronously so the UI updates immediately;
+    // persistence happens in the background.
+    _markRestartRequired();
+    unawaited(
+      ref.read(appConfigProvider.notifier).updateDevTelemetryEnabled(value),
+    );
+  }
+
+  void _onUrlSubmit(String value) {
+    final trimmed = value.trim();
+    final parsed = Uri.tryParse(trimmed);
+    if (parsed == null || !parsed.isAbsolute || trimmed.isEmpty) {
+      setState(() {
+        _urlError = 'Invalid URL — must be absolute (http:// or https://).';
+      });
+      return;
+    }
+    setState(() => _urlError = null);
+    _markRestartRequired();
+    unawaited(
+      ref.read(appConfigProvider.notifier).updateOtelCollectorUrl(trimmed),
+    );
+  }
+
+  Future<void> _onClearBuffer() async {
+    final storage = ref.read(storageServiceProvider);
+    final n = await storage.clearTelemetryOutbox();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Cleared $n telemetry rows.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final config = ref.watch(appConfigProvider);
+    final restartRequired = ref.watch(telemetryRestartRequiredProvider);
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Telemetry (dev)',
+          style: theme.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          key: const Key('telemetry-enabled-toggle'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Enable telemetry'),
+          subtitle: const Text(
+            'Send spans to the OTel Collector. Off = no network traffic.',
+          ),
+          value: config.devTelemetryEnabled,
+          onChanged: _onToggle,
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          key: const Key('telemetry-collector-url'),
+          controller: _urlController,
+          decoration: InputDecoration(
+            labelText: 'Collector URL',
+            helperText:
+                _urlError == null ? 'e.g. http://laptop.lan:4318' : null,
+            errorText: _urlError,
+            border: const OutlineInputBorder(),
+          ),
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          onSubmitted: _onUrlSubmit,
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          key: const Key('telemetry-clear-buffer'),
+          icon: const Icon(Icons.delete_outline),
+          label: const Text('Clear telemetry buffer'),
+          onPressed: _onClearBuffer,
+        ),
+        if (restartRequired)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Container(
+              key: const Key('telemetry-restart-banner'),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.tertiaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.restart_alt,
+                      color: theme.colorScheme.onTertiaryContainer),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Restart the app to apply telemetry changes.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onTertiaryContainer,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 }

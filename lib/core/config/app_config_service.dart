@@ -26,6 +26,11 @@ class AppConfigService {
   static const _ttsEnabledKey = 'tts_enabled';
   static const _audioFeedbackEnabledKey = 'audio_feedback_enabled';
 
+  // P039 T5c — dev-flavor telemetry runtime config. Persisted on
+  // both flavors but only consulted by `lib/main_dev.dart`.
+  static const _devTelemetryEnabledKey = 'dev_telemetry_enabled';
+  static const _otelCollectorUrlKey = 'otel_collector_url';
+
   // Cross-isolate-safe scalar config per ADR-ARCH-005 (P040 amendment).
   // Read by the foreground staleness check on app resume and by the
   // background isolate's 50-min skip guard (workmanager periodic task).
@@ -113,7 +118,20 @@ class AppConfigService {
       vadConfig: vadConfig,
       ttsEnabled: prefs.getBool(_ttsEnabledKey) ?? true,
       audioFeedbackEnabled: prefs.getBool(_audioFeedbackEnabledKey) ?? true,
+      devTelemetryEnabled: prefs.getBool(_devTelemetryEnabledKey) ?? true,
+      otelCollectorUrl: prefs.getString(_otelCollectorUrlKey) ??
+          defaultOtelCollectorUrl,
     );
+  }
+
+  Future<void> saveDevTelemetryEnabled(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool(_devTelemetryEnabledKey, value);
+  }
+
+  Future<void> saveOtelCollectorUrl(String value) async {
+    final prefs = await _preferences;
+    await prefs.setString(_otelCollectorUrlKey, value);
   }
 
   Future<void> _runRemovalMigration(SharedPreferences prefs) async {

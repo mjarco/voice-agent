@@ -15,6 +15,8 @@ class AppConfig {
     this.vadConfig = const VadConfig.defaults(),
     this.ttsEnabled = true,
     this.audioFeedbackEnabled = true,
+    this.devTelemetryEnabled = true,
+    this.otelCollectorUrl = defaultOtelCollectorUrl,
   });
 
   final String? apiUrl;
@@ -27,6 +29,12 @@ class AppConfig {
   final bool ttsEnabled;
   final bool audioFeedbackEnabled;
 
+  // P039 T5c — dev-flavor runtime kill-switch + endpoint override.
+  // Persisted on both flavors but only consulted by `lib/main_dev.dart`;
+  // the stable flavor leaves them at defaults and never reads them.
+  final bool devTelemetryEnabled;
+  final String otelCollectorUrl;
+
   AppConfig copyWith({
     Object? apiUrl = _sentinel,
     Object? apiToken = _sentinel,
@@ -37,6 +45,8 @@ class AppConfig {
     VadConfig? vadConfig,
     bool? ttsEnabled,
     bool? audioFeedbackEnabled,
+    bool? devTelemetryEnabled,
+    String? otelCollectorUrl,
   }) {
     return AppConfig(
       apiUrl: apiUrl == _sentinel ? this.apiUrl : apiUrl as String?,
@@ -49,6 +59,16 @@ class AppConfig {
       vadConfig: vadConfig ?? this.vadConfig,
       ttsEnabled: ttsEnabled ?? this.ttsEnabled,
       audioFeedbackEnabled: audioFeedbackEnabled ?? this.audioFeedbackEnabled,
+      devTelemetryEnabled: devTelemetryEnabled ?? this.devTelemetryEnabled,
+      otelCollectorUrl: otelCollectorUrl ?? this.otelCollectorUrl,
     );
   }
 }
+
+/// Default Collector endpoint used when the user has not customised it.
+/// Sourced from `--dart-define=OTEL_COLLECTOR=…` at build time, or
+/// `http://laptop.lan:4318` as the fallback for the home stack.
+const String defaultOtelCollectorUrl = String.fromEnvironment(
+  'OTEL_COLLECTOR',
+  defaultValue: 'http://laptop.lan:4318',
+);
