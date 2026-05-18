@@ -7,32 +7,34 @@
 
 import 'package:opentelemetry/api.dart' as otel_api;
 import 'package:opentelemetry/sdk.dart' as otel_sdk;
+import 'package:voice_agent/core/observability/durable_span_processor.dart';
+import 'package:voice_agent/core/observability/telemetry_flush_worker.dart';
+import 'package:voice_agent/core/storage/storage_service.dart';
 
 import 'telemetry.dart';
 
-/// OTel-backed Telemetry. T3 wires the SDK with a synchronous
-/// [otel_sdk.SimpleSpanProcessor] pointing at a Collector at
-/// [collectorBaseUrl]. T4 replaces the processor with the durable
-/// outbox-backed one.
+/// OTel-backed Telemetry. Persists ended spans to the SQLite outbox
+/// via [DurableSpanProcessor] and drains them over OTLP/HTTP via
+/// [TelemetryFlushWorker] — force-quit durable per ADR-OBS-001 §5.
 class OtelTelemetry implements Telemetry {
-  OtelTelemetry._(this._provider, this._tracer);
+  OtelTelemetry._(this._provider, this._tracer, this._processor, this._worker);
 
   /// Build and wire the OTel SDK. Call once from
-  /// `lib/main_dev.dart` before `runApp`.
+  /// `lib/main_dev.dart` before `runApp` — after the storage layer is
+  /// initialised (see ADR-ARCH-007 Known applications).
   ///
   /// [serviceName] is the OTel resource attribute identifying this app.
   /// [serviceVersion] is typically read from `pubspec.yaml`.
   /// [collectorBaseUrl] is the Collector base URL (no trailing slash);
-  /// the SDK posts to `$collectorBaseUrl/v1/traces`.
-  factory OtelTelemetry.boot({
+  /// the flush worker posts to `$collectorBaseUrl/v1/traces` etc.
+  /// [storage] backs the durable outbox.
+  static Future<OtelTelemetry> boot({
     required String serviceName,
     required String serviceVersion,
     required Uri collectorBaseUrl,
-  }) {
-    final exporter = otel_sdk.CollectorExporter(
-      collectorBaseUrl.resolve('/v1/traces'),
-    );
-    final processor = otel_sdk.SimpleSpanProcessor(exporter);
+    required StorageService storage,
+  }) async {
+    final processor = DurableSpanProcessor(storage: storage);
     final provider = otel_sdk.TracerProviderBase(
       processors: [processor],
       resource: otel_sdk.Resource([
@@ -45,11 +47,18 @@ class OtelTelemetry implements Telemetry {
       'voice-agent',
       schemaUrl: 'https://opentelemetry.io/schemas/1.21.0',
     );
-    return OtelTelemetry._(provider, tracer);
+    final worker = TelemetryFlushWorker(
+      storage: storage,
+      collectorBaseUrl: collectorBaseUrl,
+    );
+    await worker.start();
+    return OtelTelemetry._(provider, tracer, processor, worker);
   }
 
   final otel_sdk.TracerProviderBase _provider;
   final otel_api.Tracer _tracer;
+  final DurableSpanProcessor _processor;
+  final TelemetryFlushWorker _worker;
 
   @override
   void event(String name, {Map<String, Object?> attrs = const {}}) {
@@ -105,7 +114,21 @@ class OtelTelemetry implements Telemetry {
   @override
   Future<void> flush() async {
     _provider.forceFlush();
+    // Wait for the persist queue to drain to disk, then run one
+    // synchronous flush against the Collector. Useful from
+    // app-shutdown hooks where we want the outbox to actually try
+    // to deliver before the process dies.
+    await _processor.drain();
+    await _worker.flushOnce();
   }
+
+  /// Update the flush cadence in response to app lifecycle.
+  /// Foreground = 10s ticks; background = 60s ticks (defaults).
+  void setForeground(bool foreground) => _worker.setForeground(foreground);
+
+  /// Stop the flush worker. Use only on full process shutdown — once
+  /// stopped the outbox stops draining.
+  void stopFlushWorker() => _worker.stop();
 }
 
 class _OtelSpan implements TelemetrySpan {

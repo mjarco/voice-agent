@@ -1,6 +1,7 @@
 // `dev` flavor entrypoint. Wires `Telemetry.instance` to the
-// OTel-backed implementation before `appMain` runs, so the very first
-// span emitted at app boot already lands in the Collector.
+// OTel-backed implementation between storage init and `runApp`, so the
+// first emitted span (`app.boot`) already lands in the SQLite outbox
+// before any other layer starts.
 //
 // `package:opentelemetry` is reachable from this file and from
 // `lib/core/observability/telemetry_otel.dart` only. The stable
@@ -21,13 +22,15 @@ const _collectorEndpoint = String.fromEnvironment(
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  Telemetry.instance = OtelTelemetry.boot(
-    serviceName: 'voice-agent',
-    serviceVersion: '1.0.0+1', // T3: hard-coded; T6 reads pubspec at gen time.
-    collectorBaseUrl: Uri.parse(_collectorEndpoint),
-  );
-  Telemetry.instance.event('app.boot', attrs: const {
-    'phase': 'pre_runapp',
+  await appMain(afterStorageInit: (storage) async {
+    Telemetry.instance = await OtelTelemetry.boot(
+      serviceName: 'voice-agent',
+      serviceVersion: '1.0.0+1', // T3: hard-coded; T6 reads pubspec at gen time.
+      collectorBaseUrl: Uri.parse(_collectorEndpoint),
+      storage: storage,
+    );
+    Telemetry.instance.event('app.boot', attrs: const {
+      'phase': 'post_storage_init',
+    });
   });
-  await appMain();
 }
