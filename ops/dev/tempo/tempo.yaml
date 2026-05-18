@@ -1,0 +1,57 @@
+# P039 T2 — Tempo (traces storage) config.
+#
+# Single-binary mode: receiver + distributor + ingester + querier +
+# compactor in one process. Disk-backed local storage. Retention via
+# the compactor's 7-day block window. Sized for a single-user dev
+# stream — kilobytes per minute at peak.
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        # http receiver omitted — the Collector sends OTLP/gRPC.
+
+ingester:
+  trace_idle_period: 30s
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 168h  # 7 days
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
+
+# Generate span metrics for the dashboard. Tempo writes them as
+# Prometheus metrics that the Collector forwards to the home
+# Prometheus via remote-write. Disable here if Tempo metrics-generator
+# resource cost is a problem.
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+      service: voice-agent
+  storage:
+    path: /var/tempo/generator/wal
+  processor:
+    span_metrics:
+      enable_target_info: true
+      dimensions:
+        - deployment.environment
+        - span.kind
+        - status.code
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [span-metrics]

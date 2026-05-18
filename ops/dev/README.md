@@ -1,25 +1,22 @@
 # ops/dev — local dev-flavor observability
 
-This directory holds operational config for the dev-flavor telemetry pipeline
-introduced by P039. Two files at the time of writing:
+Operational config for the P039 dev-flavor telemetry pipeline. Two
+deployable stacks live here; pick the one that matches what you're
+doing today.
 
-- `collector-only.docker-compose.yml` — minimal OTel Collector for the **T1
-  spike**. Only an OTLP HTTP receiver + debug stdout exporter. ~30 LOC.
-- `otel-collector-config.yml` — Collector pipeline config used by the
-  spike compose.
+| Compose | Services | When to use |
+|---|---|---|
+| `collector-only.docker-compose.yml` | OTel Collector with stdout debug exporter only | Spike + plumbing checks. Verify Dart → Collector works without standing up Tempo. ~30 LOC. |
+| `telemetry.docker-compose.yml` | OTel Collector + Tempo (single binary) | Real deployment. Traces land in Tempo, metrics remote-write to the home Prometheus. Pair with the dashboard provisioning under `ops/dev/grafana/`. |
 
-A full backend stack (Collector → Tempo → Prometheus remote-write + Grafana
-data sources) lands in T2 as `telemetry.docker-compose.yml`. Until that
-ships, only the spike compose is here.
-
-## Running the spike Collector locally
+## Spike: Collector only
 
 ```bash
 cd ops/dev
-docker compose -f collector-only.docker-compose.yml up
+docker compose -f collector-only.docker-compose.yml up -d
 ```
 
-Verify it's listening:
+Verify the OTLP HTTP endpoint:
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" \
@@ -30,17 +27,58 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 ```
 
 The Collector logs every received OTLP request to stdout via the `debug`
-exporter, so you can watch it process spans live.
+exporter — useful for `docker logs voice-agent-otel-spike` live tailing.
 
-## Stopping
+Stop:
 
 ```bash
 docker compose -f collector-only.docker-compose.yml down
 ```
 
-## Deploying to `laptop.lan`
+## Full deployment
 
-The Collector binds to `0.0.0.0`, so when this compose runs on the
-laptop host (the one resolved by `laptop.lan`) the phone on the same
-LAN can POST to `http://laptop.lan:4318/v1/traces` directly. No
-auth — see P039 §Wire format and transport for the rationale.
+```bash
+cd ops/dev
+docker compose -f telemetry.docker-compose.yml up -d
+```
+
+Verify everything is healthy:
+
+```bash
+# Collector OTLP receiver
+curl -s -o /dev/null -w "Collector %{http_code}\n" \
+    -X POST http://localhost:4318/v1/traces \
+    -H 'Content-Type: application/json' -d '{}'
+# expect: Collector 200
+
+# Tempo API
+curl -s -o /dev/null -w "Tempo %{http_code}\n" http://localhost:3200/ready
+# expect: Tempo 200
+```
+
+This stack assumes the home Prometheus + Grafana are already running
+on the same host (or reachable over the docker network). For the
+home Prometheus to receive metrics from the Collector, point its
+`remote_write` URL config or check that
+`http://host.docker.internal:9090/api/v1/write` is accessible from
+within the Collector container.
+
+Two additional one-time installs into the home Grafana for the dashboard
+to work — see [`../../docs/observability.md`](../../docs/observability.md)
+for the step-by-step.
+
+Stop:
+
+```bash
+docker compose -f telemetry.docker-compose.yml down
+```
+
+## Files
+
+- `collector-only.docker-compose.yml` — single-service spike compose
+- `telemetry.docker-compose.yml` — full stack (Collector + Tempo)
+- `otel-collector-config.yml` — Collector config for the spike (debug exporter only)
+- `otel-collector-full-config.yml` — Collector config for the full stack (Tempo + Prometheus remote-write + debug)
+- `tempo/tempo.yaml` — Tempo single-binary config
+- `grafana/provisioning/datasources/voice-agent.yml` — Grafana data source provisioning, drop into the home Grafana once
+- `grafana/provisioning/dashboards/voice-agent.yml` — Grafana dashboard provider config; the actual dashboard JSON lives at `../grafana/voice-agent-dev.json`

@@ -1,0 +1,63 @@
+# P039 T2 — full dev-flavor telemetry stack.
+#
+# Two services, both intended to run on `laptop.lan` (or any host the
+# user's dev device can reach over LAN). The existing home-monitor
+# Prometheus + Grafana on the same host get a new data source and a
+# new dashboard but are NOT re-deployed here.
+#
+# Two integration touch-points the user installs once:
+#   1. Prometheus remote-write target — see otel-collector-config.yml
+#      `exporters.prometheusremotewrite.endpoint` and adjust to point at
+#      your home Prometheus' remote-write URL (default assumes
+#      http://prometheus:9090/api/v1/write within a shared docker network;
+#      change to http://localhost:9090/api/v1/write if Prometheus runs
+#      directly on the host).
+#   2. Grafana data source — copy
+#      ops/dev/grafana/provisioning/datasources/voice-agent.yml into the
+#      home Grafana's provisioning/datasources/ directory and restart
+#      that Grafana once.
+#
+# Deploy:
+#   cd ops/dev && docker compose -f telemetry.docker-compose.yml up -d
+#
+# Verify (from any LAN host):
+#   curl -X POST http://laptop.lan:4318/v1/traces \
+#       -H 'Content-Type: application/json' -d '{}'
+#   # expect HTTP 200
+#
+# Replaces the previous `collector-only.docker-compose.yml` used by the
+# T1 spike. The spike compose is preserved (single-service, stdout
+# exporter only) for future plumbing-only verifications.
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.131.0
+    container_name: voice-agent-otel-collector
+    command: ["--config=/etc/otelcol-config.yml"]
+    volumes:
+      - ./otel-collector-full-config.yml:/etc/otelcol-config.yml:ro
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    depends_on:
+      - tempo
+    extra_hosts:
+      # Lets the Collector reach the home Prometheus running on the
+      # host (outside the compose network).
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.6.0
+    container_name: voice-agent-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"   # HTTP — Grafana data source target
+      - "4319:4317"   # OTLP gRPC for traces (renamed to dodge Collector clash)
+    restart: unless-stopped
+
+volumes:
+  tempo-data:

@@ -1,0 +1,67 @@
+# P039 T2 — full-stack Collector config.
+#
+# Used by `telemetry.docker-compose.yml`. The spike compose
+# (`collector-only.docker-compose.yml`) still uses the simpler
+# `otel-collector-config.yml` with just the debug exporter so the
+# T1-style smoke tests stay friction-free.
+#
+# Pipelines:
+#   traces  -> Tempo (storage) + debug (stdout, for live tailing)
+#   metrics -> Prometheus remote-write (storage) + debug
+#
+# Tweak the `prometheusremotewrite.endpoint` below to match where the
+# home Prometheus accepts remote-write. Defaults assume the home
+# Prometheus is reachable at http://prometheus:9090/ on a docker
+# network shared with this stack. For a host-mode Prometheus (most
+# common home-monitor layout) change to http://host.docker.internal:9090/
+# (macOS / Windows) or http://172.17.0.1:9090/ (Linux).
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 100
+
+exporters:
+  # Forward traces to Tempo. Tempo's OTLP receiver lives on the same
+  # docker network so the hostname `tempo` resolves to the sibling
+  # container.
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Forward metrics to the home Prometheus via remote-write. Adjust
+  # the endpoint to your network topology.
+  prometheusremotewrite:
+    endpoint: http://host.docker.internal:9090/api/v1/write
+    # Add `auth.authenticator: basicauth/client` and configure the
+    # `basicauth/client` extension if your Prometheus requires auth.
+    tls:
+      insecure: true
+
+  # Keep the debug exporter so `docker logs voice-agent-otel-collector`
+  # is still a live tail. Useful during initial deployment.
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheusremotewrite, debug]
+  telemetry:
+    logs:
+      level: info
