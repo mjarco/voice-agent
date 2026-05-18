@@ -8,6 +8,7 @@ import 'package:voice_agent/core/audio/ambient_loop_player.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/media_button/media_button_port.dart';
 import 'package:voice_agent/core/media_button/media_button_provider.dart';
+import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/volume_button/volume_button_port.dart';
 import 'package:voice_agent/core/volume_button/volume_button_provider.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
@@ -80,6 +81,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final hfState = ref.read(handsFreeControllerProvider);
     final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
     final ttsPlaying = ref.read(ttsPlayingProvider);
+    // P039 T6 — record the press; downstream effect is driven by the
+    // existing switch below.
+    Telemetry.instance.event('input.volume_button', attrs: {
+      'direction': event.name,
+      'tts_playing': ttsPlaying,
+      'hf_state': hfState.runtimeType.toString(),
+    });
     debugPrint(
       '[VolumeBtnDbg] _onVolumeButtonEvent event=$event hfState=${hfState.runtimeType} ttsPlaying=$ttsPlaying',
     );
@@ -120,6 +128,15 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final ttsIsSpeakingDirect = ref.read(ttsServiceProvider).isSpeaking.value;
     final recStateSnap = ref.read(recordingControllerProvider);
     final hfStateSnap = ref.read(handsFreeControllerProvider);
+    // P039 T6 — record the press. Only togglePlayPause has a behavior
+    // path today, but emit for all event kinds so unrecognised hardware
+    // events are still observable.
+    Telemetry.instance.event('input.media_button', attrs: {
+      'button': event.name,
+      'tts_playing': ttsPlaying,
+      'rec_state': recStateSnap.runtimeType.toString(),
+      'hf_state': hfStateSnap.runtimeType.toString(),
+    });
     debugPrint(
       '[MediaButtonDbg] _onMediaButtonEvent event=$event '
       'ttsPlayingProvider=$ttsPlaying ttsIsSpeaking.value=$ttsIsSpeakingDirect '
