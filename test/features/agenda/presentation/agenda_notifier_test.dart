@@ -11,6 +11,7 @@ import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
 import 'package:voice_agent/core/notifications/notification_providers.dart';
+import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_state.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_notifier.dart';
@@ -105,6 +106,8 @@ class _FakeNotificationService implements NotificationService {
   final Map<int, ScheduledNotification> _snapshot = {};
   bool permitted = true;
 
+  Map<int, ScheduledNotification> get snapshot => Map.unmodifiable(_snapshot);
+
   @override
   Future<void> init() async {}
   @override
@@ -122,29 +125,6 @@ class _FakeNotificationService implements NotificationService {
   Future<void> cancelAll() async => _snapshot.clear();
 }
 
-/// Build a ProviderContainer with all deps needed by `agendaNotifierProvider`.
-/// Returns the container; tests read `agendaNotifierProvider.notifier` to get
-/// the notifier (same path production code uses).
-ProviderContainer _buildContainer(AgendaRepository repo) {
-  final notifications = _FakeNotificationService();
-  final scheduler = AgendaNotificationScheduler(
-    service: notifications,
-    location: tz.local,
-    clock: DateTime.now,
-  );
-  // AppConfigService writes to SharedPreferences; for unit tests we use the
-  // mock channel registered in setUpAll().
-  final configService = AppConfigService();
-  return ProviderContainer(
-    overrides: [
-      agendaRepositoryProvider.overrideWithValue(repo),
-      notificationServiceProvider.overrideWithValue(notifications),
-      agendaNotificationSchedulerProvider.overrideWithValue(scheduler),
-      appConfigServiceProvider.overrideWithValue(configService),
-    ],
-  );
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -152,17 +132,31 @@ void main() {
     tz_data.initializeTimeZones();
   });
 
-  setUp(() {
-    // Mock SharedPreferences (no platform plugin in the unit harness).
-    SharedPreferences.setMockInitialValues({});
-  });
-
   late _MockRepository repo;
+  late _FakeNotificationService notifications;
+  late AppConfigService configService;
   late ProviderContainer container;
 
   setUp(() {
+    // Mock SharedPreferences (no platform plugin in the unit harness).
+    SharedPreferences.setMockInitialValues({});
+
     repo = _MockRepository();
-    container = _buildContainer(repo);
+    notifications = _FakeNotificationService();
+    configService = AppConfigService();
+    final scheduler = AgendaNotificationScheduler(
+      service: notifications,
+      location: tz.local,
+      clock: DateTime.now,
+    );
+    container = ProviderContainer(
+      overrides: [
+        agendaRepositoryProvider.overrideWithValue(repo),
+        notificationServiceProvider.overrideWithValue(notifications),
+        agendaNotificationSchedulerProvider.overrideWithValue(scheduler),
+        appConfigServiceProvider.overrideWithValue(configService),
+      ],
+    );
   });
 
   tearDown(() {
@@ -328,6 +322,108 @@ void main() {
 
       expect(repo.fetchCount, 1);
       expect(notifier.state, isA<AgendaLoaded>());
+    });
+  });
+
+  // ── P040: reconcile firing conditions and session-edge wiring ──────────
+  //
+  // The proposal (§Reconciler Triggers, §Session Gating) defines explicit
+  // rules for when the reconciler runs. These tests pin them down at the
+  // notifier level so a regression (e.g., firing on non-today, firing from
+  // error state) is caught at CI.
+
+  group('P040 reconcile firing conditions', () {
+    test('reconcile fires after loaded(today)', () async {
+      // Default _MockRepository.fetchAgenda returns today's date string from
+      // the notifier's _dateString getter, which uses DateTime.now → "today".
+      repo.nextFetchResult = _responseWithItems();
+      buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      // The pure scheduler always writes the 4 summary IDs at minimum.
+      expect(notifications.snapshot.keys, containsAll([1000, 1001, 1002, 1003]),
+          reason: 'reconciler should have scheduled the 4 daily summaries');
+    });
+
+    test('reconcile does NOT fire on error(cached)', () async {
+      final cached = CachedAgenda(
+        response: _responseWithItems(),
+        fetchedAt: DateTime(2026, 4, 19, 10, 0),
+      );
+      repo.nextCachedResult = cached;
+      repo.fetchError = Exception('Offline');
+
+      buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifications.snapshot, isEmpty,
+          reason: 'stale cache must not drive OS notification scheduling');
+    });
+
+    test('reconcile does NOT fire on loaded(non-today)', () async {
+      repo.nextFetchResult = _responseWithItems();
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      // Clear what initial today-load scheduled.
+      await notifications.cancelAll();
+
+      // Navigate to a non-today date.
+      notifier.selectDate(DateTime(2030, 1, 1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifications.snapshot, isEmpty,
+          reason: 'non-today responses are for browsing, not scheduling');
+    });
+
+    test('lastAgendaFetchAt is persisted after loaded', () async {
+      final before = DateTime.now();
+      buildNotifier();
+      // Allow the fire-and-forget setLastAgendaFetchAt write to complete.
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final saved = await configService.getLastAgendaFetchAt();
+      expect(saved, isNotNull,
+          reason: 'P040 §Reconciler Triggers #2 + bg 50-min skip guard '
+              'both depend on this timestamp');
+      expect(saved!.isAfter(before.subtract(const Duration(seconds: 1))),
+          isTrue);
+    });
+  });
+
+  group('P040 session-edge wiring', () {
+    test('session edge true→false triggers refresh (fetch + reconcile)',
+        () async {
+      buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      // Force the listener to observe a transition. ref.listen ignores the
+      // initial value but fires on subsequent changes.
+      container.read(sessionActiveProvider.notifier).state = true;
+      await Future<void>.delayed(Duration.zero);
+      repo.fetchCount = 0;
+
+      // The edge of interest:
+      container.read(sessionActiveProvider.notifier).state = false;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(repo.fetchCount, greaterThan(0),
+          reason: 'true→false edge must call refresh() which re-fetches');
+    });
+
+    test('session edge false→true triggers reconcile-only (no fetch)',
+        () async {
+      repo.nextFetchResult = _responseWithItems();
+      buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+      // Snapshot is now populated with summaries (and a routine reminder).
+      repo.fetchCount = 0;
+
+      container.read(sessionActiveProvider.notifier).state = true;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(repo.fetchCount, 0,
+          reason: 'false→true edge must NOT re-fetch; it reconciles cached');
     });
   });
 }
