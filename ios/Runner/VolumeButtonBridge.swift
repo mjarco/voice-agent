@@ -37,6 +37,14 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
     // increments). Anything smaller is noise / programmatic restore.
     private let _stepThreshold: Float = 0.001
 
+    // P041 — suppression window. `outputVolume` is tracked per
+    // audio-session category context, so a category/route change makes
+    // iOS report a different value with no button press involved. While
+    // `Date() < suppressUntil` the KVO observer re-baselines silently
+    // instead of emitting a phantom press.
+    private var suppressUntil = Date.distantPast
+    private let suppressionWindow: TimeInterval = 0.6
+
     private override init() {
         super.init()
     }
@@ -73,6 +81,32 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
         }
     }
 
+    // MARK: - Suppression (P041)
+
+    /// Suppresses volume-button detection for [suppressionWindow] seconds.
+    ///
+    /// Called by the app itself (`AudioSessionBridge`) before every
+    /// audio-session category change, and by the route-change observer
+    /// below. Both events shift the value iOS reports for `outputVolume`
+    /// without any hardware button press — this window stops that shift
+    /// from being emitted as a phantom `"up"` / `"down"`.
+    ///
+    /// Safe to call when not observing — it only moves a timestamp.
+    func suppressVolumeEvents() {
+        suppressUntil = Date().addingTimeInterval(suppressionWindow)
+        NSLog("[VolumeBtnDbg] suppressing volume events for \(suppressionWindow)s (audio-session transition)")
+    }
+
+    @objc private func handleAudioRouteChange(_ notification: Notification) {
+        // A route or category change (mic acquisition, AirPods connect,
+        // our own .playAndRecord switch) shifts `outputVolume` because
+        // volume is tracked per audio-session context. Suppress briefly
+        // so the shift is not misread as a press. Covers category
+        // changes made outside AudioSessionBridge (e.g. the `record`
+        // plugin's own session setup).
+        suppressVolumeEvents()
+    }
+
     // MARK: - KVO on AVAudioSession.outputVolume
 
     private func startObserving() {
@@ -85,6 +119,11 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
                             forKeyPath: "outputVolume",
                             options: [.new, .old],
                             context: nil)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification,
+            object: nil)
         observing = true
         NSLog("[VolumeBtnDbg] startObserving — initial volume=\(lastVolume)")
     }
@@ -93,6 +132,10 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
         guard observing else { return }
         AVAudioSession.sharedInstance().removeObserver(self,
                                                       forKeyPath: "outputVolume")
+        NotificationCenter.default.removeObserver(
+            self,
+            name: AVAudioSession.routeChangeNotification,
+            object: nil)
         observing = false
         NSLog("[VolumeBtnDbg] stopObserving")
     }
@@ -113,6 +156,14 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
         lastVolume = new
         if prev < 0 {
             // First observation since startObserving — no direction yet.
+            return
+        }
+        // P041 — inside a suppression window the change comes from an
+        // audio-session category/route transition, not a button press.
+        // `lastVolume` was already updated above, so the post-transition
+        // value becomes the new baseline; emit nothing.
+        if Date() < suppressUntil {
+            NSLog("[VolumeBtnDbg] volume change suppressed (audio-session transition): \(prev) → \(new)")
             return
         }
         let delta = new - prev

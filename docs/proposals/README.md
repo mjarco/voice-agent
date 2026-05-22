@@ -54,6 +54,9 @@ Index of design proposals. Status is recorded in the `## Status:` line at the to
 | 036 | [Replay Last TTS Reply](036-replay-last-tts.md) | Implemented |
 | 037 | [Hardware-Button Control of Hands-Free Listening](037-airpods-listening-control.md) | Superseded by P038 (proposal PR #272 closed) |
 | 038 | [Always-On Capture with Volume-Button Engagement](038-always-on-capture-volume-button-engagement.md) | Implemented |
+| 039 | [OTel Dev Telemetry](039-otel-dev-telemetry.md) | Implemented |
+| 040 | [Agenda Notifications & Background Refresh](040-agenda-notifications-and-background-refresh.md) | Implemented (manual device verification pending) |
+| 041 | [Suppress Spurious Volume Events During Audio-Session Transitions](041-volume-button-spurious-event-on-session-start.md) | Implemented (manual device verification pending) |
 | — | [PoC: "Come back" notification](POC-come-back-notification.md) | PoC implemented (PR #288) |
 | — | [Backlog](P000-backlog.md) | — |
 
