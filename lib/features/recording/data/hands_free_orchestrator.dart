@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:voice_agent/core/audio/audio_route_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
@@ -16,10 +17,29 @@ import 'package:voice_agent/features/recording/domain/vad_service.dart';
 /// Inject [AudioRecorder] and [VadService] for testability. At runtime the
 /// [handsFreeEngineProvider] constructs both.
 class HandsFreeOrchestrator implements HandsFreeEngine {
-  HandsFreeOrchestrator(this._audioRecorder, this._vadService);
+  HandsFreeOrchestrator(
+    this._audioRecorder,
+    this._vadService, {
+    AudioRouteService? audioRouteService,
+    Duration watchdogInterval = const Duration(seconds: 3),
+    Duration routeRestartDebounce = const Duration(milliseconds: 300),
+  })  : _audioRouteService = audioRouteService,
+        _watchdogInterval = watchdogInterval,
+        _routeRestartDebounce = routeRestartDebounce;
 
   final AudioRecorder _audioRecorder;
   final VadService _vadService;
+
+  /// Source of iOS audio route changes (P042). When null, route-driven
+  /// restart is disabled — the silent-mic watchdog still runs.
+  final AudioRouteService? _audioRouteService;
+
+  /// How long the engine may go without an audio chunk before the
+  /// watchdog forces a capture restart.
+  final Duration _watchdogInterval;
+
+  /// Debounce window collapsing a burst of route changes into one restart.
+  final Duration _routeRestartDebounce;
 
   // ── Tuning constants ────────────────────────────────────────────────────────
   static const _sampleRate = 16000;
@@ -80,6 +100,13 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   // bridges (audio.session.*) attach to this span. Ended on stop().
   TelemetrySpan? _attachSpan;
 
+  // P042 — route-change recovery + silent-mic watchdog.
+  StreamSubscription<AudioRouteChange>? _routeSub;
+  Timer? _routeRestartTimer;
+  Timer? _watchdogTimer;
+  bool _chunkSinceWatchdogTick = false;
+  bool _restarting = false;
+
   // ── HandsFreeEngine interface ────────────────────────────────────────────────
 
   @override
@@ -101,6 +128,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
     _inCooldown = false;
+    _stopRouteMonitoring();
 
     await _audioSub?.cancel();
     _audioSub = null;
@@ -125,6 +153,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
     _inCooldown = false;
+    _stopRouteMonitoring();
 
     // P039 T5b — close the long-lived attach span if it's still open
     // (orchestrator stopped by something other than an error path).
@@ -240,6 +269,8 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
         onDone: _onStreamDone,
         cancelOnError: true,
       );
+      _subscribeToRouteChanges();
+      _startWatchdog();
     } catch (e) {
       final msg = e.toString().toLowerCase();
       final isPermission =
@@ -249,9 +280,108 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     }
   }
 
+  // ── P042 — route-change recovery + silent-mic watchdog ──────────────────────
+
+  void _subscribeToRouteChanges() {
+    final service = _audioRouteService;
+    if (service == null) return;
+    _routeSub = service.changes.listen(_onRouteChange);
+  }
+
+  void _onRouteChange(AudioRouteChange change) {
+    if (_phase == _Phase.idle) return;
+    if (!change.reason.affectsInputRoute) return;
+    debugPrint('[HFO] input route changed (${change.reason.name}) — '
+        'scheduling capture restart');
+    // Route changes arrive in bursts (a Bluetooth transition emits
+    // several); debounce so one transition triggers one restart.
+    _routeRestartTimer?.cancel();
+    _routeRestartTimer = Timer(_routeRestartDebounce, () {
+      unawaited(_restartCapture());
+    });
+  }
+
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _chunkSinceWatchdogTick = true; // grace for the first interval
+    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) => _watchdogTick());
+  }
+
+  void _watchdogTick() {
+    if (_phase == _Phase.idle || _restarting) return;
+    if (_chunkSinceWatchdogTick) {
+      _chunkSinceWatchdogTick = false;
+      return;
+    }
+    // No audio chunk since the last tick. PCM chunks arrive continuously
+    // whenever the mic is live (independent of speech), so this
+    // unambiguously means the microphone is dead while the engine still
+    // believes it is capturing. Re-acquire the stream.
+    debugPrint('[HFO] watchdog: no audio for $_watchdogInterval — restarting');
+    Telemetry.instance.event('hf.watchdog_restart');
+    unawaited(_restartCapture());
+  }
+
+  /// Tears down and re-acquires the recorder stream on the current audio
+  /// route. Preserves the non-idle [_phase], [_captureGateOpen], [_config]
+  /// and the initialised [_vadService]; drops any partial segment.
+  Future<void> _restartCapture() async {
+    if (_phase == _Phase.idle || _restarting) return;
+    _restarting = true;
+    try {
+      Telemetry.instance.event('hf.capture_restart');
+      debugPrint('[HFO] restarting capture');
+      await _audioSub?.cancel();
+      _audioSub = null;
+      try {
+        await _audioRecorder.stop();
+      } catch (_) {}
+      if (_phase == _Phase.idle) return; // stopped during restart
+      // Drop any partial segment / buffered state; resume cleanly.
+      _resetBuffers();
+      _cooldownTimer?.cancel();
+      _cooldownTimer = null;
+      _inCooldown = false;
+      _phase = _Phase.listening;
+      final audioStream = await _audioRecorder.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          sampleRate: _sampleRate,
+          numChannels: 1,
+        ),
+      );
+      if (_phase == _Phase.idle) return; // stopped during restart
+      _audioSub = audioStream.listen(
+        _enqueueChunk,
+        onError: (Object e) => _emitError('Audio stream error: $e'),
+        onDone: _onStreamDone,
+        cancelOnError: true,
+      );
+      _chunkSinceWatchdogTick = true; // grace before the watchdog judges
+      _emit(const EngineListening());
+    } catch (e) {
+      _emitError('Failed to restart audio capture: $e');
+    } finally {
+      _restarting = false;
+    }
+  }
+
+  void _stopRouteMonitoring() {
+    _routeRestartTimer?.cancel();
+    _routeRestartTimer = null;
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+    unawaited(_routeSub?.cancel());
+    _routeSub = null;
+  }
+
   // ── Chunk queue (ensures sequential async frame processing) ─────────────────
 
   void _enqueueChunk(Uint8List chunk) {
+    // P042 — mark liveness for the silent-mic watchdog. Set before the
+    // gate check: a closed gate still receives chunks, so this tracks
+    // "is the mic delivering audio", independent of engagement.
+    _chunkSinceWatchdogTick = true;
     // P039 T5b — heartbeat counter. Distinguishes a closed-gate
     // listening window from a dead-mic incident. Per ADR-OBS-001
     // hot-path rule, this is a counter, not a span.

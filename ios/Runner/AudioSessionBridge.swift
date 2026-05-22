@@ -1,20 +1,37 @@
 import AVFoundation
 import Flutter
 
-/// Manages the app-level AVAudioSession category via a MethodChannel.
+/// Manages the app-level AVAudioSession category via a MethodChannel, and
+/// (P042) streams audio route changes to Dart via an EventChannel so the
+/// hands-free capture pipeline can recover when the input route changes
+/// (AirPod removed, headphones un/plugged).
 ///
 /// Methods:
 ///   - `setPlayAndRecord`: switches to `.playAndRecord` with `.defaultToSpeaker`
 ///     to keep the app alive in background and allow simultaneous input/output.
 ///   - `setAmbient`: reverts to `.ambient` (respects silent switch, mixes with
 ///     other audio, standard foreground-only behavior per ADR-AUDIO-007).
-class AudioSessionBridge {
+///
+/// EventChannel `com.voiceagent/audio_session/route_changes` emits the
+/// `AVAudioSession.routeChangeNotification` reason as a string.
+class AudioSessionBridge: NSObject, FlutterStreamHandler {
     static let shared = AudioSessionBridge()
 
     private let channelName = "com.voiceagent/audio_session"
+    private let routeEventChannelName = "com.voiceagent/audio_session/route_changes"
     private var methodChannel: FlutterMethodChannel?
+    private var routeEventSink: FlutterEventSink?
 
-    private init() {}
+    private override init() {
+        super.init()
+    }
+
+    /// Saved category when transitioning into TTS playback. Used by
+    /// restoreAudioSession() to flip back to whatever the app had set
+    /// before TTS started. Nil means "no saved state — caller must
+    /// explicitly pick a category".
+    private var savedCategoryBeforeTtsPlayback: AVAudioSession.Category?
+    private var savedCategoryOptionsBeforeTtsPlayback: AVAudioSession.CategoryOptions?
 
     /// Call from AppDelegate after the Flutter engine is available.
     func configure(with messenger: FlutterBinaryMessenger) {
@@ -25,14 +42,62 @@ class AudioSessionBridge {
         methodChannel?.setMethodCallHandler { [weak self] call, result in
             self?.handle(call, result: result)
         }
+
+        // P042 — route-change EventChannel for hands-free capture recovery.
+        let routeEventChannel = FlutterEventChannel(
+            name: routeEventChannelName,
+            binaryMessenger: messenger
+        )
+        routeEventChannel.setStreamHandler(self)
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification,
+            object: nil
+        )
     }
 
-    /// Saved category when transitioning into TTS playback. Used by
-    /// restoreAudioSession() to flip back to whatever the app had set
-    /// before TTS started. Nil means "no saved state — caller must
-    /// explicitly pick a category".
-    private var savedCategoryBeforeTtsPlayback: AVAudioSession.Category?
-    private var savedCategoryOptionsBeforeTtsPlayback: AVAudioSession.CategoryOptions?
+    // MARK: - Route-change EventChannel (P042)
+
+    @objc private func handleRouteChange(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let raw = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else {
+            return
+        }
+        let name: String
+        switch reason {
+        case .newDeviceAvailable: name = "newDeviceAvailable"
+        case .oldDeviceUnavailable: name = "oldDeviceUnavailable"
+        case .categoryChange: name = "categoryChange"
+        case .override: name = "override"
+        case .wakeFromSleep: name = "wakeFromSleep"
+        case .noSuitableRouteForCategory: name = "noSuitableRouteForCategory"
+        case .routeConfigurationChange: name = "routeConfigurationChange"
+        case .unknown: name = "unknown"
+        @unknown default: name = "unknown"
+        }
+        NSLog("[AudioRouteDbg] route change: \(name)")
+        // FlutterEventSink must be invoked on the platform (main) thread;
+        // routeChangeNotification is often posted on a private queue.
+        DispatchQueue.main.async { [weak self] in
+            self?.routeEventSink?(name)
+        }
+    }
+
+    func onListen(withArguments arguments: Any?,
+                  eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        routeEventSink = events
+        return nil
+    }
+
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        routeEventSink = nil
+        return nil
+    }
+
+    // MARK: - MethodChannel handler
 
     private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let session = AVAudioSession.sharedInstance()

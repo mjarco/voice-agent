@@ -79,7 +79,8 @@ void main() {
   test('a stream error emits hf.stream_error with the message attribute',
       (() async {
     final recorder = _ExposedFakeRecorder();
-    final orch = HandsFreeOrchestrator(recorder, FakeVadService(const []));
+    final orch = HandsFreeOrchestrator(recorder, FakeVadService(const []),
+        watchdogInterval: const Duration(hours: 1));
     final events = <HandsFreeEngineEvent>[];
 
     final stream = orch.start(config: const VadConfig.defaults());
@@ -115,7 +116,8 @@ void main() {
   test('each captured audio chunk emits a hf.chunk_received counter',
       (() async {
     final recorder = _ExposedFakeRecorder();
-    final orch = HandsFreeOrchestrator(recorder, FakeVadService(const []));
+    final orch = HandsFreeOrchestrator(recorder, FakeVadService(const []),
+        watchdogInterval: const Duration(hours: 1));
     orch.start(config: const VadConfig.defaults()).listen((_) {});
 
     await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -144,7 +146,8 @@ void main() {
     // chunks still arrive, so the counter keeps ticking. A flatlined
     // counter while gate is open is the signature of a dead mic.
     final recorder = _ExposedFakeRecorder();
-    final orch = HandsFreeOrchestrator(recorder, FakeVadService(const []));
+    final orch = HandsFreeOrchestrator(recorder, FakeVadService(const []),
+        watchdogInterval: const Duration(hours: 1));
     orch.start(config: const VadConfig.defaults()).listen((_) {});
     await Future<void>.delayed(const Duration(milliseconds: 50));
 

@@ -1,6 +1,6 @@
 # Proposal 042 — Recover hands-free capture across audio route changes
 
-## Status: Draft — root-caused on device, pending review. Tier 3 (microphone / audio-session ownership).
+## Status: Implemented (manual device verification pending). Tier 3 (microphone / audio-session ownership).
 
 ## Problem
 
@@ -151,14 +151,14 @@ timing windows. Tracked as Future work below, not bundled here.
 
 ## Tasks
 
-- [ ] T1 — `AudioSessionBridge.swift`: route-change `EventChannel`.
-- [ ] T2 — `core/audio/`: `AudioRouteService` port + platform adapter +
+- [x] T1 — `AudioSessionBridge.swift`: route-change `EventChannel`.
+- [x] T2 — `core/audio/`: `AudioRouteService` port + platform adapter +
       provider.
-- [ ] T3 — `HandsFreeOrchestrator`: subscribe to route changes,
+- [x] T3 — `HandsFreeOrchestrator`: subscribe to route changes,
       `_restartCapture()` with debounce; failed restart → `EngineError`.
-- [ ] T4 — `HandsFreeOrchestrator`: silent-mic watchdog.
-- [ ] T5 — Revert P041 (#320, #321).
-- [ ] T6 — Manual test plan `docs/manual-tests/p042-route-change-recovery.md`.
+- [x] T4 — `HandsFreeOrchestrator`: silent-mic watchdog.
+- [x] T5 — Revert P041 (#320, #321) — merged in #323.
+- [x] T6 — Manual test plan `docs/manual-tests/p042-route-change-recovery.md`.
 
 ## Acceptance criteria
 

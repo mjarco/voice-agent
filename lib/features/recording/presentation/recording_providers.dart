@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:record/record.dart';
+import 'package:voice_agent/core/audio/audio_route_provider.dart';
 import 'package:voice_agent/features/recording/data/groq_stt_service.dart';
 import 'package:voice_agent/features/recording/data/hands_free_orchestrator.dart';
 import 'package:voice_agent/features/recording/data/recording_service_impl.dart';
@@ -29,6 +30,7 @@ final handsFreeEngineProvider = Provider<HandsFreeEngine>((ref) {
   return HandsFreeOrchestrator(
     AudioRecorder(),
     ref.watch(vadServiceProvider),
+    audioRouteService: ref.watch(audioRouteServiceProvider),
   );
 });
 
