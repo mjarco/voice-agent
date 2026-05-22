@@ -123,16 +123,20 @@ install-ios:
 	@DEVICE_ID=$$($(IOS_DEVICE_ID)); \
 	if [ -z "$$DEVICE_ID" ]; then $(IOS_NOT_FOUND); fi; \
 	DEVICE_NAME=$$($(IOS_DEVICE_NAME)); \
-	echo "Installing stable (release) on: $$DEVICE_NAME ($$DEVICE_ID)"; \
-	flutter run -d "$$DEVICE_ID" --flavor stable --release $(DART_DEFINE_FLAG)
+	echo "Building stable (release)..."; \
+	flutter build ios --flavor stable --release $(DART_DEFINE_FLAG) && \
+	echo "Installing on: $$DEVICE_NAME ($$DEVICE_ID)" && \
+	flutter install -d "$$DEVICE_ID" --flavor stable --release
 
 ## install-ios-dev: Build and install dev (release) on a physical iOS device
 install-ios-dev:
 	@DEVICE_ID=$$($(IOS_DEVICE_ID)); \
 	if [ -z "$$DEVICE_ID" ]; then $(IOS_NOT_FOUND); fi; \
 	DEVICE_NAME=$$($(IOS_DEVICE_NAME)); \
-	echo "Installing dev (release) on: $$DEVICE_NAME ($$DEVICE_ID)"; \
-	flutter run -d "$$DEVICE_ID" --flavor dev --release $(DART_DEFINE_FLAG)
+	echo "Building dev (release)..."; \
+	flutter build ios --flavor dev --release $(DART_DEFINE_FLAG) && \
+	echo "Installing on: $$DEVICE_NAME ($$DEVICE_ID)" && \
+	flutter install -d "$$DEVICE_ID" --flavor dev --release
 
 ## install-ios-dev-debug: Build and install dev (debug, hot reload) on a physical iOS device
 install-ios-dev-debug:
