@@ -104,7 +104,13 @@ void main() {
 
   HandsFreeOrchestrator make(List<VadLabel> labels) {
     recorder = FakeAudioRecorder();
-    return HandsFreeOrchestrator(recorder, FakeVadService(labels));
+    // P042: watchdog disabled — these tests drive PCM manually and would
+    // otherwise trip the silent-mic restart between pushes.
+    return HandsFreeOrchestrator(
+      recorder,
+      FakeVadService(labels),
+      watchdogInterval: const Duration(hours: 1),
+    );
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────

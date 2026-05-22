@@ -1,6 +1,6 @@
 # Proposal 042 — Recover hands-free capture across audio route changes
 
-## Status: Draft — root-caused on device, pending review. Tier 3 (microphone / audio-session ownership).
+## Status: Implemented — T1/T2/T4 verified on device 2026-05-22 (Michal iPhone, iOS 26.4.2); T3 (wired headphone) outstanding, identical route-change path. Tier 3 (microphone / audio-session ownership).
 
 ## Problem
 
@@ -126,39 +126,53 @@ silent-mic causes beyond route changes (interruptions, OS audio glitches
   continuously while the mic is live; "no chunk" unambiguously means a
   dead mic, not silence.
 
-## Relationship to P041 — recommend revert
+## Relationship to P041 — corrected
 
-P041 (#320, #321) was built on the hypothesis that audio-session /
-route-change-induced `AVAudioSession.outputVolume` shifts, misread as
-volume-button presses, caused the session to disengage. The `[HFDIAG]`
-diagnostics **disproved** this: every disengage traced to `_onTap`
-(real screen taps), `stopSession()` (real nav-bar tab switches), or
-`_disengageOneShot()` (a VAD segment — by design). The volume-button
-suspend path (`branch=suspend`) never fired in any capture.
+This section originally recommended reverting P041 outright, on the
+reading that the volume-button path "never disengaged a session". That
+reading was **wrong**, and the revert (#323) was a mistake.
 
-P041 therefore does not fix any observed bug. Its standalone concern —
-route changes producing phantom *volume* events (which can cause a
-spurious *engage*) is real but minor, and P041's implementation is
-incomplete: device logs still show route-change-induced `volume up`
-events reaching Dart. It also adds 0.25 s latency to genuine presses.
+The `[HFDIAG]` diagnostic run showed no `branch=suspend` — but that run
+was built **with P041 active**: P041 was suppressing the phantom volume
+events, which is *why* none appeared. "Fix working" was misread as "no
+bug". After the revert, device test T1 (P042 §Test impact) proved it:
+removing an AirPod emits a phantom `volume down` →
+`_onVolumeButtonEvent` → `branch=suspend` → `suspendByUser()` → the
+session disengages.
 
-**Recommendation: revert P041 (#320, #321).** The phantom-volume-event
-concern, if worth addressing, is far simpler and more reliable to fix on
-top of this proposal's `AudioRouteService`: a Dart-side rule in
-`VolumeButtonService` — "drop volume events within N ms of a route
-change" — using one reliable signal instead of P041's fragile native
-timing windows. Tracked as Future work below, not bundled here.
+So an AirPod / route change is **two** bugs at once:
+
+- **A** — a phantom `outputVolume` shift, misread as a volume-button
+  press, suspends the session (P041's domain).
+- **B** — the `record` PCM stream silently dies (this proposal's domain).
+
+Both must be fixed. P042 absorbs **A** as well — Layer 5 below — done
+properly with `AudioRouteService` instead of P041's fragile native
+timing windows. P041 itself stays reverted; its mechanism is superseded.
+
+### Layer 5 — Volume-event route-artefact filter
+
+`VolumeButtonService` passes the raw native volume stream through
+`filterVolumeRouteArtefacts`: each candidate event is held for a short
+settle window (~300 ms); if `AudioRouteService` reports a route change
+within that window — before *or* after the event — the event is
+dropped. A genuine press never coincides with a route change; a
+context-induced shift always does. This closes both delivery orderings
+with one reliable signal.
 
 ## Tasks
 
-- [ ] T1 — `AudioSessionBridge.swift`: route-change `EventChannel`.
-- [ ] T2 — `core/audio/`: `AudioRouteService` port + platform adapter +
+- [x] T1 — `AudioSessionBridge.swift`: route-change `EventChannel`.
+- [x] T2 — `core/audio/`: `AudioRouteService` port + platform adapter +
       provider.
-- [ ] T3 — `HandsFreeOrchestrator`: subscribe to route changes,
+- [x] T3 — `HandsFreeOrchestrator`: subscribe to route changes,
       `_restartCapture()` with debounce; failed restart → `EngineError`.
-- [ ] T4 — `HandsFreeOrchestrator`: silent-mic watchdog.
-- [ ] T5 — Revert P041 (#320, #321).
-- [ ] T6 — Manual test plan `docs/manual-tests/p042-route-change-recovery.md`.
+- [x] T4 — `HandsFreeOrchestrator`: silent-mic watchdog.
+- [x] T5 — Revert P041 (#320, #321) — merged in #323.
+- [x] T6 — Manual test plan `docs/manual-tests/p042-route-change-recovery.md`.
+- [x] T7 — Layer 5: `filterVolumeRouteArtefacts` in `VolumeButtonService`,
+      wired to `AudioRouteService` (corrects the P041 revert — see
+      §Relationship to P041).
 
 ## Acceptance criteria
 
@@ -167,7 +181,8 @@ timing windows. Tracked as Future work below, not bundled here.
    within ~1 s; speaking still produces segments/transcripts.
 2. Re-adding a device → capture continues.
 3. The app never sits in `HandsFreeListening` with a dead mic; the iOS
-   recording indicator matches the app state.
+   recording indicator matches the app state. A route change must not
+   disengage the session via a phantom volume event.
 4. If capture genuinely cannot be re-acquired, the controller reaches
    `HandsFreeSessionError` (visible, with Retry) — not fake-listening.
 5. The watchdog recovers a dead mic within ~3 s for any cause.
@@ -178,11 +193,9 @@ timing windows. Tracked as Future work below, not bundled here.
   (mock `AudioRecorder` + mock `AudioRouteService`); debounce collapses
   bursts; watchdog fires after the chunk-gap threshold (fake clock);
   failed restart emits `EngineError`.
+- **Volume-artefact filter**: `filterVolumeRouteArtefacts` unit-tested
+  with controllable raw + route streams (drop on route-then-volume,
+  volume-then-route; emit a genuine press).
 - **Device-only**: actual route-change recovery on hardware → manual
   test plan `docs/manual-tests/p042-route-change-recovery.md` (AirPods
   remove/insert, wired headphone un/plug, Bluetooth speaker drop).
-
-## Future work
-
-- Re-address P041's phantom-volume-event concern on top of
-  `AudioRouteService` (Dart-side suppression in `VolumeButtonService`).
