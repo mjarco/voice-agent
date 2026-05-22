@@ -56,7 +56,8 @@ Index of design proposals. Status is recorded in the `## Status:` line at the to
 | 038 | [Always-On Capture with Volume-Button Engagement](038-always-on-capture-volume-button-engagement.md) | Implemented |
 | 039 | [OTel Dev Telemetry](039-otel-dev-telemetry.md) | Implemented |
 | 040 | [Agenda Notifications & Background Refresh](040-agenda-notifications-and-background-refresh.md) | Implemented (manual device verification pending) |
-| 041 | [Suppress Spurious Volume Events During Audio-Session Transitions](041-volume-button-spurious-event-on-session-start.md) | Implemented (manual device verification pending) |
+| 041 | [Suppress Spurious Volume Events During Audio-Session Transitions](041-volume-button-spurious-event-on-session-start.md) | Implemented — revert recommended (P042 §Relationship to P041) |
+| 042 | [Recover Hands-Free Capture Across Audio Route Changes](042-recover-hands-free-capture-across-route-changes.md) | Draft — root-caused, pending review |
 | — | [PoC: "Come back" notification](POC-come-back-notification.md) | PoC implemented (PR #288) |
 | — | [Backlog](P000-backlog.md) | — |
 
