@@ -19,6 +19,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T2 | Real Volume Down while engaged still suspends | pending |
 | T3 | Real Volume Up while idle still engages | pending |
 | T4 | Volume Down interrupts TTS (no regression) | pending |
+| T5 | Headphone connect/disconnect does not disengage | pending |
 
 ---
 
@@ -135,9 +136,37 @@ verify the press happened well after TTS audio actually started.
 
 ---
 
+### T5 — Headphone connect/disconnect does not disengage (~4 min)
+
+**Status:** pending
+
+**Do:**
+1. Tap the mic to engage (button orange, "Listening...").
+2. Connect wired or Bluetooth headphones (or AirPods). Watch the button.
+3. With headphones connected, disconnect them. Watch the button.
+4. Repeat steps 2–3 a few times, varying the device media volume.
+
+**Why:** verifies the P041 §Follow-up fix — a headphone route change
+shifts `outputVolume`, and the `outputVolume` KVO can be delivered
+*before* the `routeChangeNotification`. Deferred emission must let the
+route change cancel the phantom press.
+
+**Expected:** the session **stays** engaged across every connect and
+disconnect — button stays orange, "Listening..." strip remains. Console
+shows `[VolumeBtnDbg] cancelled pending volume ... (route change)` (or
+`volume change suppressed`), and **no** `branch=suspend`.
+
+**On failure:** if `branch=suspend` still fires, inspect the
+`[VolumeBtnDbg]` timestamps — if the deferred `emitting deferred
+volume` line fires *before* `cancelled pending volume`, the route-change
+notification arrived later than `emitDelay` (0.25 s) after the KVO;
+widen `emitDelay` in `VolumeButtonBridge.swift`.
+
+---
+
 ## When this plan is "done"
 
-- **T1, T2, T3 must PASS** — they are the core fix plus its two
+- **T1, T2, T3, T5 must PASS** — the core fixes plus the two
   no-regression guarantees. Any failure blocks shipping.
 - **T4** should PASS; a failure scoped to a tight press-during-transition
   race may be documented in the proposal §Risks rather than blocking.

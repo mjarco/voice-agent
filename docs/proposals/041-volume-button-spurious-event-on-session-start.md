@@ -1,6 +1,6 @@
 # Proposal 041 — Suppress spurious volume events during audio-session transitions
 
-## Status: Implemented (lightweight; manual device verification pending). Hotfix follow-up to P038.
+## Status: Implemented (lightweight; manual device verification pending). Hotfix follow-up to P038. Amended with a route-change timing-hole fix — see §Follow-up.
 
 ## Problem
 
@@ -115,3 +115,42 @@ owns the KVO observer; a second guard in Dart would be redundant.
   plan `docs/manual-tests/p041-volume-button-suppression.md`. The
   proposal stays `manual device verification pending` until the
   must-pass cases there are green.
+
+## Follow-up — route-change timing hole (headphone connect/disconnect)
+
+On-device testing of the original fix found that recording still
+disengages when **headphones connect or disconnect**. Same root cause
+(a route change shifts `outputVolume`), but the first fix did not fully
+close it:
+
+- The `AudioSessionBridge` pre-arm covers only **app-initiated**
+  category changes. A physical headphone plug/unplug has no pre-arm.
+- The `routeChangeNotification` observer only suppresses **forward**.
+  The `outputVolume` KVO can be delivered **before** the matching
+  `routeChangeNotification`, so the phantom event is emitted before the
+  suppression window is armed.
+
+### Fix — deferred emission
+
+A genuine hardware volume press **never** coincides with a route
+change; a context-induced volume shift **always** does. So
+`VolumeButtonBridge` no longer emits a direction immediately:
+
+- Each candidate press is held for `emitDelay` (0.25 s) on a
+  one-shot `Timer` (`.common` run-loop mode, so it fires while
+  backgrounded).
+- `handleAudioRouteChange` cancels any pending emission — if a route
+  change lands within the window, the KVO that scheduled the emission
+  was that route change, not a button.
+- This closes both orderings: KVO-before-notification (pending emission
+  cancelled) and notification-before-KVO (existing forward suppression).
+
+Trade-off: a real press is delayed by 0.25 s (imperceptible for an
+engage/suspend gesture), and a real press in the rare 0.25 s coincident
+with a route change is dropped — acceptable, since a lost press is far
+better than a phantom one tearing down the session.
+
+### Tasks (follow-up)
+
+- [x] T4 — `VolumeButtonBridge`: deferred emission + cancel-on-route-change.
+- [x] T5 — Manual test plan: headphone connect/disconnect case.
