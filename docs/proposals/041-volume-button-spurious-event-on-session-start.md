@@ -1,6 +1,6 @@
 # Proposal 041 — Suppress spurious volume events during audio-session transitions
 
-## Status: Implemented (lightweight; manual device verification pending). Hotfix follow-up to P038. Amended with a route-change timing-hole fix — see §Follow-up.
+## Status: Reverted (2026-05-22) — code rolled back. On-device `[HFDIAG]` diagnostics proved the volume-button path never disengaged a session; this proposal fixed a non-bug. The real bug (audio route changes silently killing capture) is tracked by P042. See P042 §Relationship to P041 for the full reasoning.
 
 ## Problem
 
