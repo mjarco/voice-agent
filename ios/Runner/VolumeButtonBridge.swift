@@ -37,26 +37,6 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
     // increments). Anything smaller is noise / programmatic restore.
     private let _stepThreshold: Float = 0.001
 
-    // P041 — suppression window. `outputVolume` is tracked per
-    // audio-session category context, so a category/route change makes
-    // iOS report a different value with no button press involved. While
-    // `Date() < suppressUntil` the KVO observer re-baselines silently
-    // instead of emitting a phantom press.
-    private var suppressUntil = Date.distantPast
-    private let suppressionWindow: TimeInterval = 0.6
-
-    // P041 follow-up — deferred emission. A genuine hardware press never
-    // coincides with a route change; a context-induced volume shift
-    // always does. But the `outputVolume` KVO can arrive *before* the
-    // matching routeChangeNotification (observed on headphone
-    // connect/disconnect), so forward-only suppression misses it. Every
-    // candidate press is therefore held for `emitDelay`; if a route
-    // change lands during that window the pending emission is cancelled
-    // — it was a route shift, not a button.
-    private var pendingEmitTimer: Timer?
-    private var pendingDirection: String?
-    private let emitDelay: TimeInterval = 0.25
-
     private override init() {
         super.init()
     }
@@ -93,71 +73,6 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
         }
     }
 
-    // MARK: - Suppression (P041)
-
-    /// Suppresses volume-button detection for [suppressionWindow] seconds.
-    ///
-    /// Called by the app itself (`AudioSessionBridge`) before every
-    /// audio-session category change, and by the route-change observer
-    /// below. Both events shift the value iOS reports for `outputVolume`
-    /// without any hardware button press — this window stops that shift
-    /// from being emitted as a phantom `"up"` / `"down"`.
-    ///
-    /// Safe to call when not observing — it only moves a timestamp.
-    func suppressVolumeEvents() {
-        suppressUntil = Date().addingTimeInterval(suppressionWindow)
-        NSLog("[VolumeBtnDbg] suppressing volume events for \(suppressionWindow)s (audio-session transition)")
-    }
-
-    @objc private func handleAudioRouteChange(_ notification: Notification) {
-        // A route or category change (headphone connect/disconnect, mic
-        // acquisition, AirPods, our own .playAndRecord switch) shifts
-        // `outputVolume` because volume is tracked per audio-session
-        // context. Two-sided defence:
-        //  • cancel any press scheduled in the last `emitDelay`s — the
-        //    KVO that scheduled it was this route change, delivered just
-        //    before this notification;
-        //  • suppress forward for `suppressionWindow`s for KVO changes
-        //    delivered just after.
-        cancelPendingEmit()
-        suppressVolumeEvents()
-    }
-
-    /// Holds a candidate press for `emitDelay` before forwarding it to
-    /// Dart, so a routeChangeNotification arriving in that window can
-    /// cancel it. Latest direction wins if presses arrive in a burst.
-    private func scheduleDeferredEmit(_ direction: String) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.pendingDirection = direction
-            self.pendingEmitTimer?.invalidate()
-            // .common run-loop mode so the timer still fires while the
-            // app is backgrounded with an active audio session
-            // (lock-screen engagement, P038).
-            let timer = Timer(timeInterval: self.emitDelay, repeats: false) { [weak self] _ in
-                guard let self = self, let dir = self.pendingDirection else { return }
-                self.pendingDirection = nil
-                self.pendingEmitTimer = nil
-                NSLog("[VolumeBtnDbg] emitting deferred volume \(dir)")
-                self.eventSink?(dir)
-            }
-            RunLoop.main.add(timer, forMode: .common)
-            self.pendingEmitTimer = timer
-        }
-    }
-
-    private func cancelPendingEmit() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            if let pending = self.pendingDirection {
-                NSLog("[VolumeBtnDbg] cancelled pending volume \(pending) (route change)")
-            }
-            self.pendingEmitTimer?.invalidate()
-            self.pendingEmitTimer = nil
-            self.pendingDirection = nil
-        }
-    }
-
     // MARK: - KVO on AVAudioSession.outputVolume
 
     private func startObserving() {
@@ -170,11 +85,6 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
                             forKeyPath: "outputVolume",
                             options: [.new, .old],
                             context: nil)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAudioRouteChange(_:)),
-            name: AVAudioSession.routeChangeNotification,
-            object: nil)
         observing = true
         NSLog("[VolumeBtnDbg] startObserving — initial volume=\(lastVolume)")
     }
@@ -183,11 +93,6 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
         guard observing else { return }
         AVAudioSession.sharedInstance().removeObserver(self,
                                                       forKeyPath: "outputVolume")
-        NotificationCenter.default.removeObserver(
-            self,
-            name: AVAudioSession.routeChangeNotification,
-            object: nil)
-        cancelPendingEmit()
         observing = false
         NSLog("[VolumeBtnDbg] stopObserving")
     }
@@ -210,21 +115,13 @@ class VolumeButtonBridge: NSObject, FlutterStreamHandler {
             // First observation since startObserving — no direction yet.
             return
         }
-        // P041 — inside a suppression window the change comes from an
-        // audio-session category/route transition, not a button press.
-        // `lastVolume` was already updated above, so the post-transition
-        // value becomes the new baseline; emit nothing.
-        if Date() < suppressUntil {
-            NSLog("[VolumeBtnDbg] volume change suppressed (audio-session transition): \(prev) → \(new)")
-            return
-        }
         let delta = new - prev
         if abs(delta) < _stepThreshold {
             return
         }
         let direction = delta > 0 ? "up" : "down"
-        NSLog("[VolumeBtnDbg] volume \(direction): \(prev) → \(new) — deferring \(emitDelay)s")
-        scheduleDeferredEmit(direction)
+        NSLog("[VolumeBtnDbg] volume \(direction): \(prev) → \(new)")
+        eventSink?(direction)
     }
 
     // MARK: - FlutterStreamHandler

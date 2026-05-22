@@ -36,20 +36,6 @@ class AudioSessionBridge {
 
     private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let session = AVAudioSession.sharedInstance()
-        // P041 — every category mutation below shifts the value iOS
-        // reports for `outputVolume` (volume is tracked per
-        // audio-session context). Pre-arm the volume-button bridge
-        // *before* the mutation so the resulting KVO change — which can
-        // be delivered synchronously inside setActive(true), earlier
-        // than routeChangeNotification — is not misread as a hardware
-        // volume-button press. See Proposal 041.
-        switch call.method {
-        case "setPlayback", "restoreAudioSession", "setPlayAndRecord",
-             "setPlaybackOnly", "setAmbient":
-            VolumeButtonBridge.shared.suppressVolumeEvents()
-        default:
-            break
-        }
         switch call.method {
         case "setPlayback":
             // P034 follow-up: during TTS playback, switch to .playback (no

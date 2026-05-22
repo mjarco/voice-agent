@@ -65,3 +65,6 @@ mixkit-*.wav
 
 # iOS extensions not yet integrated
 ios/VoiceAgentControl/
+
+# Harness-created agent worktrees (not project files)
+.claude/worktrees/
