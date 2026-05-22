@@ -1,6 +1,6 @@
 # Proposal 042 — Recover hands-free capture across audio route changes
 
-## Status: Implemented (manual device verification pending). Tier 3 (microphone / audio-session ownership).
+## Status: Implemented — T1/T2/T4 verified on device 2026-05-22 (Michal iPhone, iOS 26.4.2); T3 (wired headphone) outstanding, identical route-change path. Tier 3 (microphone / audio-session ownership).
 
 ## Problem
 

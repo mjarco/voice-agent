@@ -1,7 +1,7 @@
 # Manual test: P042 — recover hands-free capture across audio route changes
 
 **Proposal:** [`docs/proposals/042-recover-hands-free-capture-across-route-changes.md`](../proposals/042-recover-hands-free-capture-across-route-changes.md)
-**Overall status:** **pending** — no case yet executed on a physical device.
+**Overall status:** **passed** — T1/T2/T4 verified on device 2026-05-22 (Michal iPhone, iOS 26.4.2); T3 (wired headphone) outstanding, same route-change path; T5 opportunistic.
 **Why now:** P042 makes the hands-free pipeline re-acquire the microphone when the iOS audio route changes. Route changes, `AVAudioSession` behaviour and the `record` plugin's stream lifecycle are device-only — `flutter test` cannot exercise them.
 **Time budget:** ~15 min, iPhone only.
 **What we are testing:** that removing/adding an audio device while a session is engaged keeps capture working — and never leaves the app in `HandsFreeListening` (orange) with a dead mic.
@@ -14,12 +14,12 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 | # | Case | Status |
 |---|---|---|
-| S1 | Install on iPhone | pending |
-| T1 | AirPod removal → capture continues on built-in mic | pending |
-| T2 | AirPod re-insertion → capture continues | pending |
-| T3 | Wired headphone un/plug → capture continues | pending |
-| T4 | Never stuck orange with a dead mic | pending |
-| T5 | Watchdog recovers a silent mic | pending |
+| S1 | Install on iPhone | passed (2026-05-22, Michal iPhone, iOS 26.4.2) |
+| T1 | AirPod removal → capture continues on built-in mic | passed (2026-05-22, Michal iPhone, iOS 26.4.2) |
+| T2 | AirPod re-insertion → capture continues | passed (2026-05-22, Michal iPhone, iOS 26.4.2) |
+| T3 | Wired headphone un/plug → capture continues | pending (no wired headset on hand; identical route-change path to T1/T2) |
+| T4 | Never stuck orange with a dead mic | passed (2026-05-22, Michal iPhone, iOS 26.4.2) |
+| T5 | Watchdog recovers a silent mic | skipped (not reproduced — opportunistic) |
 
 ---
 
@@ -27,7 +27,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### S1 — Install on iPhone
 
-**Status:** pending
+**Status:** passed (2026-05-22, Michal iPhone, iOS 26.4.2)
 
 **Do:** install the dev flavour on a physical iPhone (route changes and
 `AVAudioSession` cannot be exercised on Simulator).
@@ -47,7 +47,7 @@ console attached — `[AudioRouteDbg]` (native route changes) and `[HFO]`
 
 ### T1 — AirPod removal → capture continues (~3 min)
 
-**Status:** pending
+**Status:** passed (2026-05-22, Michal iPhone, iOS 26.4.2) — log: `[VolumeBtnDbg] dropped held VolumeButtonEvent.down — route change` (phantom suspend blocked) + `[HFO] restarting capture`; no `branch=suspend`.
 
 **Do:**
 1. With AirPods connected, tap the mic to engage (orange "Listening...").
@@ -73,7 +73,7 @@ input-affecting, or the orchestrator's route subscription is not active.
 
 ### T2 — AirPod re-insertion → capture continues (~2 min)
 
-**Status:** pending
+**Status:** passed (2026-05-22, Michal iPhone, iOS 26.4.2) — log: `[HFO] input route changed (newDeviceAvailable)` → `[HFO] restarting capture`.
 
 **Do:**
 1. Continuing from T1 (engaged, capturing on built-in mic), put the
@@ -108,7 +108,7 @@ never a silent dead mic.
 
 ### T4 — Never stuck orange with a dead mic (~2 min)
 
-**Status:** pending
+**Status:** passed (2026-05-22, Michal iPhone, iOS 26.4.2) — repeated AirPod in/out cycles; session stayed consistent, no fake-listening state.
 
 **Do:** repeat T1–T3 a few times, quickly. After each, check the iOS
 recording indicator (orange dot / pill in the status bar).
@@ -123,7 +123,7 @@ never diverge.
 
 ### T5 — Watchdog recovers a silent mic (~3 min)
 
-**Status:** pending
+**Status:** skipped (not reproduced — opportunistic safety net; covered by unit tests)
 
 **Do:** this is hard to trigger deliberately — the watchdog is a safety
 net for silent-mic causes the route-change path misses. If during normal
