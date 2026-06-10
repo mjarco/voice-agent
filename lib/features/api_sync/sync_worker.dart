@@ -301,7 +301,12 @@ class SyncWorker {
   Future<void> _handleReply(String? body) async {
     if (body == null) return;
     try {
-      final json = jsonDecode(body) as Map<String, dynamic>;
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      // 043: P088 wraps the transcript reply in {"data": {...}} — unwrap it
+      // when present. The flat-shape fallback is permanent (keeps every
+      // client/server version pairing working).
+      final data = decoded['data'];
+      final json = data is Map<String, dynamic> ? data : decoded;
       final message = json['message'] as String?;
       if (message == null || message.isEmpty) return;
       final language = json['language'] as String?;
