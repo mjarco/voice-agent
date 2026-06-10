@@ -1189,6 +1189,112 @@ void main() {
     });
   });
 
+  group('envelope-tolerant reply reader (043)', () {
+    test('flat shape (today\'s server) → speaks, adopts conversation_id, '
+        'dispatches session control', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody =
+          '{"message":"Hi","language":"en","conversation_id":"conv-1",'
+          '"session_control":{"stop_recording":true}}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(tts.log, ['stop', 'speak:Hi:en']);
+      expect(sessionIdCoordinator.currentConversationId, 'conv-1');
+      expect(dispatcher.dispatched, hasLength(1));
+      expect(dispatcher.dispatched.first.stopRecording, isTrue);
+    });
+
+    test('enveloped shape {"data":{...}} → same three behaviors, '
+        'identical values', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody =
+          '{"data":{"message":"Hi","language":"en","conversation_id":"conv-1",'
+          '"session_control":{"stop_recording":true}}}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(tts.log, ['stop', 'speak:Hi:en']);
+      expect(sessionIdCoordinator.currentConversationId, 'conv-1');
+      expect(dispatcher.dispatched, hasLength(1));
+      expect(dispatcher.dispatched.first.stopRecording, isTrue);
+    });
+
+    test('session_control inside data is dispatched', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody =
+          '{"data":{"message":"Bye","language":"en",'
+          '"session_control":{"reset_session":true,"stop_recording":true}}}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(dispatcher.dispatched, hasLength(1));
+      expect(dispatcher.dispatched.first.resetSession, isTrue);
+      expect(dispatcher.dispatched.first.stopRecording, isTrue);
+    });
+
+    test('{"data": null} with no sibling message → silent', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"data": null}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(tts.log, isEmpty);
+      expect(dispatcher.dispatched, isEmpty);
+    });
+
+    test('{"data": "str"} with no sibling message → silent', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"data": "str"}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(tts.log, isEmpty);
+      expect(dispatcher.dispatched, isEmpty);
+    });
+
+    test('precedence: data map wins over sibling message → speaks "inner"',
+        () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"data":{"message":"inner"},"message":"outer"}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(tts.log, ['stop', 'speak:inner:null']);
+    });
+
+    test('malformed/non-JSON body → silent', () async {
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"data": broken';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 200));
+      worker.stop();
+
+      expect(tts.log, isEmpty);
+      expect(dispatcher.dispatched, isEmpty);
+    });
+  });
+
   group('P036 replay-last (LocalCommandMatcher + TtsReplyBuffer)', () {
     Future<void> seedReplyAndDrain() async {
       // Seed: a normal agent reply that primes the buffer.
