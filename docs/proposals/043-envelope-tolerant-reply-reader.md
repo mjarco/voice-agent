@@ -1,6 +1,6 @@
 # Proposal 043 — Envelope-tolerant agent-reply reader
 
-## Status: Implemented (2026-06-10, PR #327) — device install pending, gated in journal-agent (P088 AC4). Tier 3 (personal-agent API contract change). Sibling of personal-agent P088.
+## Status: Implemented (2026-06-10, PR #327) — device install done 2026-06-12 (stable flavor, Michal iPhone); personal-agent P088 envelope deployed to prod the same day. Tier 3 (personal-agent API contract change). Sibling of personal-agent P088.
 
 ## Problem
 
