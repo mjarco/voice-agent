@@ -55,7 +55,10 @@ class PinsScreen extends ConsumerWidget {
       child: ListView(
         children: view == PinView.topic
             ? _topicGrouped(context, ref, notifier, pins)
-            : [for (final p in pins) _tile(context, ref, notifier, p)],
+            : [
+                for (final p in pins)
+                  _tile(context, ref, notifier, p, showTopic: true),
+              ],
       ),
     );
   }
@@ -85,16 +88,21 @@ class PinsScreen extends ConsumerWidget {
       }
     }
 
+    // In the by-topic view the section header already names the topic, so the
+    // tile subtitle omits it to avoid duplication.
     final widgets = <Widget>[];
     for (final label in order) {
       widgets.add(_SectionHeader(label: label));
       widgets.addAll(
-        byLabel[label]!.map((p) => _tile(context, ref, notifier, p)),
+        byLabel[label]!
+            .map((p) => _tile(context, ref, notifier, p, showTopic: false)),
       );
     }
     if (untitled.isNotEmpty) {
       widgets.add(const _SectionHeader(label: 'No topic'));
-      widgets.addAll(untitled.map((p) => _tile(context, ref, notifier, p)));
+      widgets.addAll(
+        untitled.map((p) => _tile(context, ref, notifier, p, showTopic: false)),
+      );
     }
     return widgets;
   }
@@ -103,11 +111,13 @@ class PinsScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     PinsNotifier notifier,
-    PinSummary pin,
-  ) {
+    PinSummary pin, {
+    required bool showTopic,
+  }) {
     return _PinTile(
       key: Key('pin-tile-${pin.recordId}'),
       pin: pin,
+      showTopic: showTopic,
       onTap: () async {
         await context.push('/chat/pins/${pin.recordId}');
         // ADR-ARCH-011: refresh on return so an unpin done from the detail
@@ -191,11 +201,13 @@ class _PinTile extends StatelessWidget {
   const _PinTile({
     super.key,
     required this.pin,
+    required this.showTopic,
     required this.onTap,
     required this.onUnpin,
   });
 
   final PinSummary pin;
+  final bool showTopic;
   final VoidCallback onTap;
   final VoidCallback onUnpin;
 
@@ -221,7 +233,9 @@ class _PinTile extends StatelessWidget {
   String _subtitle() {
     final label = pin.topicLabel;
     final date = _formatDate(pin.createdAt);
-    if (label != null && label.isNotEmpty) return '$label · $date';
+    if (showTopic && label != null && label.isNotEmpty) {
+      return '$label · $date';
+    }
     return date;
   }
 }

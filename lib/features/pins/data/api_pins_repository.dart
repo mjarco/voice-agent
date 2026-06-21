@@ -69,8 +69,8 @@ class ApiPinsRepository implements PinsRepository {
     if (body == null) throw PinsGeneralException('Empty response');
     final json = jsonDecode(body) as Map<String, dynamic>;
     final data = json['data'];
-    if (data == null) throw PinsGeneralException('Missing data envelope');
-    return (data as List<dynamic>)
+    if (data is! List) throw PinsGeneralException('Missing data envelope');
+    return data
         .map((e) => PinSummary.fromMap(e as Map<String, dynamic>))
         .toList();
   }
@@ -78,8 +78,10 @@ class ApiPinsRepository implements PinsRepository {
   PinDetail _parseDetail(String? body) {
     if (body == null) throw PinsGeneralException('Empty response');
     final json = jsonDecode(body) as Map<String, dynamic>;
-    final data = json['data'] as Map<String, dynamic>?;
-    if (data == null) throw PinsGeneralException('Missing data envelope');
+    final data = json['data'];
+    if (data is! Map<String, dynamic>) {
+      throw PinsGeneralException('Missing data envelope');
+    }
     return PinDetail.fromMap(data);
   }
 }

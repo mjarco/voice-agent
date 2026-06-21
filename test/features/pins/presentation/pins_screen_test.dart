@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
+import 'package:voice_agent/features/pins/presentation/pin_detail_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/features/pins/presentation/pins_screen.dart';
 
@@ -33,6 +34,8 @@ class _StubRepository implements PinsRepository {
   Future<void> unpin(String recordId) async {
     lastUnpinId = recordId;
     if (unpinError != null) throw unpinError!;
+    // Reflect the backend soft-delete so a subsequent re-fetch omits the row.
+    pins = pins.where((p) => p.recordId != recordId).toList();
   }
 }
 
@@ -149,6 +152,52 @@ void main() {
 
       expect(repo.lastUnpinId, 'a');
       expect(find.byKey(const Key('pin-tile-a')), findsNothing);
+    });
+
+    // ADR-ARCH-011 seam: unpinning from the detail screen must drop the row
+    // from the list on return (via the tile's awaited-push + refresh()).
+    testWidgets('unpinning from the detail screen removes the row on return',
+        (tester) async {
+      final repo = _StubRepository(pins: [_pin('a'), _pin('b')]);
+      final router = GoRouter(
+        initialLocation: '/chat/pins',
+        routes: [
+          GoRoute(
+            path: '/chat/pins',
+            builder: (context, state) => const PinsScreen(),
+            routes: [
+              GoRoute(
+                path: ':id',
+                builder: (context, state) =>
+                    PinDetailScreen(recordId: state.pathParameters['id']!),
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [pinsRepositoryProvider.overrideWithValue(repo)],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open detail for pin a.
+      await tester.tap(find.byKey(const Key('pin-tile-a')));
+      await tester.pumpAndSettle();
+
+      // Unpin from the detail screen and confirm.
+      await tester.tap(find.byKey(const Key('pin-detail-unpin')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-detail-unpin-confirm')));
+      await tester.pumpAndSettle();
+
+      // Back on the list, the row is gone (refresh re-fetched the reduced set).
+      expect(repo.lastUnpinId, 'a');
+      expect(find.byKey(const Key('pin-tile-a')), findsNothing);
+      expect(find.byKey(const Key('pin-tile-b')), findsOneWidget);
     });
   });
 }

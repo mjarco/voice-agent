@@ -48,8 +48,8 @@ class PinsNotifier extends StateNotifier<PinsListState> {
         );
       }
       return true;
-    } on PinsException catch (e) {
-      lastActionError = e.message;
+    } catch (e) {
+      lastActionError = e is PinsException ? e.message : e.toString();
       return false;
     }
   }
