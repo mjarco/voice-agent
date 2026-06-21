@@ -619,6 +619,8 @@ placeholder screens within this structure — they do not add routes.
 | `/record/history/:id` | 020 (child of /record/history) | 007 (TranscriptDetailScreen) |
 | `/routines` | 020 (shell branch 3) | 022 (RoutinesPlaceholderScreen → real screen) |
 | `/chat` | 020 (shell branch 4) | 024 (ChatPlaceholderScreen → real screen) |
+| `/pins` | 045 (outside shell) | 045 (PinsScreen) — reached from Record + Chat app bars |
+| `/pins/:id` | 045 (child of /pins) | 045 (PinDetailScreen) |
 | `/settings` | 020 (outside shell) | 006 (SettingsScreen) |
 | `/settings/advanced` | 020 (child of /settings) | 013 (AdvancedSettingsScreen) |
 

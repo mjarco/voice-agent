@@ -48,10 +48,10 @@ PinSummary _pin(String id, {String? topic}) => PinSummary(
 
 Future<void> _pump(WidgetTester tester, PinsRepository repo) async {
   final router = GoRouter(
-    initialLocation: '/chat/pins',
+    initialLocation: '/pins',
     routes: [
       GoRoute(
-        path: '/chat/pins',
+        path: '/pins',
         builder: (context, state) => const PinsScreen(),
         routes: [
           GoRoute(
@@ -160,10 +160,10 @@ void main() {
         (tester) async {
       final repo = _StubRepository(pins: [_pin('a'), _pin('b')]);
       final router = GoRouter(
-        initialLocation: '/chat/pins',
+        initialLocation: '/pins',
         routes: [
           GoRoute(
-            path: '/chat/pins',
+            path: '/pins',
             builder: (context, state) => const PinsScreen(),
             routes: [
               GoRoute(

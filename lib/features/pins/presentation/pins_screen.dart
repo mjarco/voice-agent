@@ -119,7 +119,7 @@ class PinsScreen extends ConsumerWidget {
       pin: pin,
       showTopic: showTopic,
       onTap: () async {
-        await context.push('/chat/pins/${pin.recordId}');
+        await context.push('/pins/${pin.recordId}');
         // ADR-ARCH-011: refresh on return so an unpin done from the detail
         // screen is reflected in the list.
         notifier.refresh();

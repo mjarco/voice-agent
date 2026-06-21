@@ -40,10 +40,10 @@ class _StubRepository implements PinsRepository {
 
 Future<void> _pump(WidgetTester tester, PinsRepository repo) async {
   final router = GoRouter(
-    initialLocation: '/chat/pins/abc',
+    initialLocation: '/pins/abc',
     routes: [
       GoRoute(
-        path: '/chat/pins',
+        path: '/pins',
         builder: (context, state) => const Scaffold(body: Text('Pins list')),
         routes: [
           GoRoute(

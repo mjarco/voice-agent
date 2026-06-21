@@ -34,6 +34,9 @@ import 'package:voice_agent/core/media_button/media_button_provider.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/stt_service.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
+import 'package:voice_agent/core/models/pin.dart';
+import 'package:voice_agent/features/pins/domain/pins_repository.dart';
+import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 
 import 'package:timezone/data/latest_all.dart' as tz_data;
 
@@ -262,6 +265,16 @@ class _StubHandsFreeControlPort implements HandsFreeControlPort {
   Future<void> stopSession() async {}
 }
 
+class _StubPinsRepository implements PinsRepository {
+  @override
+  Future<List<PinSummary>> fetchPins(PinView view) async => [];
+  @override
+  Future<PinDetail> fetchPin(String recordId) async =>
+      throw UnimplementedError();
+  @override
+  Future<void> unpin(String recordId) async {}
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 void main() {
@@ -447,6 +460,38 @@ void main() {
       expect(coordinator.resetCount, 0);
       expect(toaster.messages, isEmpty);
       expect(haptic.lightImpactCount, 0);
+    });
+  });
+
+  group('Pins button (quick access from landing screen)', () {
+    testWidgets('exists in the Record AppBar', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _baseOverrides(),
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('record-pins-button')), findsOneWidget);
+    });
+
+    testWidgets('tap navigates to the Pins screen', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides(),
+            pinsRepositoryProvider.overrideWithValue(_StubPinsRepository()),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('record-pins-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(AppBar, 'Pins'), findsOneWidget);
     });
   });
 }
