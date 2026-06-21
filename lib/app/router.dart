@@ -3,6 +3,8 @@ import 'package:voice_agent/app/app_shell_scaffold.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
 import 'package:voice_agent/features/chat/presentation/conversations_screen.dart';
 import 'package:voice_agent/features/chat/presentation/thread_screen.dart';
+import 'package:voice_agent/features/pins/presentation/pin_detail_screen.dart';
+import 'package:voice_agent/features/pins/presentation/pins_screen.dart';
 import 'package:voice_agent/features/plan/presentation/plan_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
@@ -89,6 +91,21 @@ GoRouter createRouter() => GoRouter(
               path: '/chat',
               builder: (_, _) => const ConversationsScreen(),
               routes: [
+                // Static 'pins' MUST precede the dynamic ':id' route so
+                // '/chat/pins' is not captured as a conversation id (P045).
+                GoRoute(
+                  path: 'pins',
+                  builder: (_, _) => const PinsScreen(),
+                  routes: [
+                    GoRoute(
+                      path: ':id',
+                      builder: (_, state) {
+                        final id = state.pathParameters['id']!;
+                        return PinDetailScreen(recordId: id);
+                      },
+                    ),
+                  ],
+                ),
                 GoRoute(
                   path: ':id',
                   builder: (_, state) {

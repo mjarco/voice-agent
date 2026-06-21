@@ -58,7 +58,7 @@ Index of design proposals. Status is recorded in the `## Status:` line at the to
 | 040 | [Agenda Notifications & Background Refresh](040-agenda-notifications-and-background-refresh.md) | Implemented (manual device verification pending) |
 | 041 | [Suppress Spurious Volume Events During Audio-Session Transitions](041-volume-button-spurious-event-on-session-start.md) | Reverted — fixed a non-bug (see P042 §Relationship to P041) |
 | 042 | [Recover Hands-Free Capture Across Audio Route Changes](042-recover-hands-free-capture-across-route-changes.md) | Implemented (device-verified 2026-05-22; T3 wired outstanding) |
-| 045 | [Pins (Saved References) Screen](045-pins-screen.md) | Draft |
+| 045 | [Pins (Saved References) Screen](045-pins-screen.md) | Implemented |
 | — | [PoC: "Come back" notification](POC-come-back-notification.md) | PoC implemented (PR #288) |
 | — | [Backlog](P000-backlog.md) | — |
 

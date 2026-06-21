@@ -144,11 +144,15 @@ void main() {
       );
     });
 
-    testWidgets('renders add and settings icons', (tester) async {
+    testWidgets('renders add, pins, and settings icons', (tester) async {
       await _pumpScreen(tester);
 
       expect(
         find.byKey(const Key('conversations-new-icon')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('conversations-pins-icon')),
         findsOneWidget,
       );
       expect(
