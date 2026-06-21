@@ -1,6 +1,6 @@
 # Proposal 045 — Pins (Saved References) Screen
 
-## Status: Draft
+## Status: Implemented
 
 ## Prerequisites
 - P024 (Chat Screen) — provides the `/chat` branch and the pattern for fetching backend data via SSE/HTTP; the Pins screen hangs off Chat as a child route
