@@ -517,3 +517,25 @@ its own small design.
 ### Search across pins (deferred)
 V1 is browse + topic toggle. If the pinboard grows large, a client-side or
 backend search (`GET /api/v1/pins?q=…`, not yet implemented) becomes worthwhile.
+
+---
+
+## Addendum (2026-06-21) — quick-access entry point
+
+After dogfooding the shipped feature, the single Chat-app-bar entry point felt
+too buried. Two follow-up changes (same feature, no contract change to the
+backend):
+
+- **Pins promoted to a top-level route.** `/chat/pins` and `/chat/pins/:id`
+  moved to `/pins` and `/pins/:id`, registered outside the shell alongside
+  `/settings`. Rationale: pushing a Chat-branch-nested route from another branch
+  (e.g. the Record landing screen) is fragile under `StatefulShellRoute`; a
+  top-level route is reachable cleanly from anywhere via `context.push('/pins')`,
+  exactly like Settings. This supersedes the original §Route Integration table.
+- **Second entry point on the landing screen.** The Record screen
+  (`initialLocation`, the screen the app opens on) gains a keyed pin app-bar icon
+  (`record-pins-button`) → `/pins`. The Chat-app-bar icon remains and now also
+  pushes `/pins`.
+
+No change to the read/unpin behavior, models, repository, or the backend
+contract — only navigation placement.

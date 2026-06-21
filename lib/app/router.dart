@@ -91,21 +91,6 @@ GoRouter createRouter() => GoRouter(
               path: '/chat',
               builder: (_, _) => const ConversationsScreen(),
               routes: [
-                // Static 'pins' MUST precede the dynamic ':id' route so
-                // '/chat/pins' is not captured as a conversation id (P045).
-                GoRoute(
-                  path: 'pins',
-                  builder: (_, _) => const PinsScreen(),
-                  routes: [
-                    GoRoute(
-                      path: ':id',
-                      builder: (_, state) {
-                        final id = state.pathParameters['id']!;
-                        return PinDetailScreen(recordId: id);
-                      },
-                    ),
-                  ],
-                ),
                 GoRoute(
                   path: ':id',
                   builder: (_, state) {
@@ -116,6 +101,20 @@ GoRouter createRouter() => GoRouter(
               ],
             ),
           ],
+        ),
+      ],
+    ),
+    // Pins — top-level (full-screen, outside shell) so the saved-references
+    // screen is reachable from anywhere: the Record landing screen's app bar
+    // and the Chat app bar both push '/pins' (P045 + quick-access).
+    GoRoute(
+      path: '/pins',
+      builder: (context, state) => const PinsScreen(),
+      routes: [
+        GoRoute(
+          path: ':id',
+          builder: (context, state) =>
+              PinDetailScreen(recordId: state.pathParameters['id']!),
         ),
       ],
     ),

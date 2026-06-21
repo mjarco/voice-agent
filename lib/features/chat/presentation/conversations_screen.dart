@@ -30,7 +30,7 @@ class ConversationsScreen extends ConsumerWidget {
             key: const Key('conversations-pins-icon'),
             icon: const Icon(Icons.push_pin_outlined),
             tooltip: 'Pins',
-            onPressed: () => context.push('/chat/pins'),
+            onPressed: () => context.push('/pins'),
           ),
           IconButton(
             key: const Key('conversations-settings-icon'),
