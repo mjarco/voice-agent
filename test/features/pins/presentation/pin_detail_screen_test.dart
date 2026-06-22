@@ -54,7 +54,7 @@ Future<void> _pump(WidgetTester tester, PinsRepository repo) async {
         ],
       ),
       GoRoute(
-        path: '/chat/:id',
+        path: '/conversation/:id',
         builder: (context, state) =>
             Scaffold(body: Text('Thread ${state.pathParameters['id']}')),
       ),

@@ -16,8 +16,8 @@ import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
 import 'package:voice_agent/features/usage/presentation/usage_screen.dart';
 
-GoRouter createRouter() => GoRouter(
-  initialLocation: '/record',
+GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
+  initialLocation: initialLocation,
   routes: [
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
@@ -117,6 +117,17 @@ GoRouter createRouter() => GoRouter(
               PinDetailScreen(recordId: state.pathParameters['id']!),
         ),
       ],
+    ),
+    // Conversation thread — top-level (outside shell), so a specific thread
+    // can be opened from anywhere (e.g. a pin's "open source conversation").
+    // The in-shell `/chat/:id` cannot be pushed from outside the shell: pushing
+    // it builds the shell at the chat branch's *default* location (the
+    // conversations list), dropping the `:id`. This standalone route renders
+    // the same full-screen ThreadScreen with a back button to the caller.
+    GoRoute(
+      path: '/conversation/:id',
+      builder: (_, state) =>
+          ThreadScreen(conversationId: state.pathParameters['id']!),
     ),
     // Settings — outside shell (full-screen, no bottom nav)
     GoRoute(

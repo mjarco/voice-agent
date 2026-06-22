@@ -30,7 +30,7 @@ class PinDetailScreen extends ConsumerWidget {
                 key: const Key('pin-detail-open-conversation'),
                 icon: const Icon(Icons.forum_outlined),
                 tooltip: 'Open conversation',
-                onPressed: () => context.push('/chat/$conversationId'),
+                onPressed: () => context.push('/conversation/$conversationId'),
               ),
             IconButton(
               key: const Key('pin-detail-copy'),

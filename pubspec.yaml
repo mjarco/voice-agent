@@ -4,7 +4,7 @@ publish_to: 'none'
 # Single source of truth for the app version. Format: MAJOR.MINOR.PATCH+BUILD.
 # Bump it in the same PR as the change, and tag `vMAJOR.MINOR.PATCH` after merge.
 # See "Versioning & Releases" in CLAUDE.md for the rules.
-version: 1.1.0+2
+version: 1.1.1+3
 
 environment:
   sdk: ^3.11.1
