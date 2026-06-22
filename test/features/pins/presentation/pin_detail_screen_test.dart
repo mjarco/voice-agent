@@ -53,6 +53,11 @@ Future<void> _pump(WidgetTester tester, PinsRepository repo) async {
           ),
         ],
       ),
+      GoRoute(
+        path: '/chat/:id',
+        builder: (context, state) =>
+            Scaffold(body: Text('Thread ${state.pathParameters['id']}')),
+      ),
     ],
   );
 
@@ -125,6 +130,44 @@ void main() {
       expect(
         find.byKey(const Key('pin-detail-retry-button')),
         findsOneWidget,
+      );
+    });
+
+    testWidgets('open-conversation action opens the source chat thread',
+        (tester) async {
+      final repo = _StubRepository()
+        ..pin = PinDetail(
+          recordId: 'abc',
+          pinName: 'pin abc',
+          text: '# Heading\n\nbody text',
+          conversationId: 'conv-789',
+          createdAt: DateTime.utc(2026, 6, 15),
+        );
+      await _pump(tester, repo);
+
+      final action = find.byKey(const Key('pin-detail-open-conversation'));
+      expect(action, findsOneWidget);
+
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Thread conv-789'), findsOneWidget);
+    });
+
+    testWidgets('hides the open-conversation action when no source conversation',
+        (tester) async {
+      final repo = _StubRepository()
+        ..pin = PinDetail(
+          recordId: 'abc',
+          pinName: 'pin abc',
+          text: 'body',
+          createdAt: DateTime.utc(2026, 6, 15),
+        );
+      await _pump(tester, repo);
+
+      expect(
+        find.byKey(const Key('pin-detail-open-conversation')),
+        findsNothing,
       );
     });
   });

@@ -25,6 +25,13 @@ class PinDetailScreen extends ConsumerWidget {
         title: Text(state is PinDetailLoaded ? state.pin.pinName : 'Pin'),
         actions: [
           if (state is PinDetailLoaded) ...[
+            if (_conversationId(state.pin) case final conversationId?)
+              IconButton(
+                key: const Key('pin-detail-open-conversation'),
+                icon: const Icon(Icons.forum_outlined),
+                tooltip: 'Open conversation',
+                onPressed: () => context.push('/chat/$conversationId'),
+              ),
             IconButton(
               key: const Key('pin-detail-copy'),
               icon: const Icon(Icons.copy),
@@ -48,6 +55,13 @@ class PinDetailScreen extends ConsumerWidget {
           _ErrorState(message: message, onRetry: notifier.refresh),
       },
     );
+  }
+
+  /// The source conversation id, or null when absent/empty (legacy pins) so
+  /// the "open conversation" action only shows when there is a thread to open.
+  String? _conversationId(PinDetail pin) {
+    final id = pin.conversationId;
+    return (id == null || id.isEmpty) ? null : id;
   }
 
   void _copy(BuildContext context, String text) {

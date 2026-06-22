@@ -29,13 +29,15 @@ void main() {
   });
 
   group('PinDetail.fromMap', () {
-    test('parses a full detail with aliases and source events', () {
+    test('parses a full detail with aliases, source events and conversation',
+        () {
       final pin = PinDetail.fromMap({
         'record_id': 'abc123',
         'pin_name': 'garage pinout',
         'topic_label': 'Electronics',
         'text': '# Pinout\n\n| Pin | Signal |',
         'aliases': ['pinout', 'wiring'],
+        'conversation_id': 'conv-789',
         'source_event_ids': ['event-456'],
         'created_at': '2026-06-15T10:30:00Z',
       });
@@ -45,11 +47,13 @@ void main() {
       expect(pin.topicLabel, 'Electronics');
       expect(pin.text, '# Pinout\n\n| Pin | Signal |');
       expect(pin.aliases, ['pinout', 'wiring']);
+      expect(pin.conversationId, 'conv-789');
       expect(pin.sourceEventIds, ['event-456']);
       expect(pin.createdAt, DateTime.utc(2026, 6, 15, 10, 30));
     });
 
-    test('defaults optional lists to empty and topic to null', () {
+    test('defaults optional lists to empty, conversation and topic to null',
+        () {
       final pin = PinDetail.fromMap({
         'record_id': 'abc123',
         'pin_name': 'minimal',
@@ -59,6 +63,7 @@ void main() {
 
       expect(pin.topicLabel, isNull);
       expect(pin.aliases, isEmpty);
+      expect(pin.conversationId, isNull);
       expect(pin.sourceEventIds, isEmpty);
     });
   });
