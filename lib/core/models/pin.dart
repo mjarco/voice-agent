@@ -35,6 +35,7 @@ class PinDetail {
     this.topicLabel,
     required this.text,
     this.aliases = const [],
+    this.conversationId,
     this.sourceEventIds = const [],
     required this.createdAt,
   });
@@ -46,6 +47,11 @@ class PinDetail {
   /// Verbatim markdown body of the saved reference.
   final String text;
   final List<String> aliases;
+
+  /// Conversation the reference was pinned from. Null for legacy pins saved
+  /// before the backend recorded the source (`conversation_id` omitempty).
+  /// When present, the detail screen links back to that chat thread.
+  final String? conversationId;
   final List<String> sourceEventIds;
   final DateTime createdAt;
 
@@ -56,6 +62,7 @@ class PinDetail {
       topicLabel: map['topic_label'] as String?,
       text: map['text'] as String,
       aliases: _stringList(map['aliases']),
+      conversationId: map['conversation_id'] as String?,
       sourceEventIds: _stringList(map['source_event_ids']),
       createdAt: DateTime.parse(map['created_at'] as String),
     );
