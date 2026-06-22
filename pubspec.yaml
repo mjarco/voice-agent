@@ -1,7 +1,10 @@
 name: voice_agent
 description: Offline-first voice-to-text app that sends transcripts to your API.
 publish_to: 'none'
-version: 1.0.0+1
+# Single source of truth for the app version. Format: MAJOR.MINOR.PATCH+BUILD.
+# Bump it in the same PR as the change, and tag `vMAJOR.MINOR.PATCH` after merge.
+# See "Versioning & Releases" in CLAUDE.md for the rules.
+version: 1.1.0+2
 
 environment:
   sdk: ^3.11.1

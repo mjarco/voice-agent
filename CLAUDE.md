@@ -455,6 +455,79 @@ Before requesting review, verify:
 - [ ] No hardcoded secrets, tokens, or credentials
 - [ ] No TODO without a linked issue
 - [ ] No debugging artifacts (`print()`, `debugPrint()`)
+- [ ] Version bumped in `pubspec.yaml` per **Versioning & Releases** (skip only for docs/test/CI-only changes)
+
+---
+
+## Versioning & Releases
+
+The app is versioned with [Semantic Versioning](https://semver.org) plus a
+build number. **`pubspec.yaml`'s `version:` line is the single source of
+truth** — nothing else stores the version. Managed versioning started at
+**`v1.1.0`** (2026-06-22); the earlier `v0.1` tag predates this policy and is
+kept only as history.
+
+### Format
+
+```
+version: MAJOR.MINOR.PATCH+BUILD     # e.g. 1.1.0+2
+```
+
+- **MAJOR** — incompatible change to how the user works with the app, a data
+  migration with reset risk, or a personal-agent API contract the old app can
+  no longer talk to.
+- **MINOR** — a new user-facing feature or capability, backward-compatible
+  (e.g. "open the source conversation from a pin").
+- **PATCH** — a bug fix or behavior correction with no new capability.
+- **BUILD** (the `+N` suffix) — a monotonically increasing integer. iOS and
+  Android **require** the build number to increase for every artifact installed
+  on a device; it **never decreases**. Bump it on *every* version change, and
+  again whenever you cut a fresh device build of an unchanged version.
+
+When in doubt between two levels, pick the higher one.
+
+### When to bump
+
+Bump the version **in the same PR as the change**, as part of the diff — not in
+a separate follow-up. Reviewers see the version move with the behavior it
+describes.
+
+- Feature PR → bump MINOR, reset PATCH to 0, BUILD +1 (`1.1.0+2` → `1.2.0+3`).
+- Fix PR → bump PATCH, BUILD +1 (`1.2.0+3` → `1.2.1+4`).
+- Docs / tests / CI / refactor with no shipped behavior change → no version
+  bump (the BUILD number only needs to move when you actually build for a
+  device).
+
+The BUILD number is global and append-only: always the previous build + 1,
+regardless of which of MAJOR/MINOR/PATCH moved.
+
+### Tagging a release
+
+After a version-bearing PR merges to `main`, tag the merge commit with an
+annotated `vMAJOR.MINOR.PATCH` tag and push it. The tag is the canonical
+"this version shipped here" marker; its annotation message is the release note.
+
+```bash
+git checkout main && git pull --ff-only
+git tag -a v1.1.0 -m "v1.1.0 — open the source conversation from a pin"
+git push origin v1.1.0
+```
+
+One tag per `MAJOR.MINOR.PATCH`; the BUILD number is not tagged. If several
+device builds share a version, only the version is tagged.
+
+### Versions vs. proposals
+
+Proposal numbers (`Pnnn`, `0nn`) track *design*; the version tracks the
+*shipped app*. They are not 1:1 — a single release may land several proposals,
+and a proposal may ship across several releases. Reference proposals in the
+commit/PR; reference the version in the tag.
+
+### Building a release
+
+`make install-ios` (stable flavor, release) builds whatever `pubspec.yaml`
+currently declares and installs it on the connected device. Bump the version
+*before* building so the installed artifact carries the right number.
 
 ---
 
