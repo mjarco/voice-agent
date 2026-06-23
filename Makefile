@@ -111,8 +111,8 @@ simulator:
 # platform column with whitespace so the literal pattern never matched
 # on recent versions. Using awk's regex field separator handles any
 # spacing.
-IOS_DEVICE_ID = flutter devices 2>/dev/null | awk -F' *• *' '$$3=="ios"{print $$2; exit}'
-IOS_DEVICE_NAME = flutter devices 2>/dev/null | awk -F' *• *' '$$3=="ios"{print $$1; exit}'
+IOS_DEVICE_ID = flutter devices 2>/dev/null | awk -F' *• *' '$$3=="ios" && $$4 !~ /simulator/{print $$2; exit}'
+IOS_DEVICE_NAME = flutter devices 2>/dev/null | awk -F' *• *' '$$3=="ios" && $$4 !~ /simulator/{print $$1; exit}'
 IOS_NOT_FOUND = echo "ERROR: No physical iOS device found."; \
 	echo "Connect your iPhone via USB or enable wireless debugging:"; \
 	echo "  Xcode > Window > Devices and Simulators > pair your device"; \
