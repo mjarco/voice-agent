@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
+import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/network/api_client.dart';
+import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
@@ -14,14 +16,24 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
   ThreadNotifier({
     required String conversationId,
     required ChatRepository repository,
+    required PinWriter pinWriter,
   })  : _conversationId = conversationId,
         _repository = repository,
+        _pinWriter = pinWriter,
         super(const ThreadLoading()) {
     load();
   }
 
   final String _conversationId;
   final ChatRepository _repository;
+  final PinWriter _pinWriter;
+
+  // Session-local pin view state (proposal 046). Held as notifier fields, not on
+  // the immutable Thread* states, so they survive a streaming->loaded transition
+  // without threading through every state rebuild. Not reconciled with the
+  // backend on reload — the pinboard is the source of truth.
+  final Set<String> _pinnedEventIds = {};
+  final Set<String> _pinInFlight = {};
 
   StreamSubscription<SseEvent>? _subscription;
   String? _currentIdempotencyKey;
@@ -415,6 +427,96 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           selectedBackend: refreshed.selectedBackend,
           pendingUserMessage: refreshed.pendingUserMessage,
           toolProgress: refreshed.toolProgress,
+        );
+      default:
+        break;
+    }
+  }
+
+  /// Whether [eventId] has been pinned this session (filled icon).
+  bool isPinned(String eventId) => _pinnedEventIds.contains(eventId);
+
+  /// Whether a pin flow for [eventId] is in progress (spinner + single-flight).
+  bool isPinInFlight(String eventId) => _pinInFlight.contains(eventId);
+
+  /// Starts a pin flow for a message: marks it in-flight (single-flight, drives
+  /// the spinner) while fetching a suggested name + topic. Returns null when a
+  /// flow is already running for this event or it is already pinned (the tap is
+  /// a no-op). Rethrows on failure for the screen to surface. The in-flight mark
+  /// spans only the suggest call — the confirm dialog runs behind a modal
+  /// barrier, so re-taps can't happen while it is open. The create step is
+  /// [confirmPin]; cancel with [cancelPin].
+  Future<PinSuggestion?> beginPin(
+    String conversationId,
+    String eventId,
+  ) async {
+    if (_pinInFlight.contains(eventId) || _pinnedEventIds.contains(eventId)) {
+      return null;
+    }
+    _pinInFlight.add(eventId);
+    _touch();
+    try {
+      return await _pinWriter.suggestPin(conversationId, eventId);
+    } finally {
+      _pinInFlight.remove(eventId);
+      _touch();
+    }
+  }
+
+  /// Creates the pin after the user confirms. On success marks the event pinned;
+  /// always clears the in-flight mark. Rethrows on failure for the screen.
+  Future<PinCreateResult> confirmPin(
+    String conversationId,
+    String eventId, {
+    required String name,
+    String? topicLabel,
+  }) async {
+    try {
+      final result = await _pinWriter.createPin(PinCreateRequest(
+        conversationId: conversationId,
+        eventId: eventId,
+        name: name,
+        topicLabel: topicLabel,
+      ));
+      _pinnedEventIds.add(eventId);
+      return result;
+    } finally {
+      _pinInFlight.remove(eventId);
+      _touch();
+    }
+  }
+
+  /// Abandons an in-flight pin flow (dialog cancelled).
+  void cancelPin(String eventId) {
+    if (_pinInFlight.remove(eventId)) _touch();
+  }
+
+  /// Re-emits the current state as a fresh instance so listeners rebuild after a
+  /// pin-set change (the sets are notifier fields, not state fields).
+  void _touch() {
+    final current = state;
+    switch (current) {
+      case ThreadLoaded():
+        state = ThreadLoaded(
+          conversation: current.conversation,
+          events: current.events,
+          records: current.records,
+          models: current.models,
+          backends: current.backends,
+          selectedModel: current.selectedModel,
+          selectedBackend: current.selectedBackend,
+        );
+      case ThreadStreaming():
+        state = ThreadStreaming(
+          conversation: current.conversation,
+          events: current.events,
+          records: current.records,
+          models: current.models,
+          backends: current.backends,
+          selectedModel: current.selectedModel,
+          selectedBackend: current.selectedBackend,
+          pendingUserMessage: current.pendingUserMessage,
+          toolProgress: current.toolProgress,
         );
       default:
         break;

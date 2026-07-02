@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/features/chat/data/api_chat_repository.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
@@ -23,5 +24,6 @@ final threadNotifierProvider =
   (ref, conversationId) => ThreadNotifier(
     conversationId: conversationId,
     repository: ref.watch(chatRepositoryProvider),
+    pinWriter: ref.watch(pinWriterProvider),
   ),
 );
