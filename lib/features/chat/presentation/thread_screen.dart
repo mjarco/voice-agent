@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
+import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
@@ -24,6 +25,59 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
   void dispose() {
     _textController.dispose();
     super.dispose();
+  }
+
+  /// Pin flow for an agent message (proposal 046): suggest name+topic, confirm
+  /// in a dialog, then create. The notifier owns the network calls and the
+  /// in-flight / pinned sets; this method only drives the dialog and SnackBars.
+  Future<void> _startPin(ConversationEvent event) async {
+    final notifier =
+        ref.read(threadNotifierProvider(widget.conversationId).notifier);
+    final messenger = ScaffoldMessenger.of(context);
+
+    final PinSuggestion? suggestion;
+    try {
+      suggestion = await notifier.beginPin(event.conversationId, event.eventId);
+    } on Exception catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not prepare pin: $e')),
+      );
+      return;
+    }
+    // Already pinned or a flow is already running for this message.
+    if (suggestion == null) return;
+    if (!mounted) return;
+
+    final confirmed = await showDialog<_PinConfirmation>(
+      context: context,
+      builder: (_) => _PinConfirmDialog(suggestion: suggestion!),
+    );
+    if (confirmed == null) {
+      notifier.cancelPin(event.eventId);
+      return;
+    }
+
+    try {
+      final created = await notifier.confirmPin(
+        event.conversationId,
+        event.eventId,
+        name: confirmed.name,
+        topicLabel: confirmed.topicLabel,
+      );
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Pinned as "${created.pin.pinName}"'),
+          action: SnackBarAction(
+            label: 'Open',
+            onPressed: () => context.push('/pins'),
+          ),
+        ),
+      );
+    } on Exception catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Could not pin: $e')));
+    }
   }
 
   @override
@@ -173,10 +227,18 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
                   final widgets = <Widget>[];
                   for (var i = 0; i < reversed.length; i++) {
                     final event = reversed[i];
+                    final canPin = event.role == EventRole.agent &&
+                        event.conversationId.isNotEmpty;
                     widgets.add(_MessageBubble(
                       key: Key('thread-event-${event.eventId}'),
                       content: event.content,
                       role: event.role,
+                      eventId: event.eventId,
+                      canPin: canPin,
+                      pinned: canPin && notifier.isPinned(event.eventId),
+                      pinInFlight:
+                          canPin && notifier.isPinInFlight(event.eventId),
+                      onPin: canPin ? () => _startPin(event) : null,
                     ));
                     final isLastAgent = event.role == EventRole.agent &&
                         reversed
@@ -235,11 +297,26 @@ class _MessageBubble extends StatelessWidget {
     required this.content,
     required this.role,
     this.pending = false,
+    this.eventId,
+    this.canPin = false,
+    this.pinned = false,
+    this.pinInFlight = false,
+    this.onPin,
   });
 
   final String content;
   final EventRole role;
   final bool pending;
+
+  /// Backend event id — present only for persisted messages (proposal 046).
+  final String? eventId;
+
+  /// Whether the pin affordance is shown. True only for agent messages that
+  /// have a real server identity (an [eventId] + conversation id).
+  final bool canPin;
+  final bool pinned;
+  final bool pinInFlight;
+  final VoidCallback? onPin;
 
   @override
   Widget build(BuildContext context) {
@@ -269,6 +346,28 @@ class _MessageBubble extends StatelessWidget {
       );
     }
 
+    final Widget content0;
+    if (canPin) {
+      content0 = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          body,
+          Align(
+            alignment: Alignment.centerRight,
+            child: _PinButton(
+              eventId: eventId,
+              pinned: pinned,
+              inFlight: pinInFlight,
+              onPin: onPin,
+            ),
+          ),
+        ],
+      );
+    } else {
+      content0 = body;
+    }
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -285,8 +384,136 @@ class _MessageBubble extends StatelessWidget {
           color: bubbleColor,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: body,
+        child: content0,
       ),
+    );
+  }
+}
+
+/// Pin affordance on an agent bubble: a spinner while a pin flow runs, a filled
+/// pin once saved, an outlined pin otherwise (proposal 046).
+class _PinButton extends StatelessWidget {
+  const _PinButton({
+    required this.eventId,
+    required this.pinned,
+    required this.inFlight,
+    required this.onPin,
+  });
+
+  final String? eventId;
+  final bool pinned;
+  final bool inFlight;
+  final VoidCallback? onPin;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    if (inFlight) {
+      return const Padding(
+        padding: EdgeInsets.all(8),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    return IconButton(
+      key: eventId != null ? Key('pin-button-$eventId') : null,
+      visualDensity: VisualDensity.compact,
+      iconSize: 18,
+      tooltip: pinned ? 'Pinned' : 'Pin this message',
+      color: pinned ? cs.primary : cs.onSurfaceVariant,
+      icon: Icon(pinned ? Icons.push_pin : Icons.push_pin_outlined),
+      onPressed: pinned ? null : onPin,
+    );
+  }
+}
+
+/// User's confirmed pin name + optional topic from [_PinConfirmDialog].
+class _PinConfirmation {
+  const _PinConfirmation({required this.name, this.topicLabel});
+  final String name;
+  final String? topicLabel;
+}
+
+/// Confirm dialog seeded from the backend suggestion. Edits name + topic only;
+/// the pin body is the verbatim message, copied server-side (proposal 046).
+class _PinConfirmDialog extends StatefulWidget {
+  const _PinConfirmDialog({required this.suggestion});
+
+  final PinSuggestion suggestion;
+
+  @override
+  State<_PinConfirmDialog> createState() => _PinConfirmDialogState();
+}
+
+class _PinConfirmDialogState extends State<_PinConfirmDialog> {
+  late final TextEditingController _nameController =
+      TextEditingController(text: widget.suggestion.name);
+  late final TextEditingController _topicController =
+      TextEditingController(text: widget.suggestion.topicLabel ?? '');
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _topicController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    final topic = _topicController.text.trim();
+    Navigator.of(context).pop(
+      _PinConfirmation(name: name, topicLabel: topic.isEmpty ? null : topic),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('pin-confirm-dialog'),
+      title: const Text('Pin this message'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            key: const Key('pin-name-field'),
+            controller: _nameController,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              hintText: 'What to call this reference',
+            ),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const Key('pin-topic-field'),
+            controller: _topicController,
+            decoration: const InputDecoration(
+              labelText: 'Topic (optional)',
+              hintText: 'Group under a topic',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          key: const Key('pin-cancel-button'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('pin-confirm-button'),
+          onPressed:
+              _nameController.text.trim().isEmpty ? null : _submit,
+          child: const Text('Pin'),
+        ),
+      ],
     );
   }
 }

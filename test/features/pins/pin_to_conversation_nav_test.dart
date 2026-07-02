@@ -12,6 +12,7 @@ import 'package:voice_agent/features/chat/presentation/thread_screen.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/core/models/pin.dart';
+import 'package:voice_agent/core/network/pin_writer.dart';
 
 /// Regression test for the pin -> source-conversation navigation.
 ///
@@ -89,6 +90,24 @@ class _StubChatRepository implements ChatRepository {
   Future<bool> toggleEndorse(String recordId) async => false;
 }
 
+class _NoopPinWriter implements PinWriter {
+  @override
+  Future<PinSuggestion> suggestPin(String conversationId, String eventId) async =>
+      const PinSuggestion(name: 'stub');
+
+  @override
+  Future<PinCreateResult> createPin(PinCreateRequest request) async =>
+      PinCreateResult(
+        pin: PinDetail(
+          recordId: 'pin-1',
+          pinName: request.name,
+          text: 'body',
+          createdAt: DateTime(2026, 1, 1),
+        ),
+        created: true,
+      );
+}
+
 void main() {
   testWidgets(
     'opening a pin\'s source conversation lands on the thread, not the list',
@@ -100,6 +119,7 @@ void main() {
           overrides: [
             pinsRepositoryProvider.overrideWithValue(_StubPinsRepository()),
             chatRepositoryProvider.overrideWithValue(_StubChatRepository()),
+            pinWriterProvider.overrideWithValue(_NoopPinWriter()),
           ],
           child: MaterialApp.router(
             routerConfig: createRouter(initialLocation: '/pins/abc'),

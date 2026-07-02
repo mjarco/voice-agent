@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
+import 'package:voice_agent/core/models/pin.dart';
+import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
@@ -115,10 +117,44 @@ ConversationRecord _record({String id = 'rec-1', bool endorsed = false, String s
   );
 }
 
+class _FakePinWriter implements PinWriter {
+  PinSuggestion suggestResult =
+      const PinSuggestion(name: 'ESP32 pinout', topicLabel: 'Electronics');
+  Object? suggestError;
+  Object? createError;
+  final List<PinCreateRequest> created = [];
+
+  @override
+  Future<PinSuggestion> suggestPin(
+    String conversationId,
+    String eventId,
+  ) async {
+    if (suggestError != null) throw suggestError!;
+    return suggestResult;
+  }
+
+  @override
+  Future<PinCreateResult> createPin(PinCreateRequest request) async {
+    created.add(request);
+    if (createError != null) throw createError!;
+    return PinCreateResult(
+      pin: PinDetail(
+        recordId: 'pin-1',
+        pinName: request.name,
+        topicLabel: request.topicLabel,
+        text: 'body',
+        createdAt: DateTime(2026, 1, 1),
+      ),
+      created: true,
+    );
+  }
+}
+
 Future<void> _pumpScreen(
   WidgetTester tester, {
   required _StubRepository repository,
   String conversationId = 'conv-1',
+  _FakePinWriter? pinWriter,
 }) async {
   final router = GoRouter(
     initialLocation: '/chat/$conversationId',
@@ -132,6 +168,10 @@ Future<void> _pumpScreen(
         path: '/settings',
         builder: (_, _) => const Scaffold(body: Text('Settings')),
       ),
+      GoRoute(
+        path: '/pins',
+        builder: (_, _) => const Scaffold(body: Text('Pins screen')),
+      ),
     ],
   );
 
@@ -139,6 +179,7 @@ Future<void> _pumpScreen(
     ProviderScope(
       overrides: [
         chatRepositoryProvider.overrideWithValue(repository),
+        pinWriterProvider.overrideWithValue(pinWriter ?? _FakePinWriter()),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -166,7 +207,10 @@ void main() {
       );
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [chatRepositoryProvider.overrideWithValue(repo)],
+          overrides: [
+            chatRepositoryProvider.overrideWithValue(repo),
+            pinWriterProvider.overrideWithValue(_FakePinWriter()),
+          ],
           child: MaterialApp.router(routerConfig: router),
         ),
       );
@@ -404,6 +448,146 @@ void main() {
       await _pumpScreen(tester, repository: repo, conversationId: 'new');
 
       expect(find.text('New Chat'), findsOneWidget);
+    });
+  });
+
+  group('pin a message (P046)', () {
+    _StubRepository agentRepo() => _StubRepository()
+      ..conversationResult = _conv()
+      ..eventsResult = [
+        _event(id: 'evt-agent', role: EventRole.agent, content: 'Agent reply'),
+      ];
+
+    testWidgets('agent bubble shows a pin button, user bubble does not',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [
+          _event(id: 'evt-user', role: EventRole.user, content: 'Hi'),
+          _event(id: 'evt-agent', role: EventRole.agent, content: 'Reply'),
+        ];
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.byKey(const Key('pin-button-evt-agent')), findsOneWidget);
+      expect(find.byKey(const Key('pin-button-evt-user')), findsNothing);
+    });
+
+    testWidgets('no pin button when the event has no server conversation id',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [
+          ConversationEvent(
+            eventId: 'evt-agent',
+            conversationId: '',
+            sequence: 1,
+            role: EventRole.agent,
+            content: 'Reply',
+            receivedAt: DateTime(2026, 1, 1),
+          ),
+        ];
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.byKey(const Key('pin-button-evt-agent')), findsNothing);
+    });
+
+    testWidgets('tapping the pin button opens a dialog seeded from suggestion',
+        (tester) async {
+      final pin = _FakePinWriter()
+        ..suggestResult =
+            const PinSuggestion(name: 'Garage pinout', topicLabel: 'Wiring');
+      await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
+
+      await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('pin-confirm-dialog')), findsOneWidget);
+      expect(find.text('Garage pinout'), findsOneWidget);
+      expect(find.text('Wiring'), findsOneWidget);
+    });
+
+    testWidgets('confirming creates the pin with the exact payload',
+        (tester) async {
+      final pin = _FakePinWriter()
+        ..suggestResult =
+            const PinSuggestion(name: 'Garage pinout', topicLabel: 'Wiring');
+      await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
+
+      await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-confirm-button')));
+      await tester.pumpAndSettle();
+
+      final req = pin.created.single;
+      expect(req.conversationId, 'conv-1');
+      expect(req.eventId, 'evt-agent');
+      expect(req.name, 'Garage pinout');
+      expect(req.topicLabel, 'Wiring');
+      expect(find.text('Pinned as "Garage pinout"'), findsOneWidget);
+    });
+
+    testWidgets('the pin button becomes filled after a successful pin',
+        (tester) async {
+      await _pumpScreen(tester, repository: agentRepo());
+
+      await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-confirm-button')));
+      await tester.pumpAndSettle();
+
+      final icon = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const Key('pin-button-evt-agent')),
+          matching: find.byType(Icon),
+        ),
+      );
+      expect(icon.icon, Icons.push_pin);
+    });
+
+    testWidgets('the Open snackbar action navigates to the pinboard',
+        (tester) async {
+      await _pumpScreen(tester, repository: agentRepo());
+
+      await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-confirm-button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pins screen'), findsOneWidget);
+    });
+
+    testWidgets('cancelling the dialog pins nothing', (tester) async {
+      final pin = _FakePinWriter();
+      await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
+
+      await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-cancel-button')));
+      await tester.pumpAndSettle();
+
+      expect(pin.created, isEmpty);
+      final icon = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const Key('pin-button-evt-agent')),
+          matching: find.byType(Icon),
+        ),
+      );
+      expect(icon.icon, Icons.push_pin_outlined);
+    });
+
+    testWidgets('a suggest failure shows a snackbar and opens no dialog',
+        (tester) async {
+      final pin = _FakePinWriter()..suggestError = Exception('offline');
+      await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
+
+      await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('pin-confirm-dialog')), findsNothing);
+      expect(find.textContaining('Could not prepare pin'), findsOneWidget);
     });
   });
 }

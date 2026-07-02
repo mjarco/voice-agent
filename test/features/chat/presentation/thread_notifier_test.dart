@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
+import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/network/api_client.dart';
+import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
@@ -88,6 +90,46 @@ class _StubRepository implements ChatRepository {
   }
 }
 
+class _FakePinWriter implements PinWriter {
+  PinSuggestion suggestResult =
+      const PinSuggestion(name: 'Suggested', topicLabel: 'Topic');
+  Object? suggestError;
+  Object? createError;
+
+  final List<(String, String)> suggestCalls = [];
+  final List<PinCreateRequest> createdRequests = [];
+
+  @override
+  Future<PinSuggestion> suggestPin(
+    String conversationId,
+    String eventId,
+  ) async {
+    suggestCalls.add((conversationId, eventId));
+    if (suggestError != null) throw suggestError!;
+    return suggestResult;
+  }
+
+  @override
+  Future<PinCreateResult> createPin(PinCreateRequest request) async {
+    createdRequests.add(request);
+    if (createError != null) throw createError!;
+    return PinCreateResult(
+      pin: PinDetail(
+        recordId: 'pin-1',
+        pinName: request.name,
+        topicLabel: request.topicLabel,
+        text: 'body',
+        createdAt: DateTime(2026, 1, 1),
+      ),
+      created: true,
+    );
+  }
+}
+
+/// Shared no-op pin writer for the pre-existing tests that never pin. Pin flow
+/// tests build their own `_FakePinWriter` so they can inspect calls.
+final _pinWriter = _FakePinWriter();
+
 Conversation _conv({
   String id = 'conv-1',
   String sessionId = 'sess-1',
@@ -161,7 +203,7 @@ void main() {
     test('transitions to empty state with generated sessionId', () async {
       final repo = _StubRepository();
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -177,7 +219,7 @@ void main() {
           defaultBackend: 'b1',
         );
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -193,7 +235,7 @@ void main() {
         ..eventsResult = [_event()]
         ..recordsResult = [_record()];
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -207,7 +249,7 @@ void main() {
     test('emits error when getConversation returns null', () async {
       final repo = _StubRepository()..conversationResult = null;
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -219,7 +261,7 @@ void main() {
     test('emits error on load failure', () async {
       final repo = _StubRepository()..throwOnLoad = true;
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -234,7 +276,7 @@ void main() {
           defaultBackend: 'b2',
         );
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -247,7 +289,7 @@ void main() {
     test('is no-op when state is streaming', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -263,7 +305,7 @@ void main() {
         ..conversationResult =
             _conv(status: ConversationStatus.closed);
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -274,7 +316,7 @@ void main() {
     test('transitions loaded → streaming with pendingUserMessage', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -288,7 +330,7 @@ void main() {
     test('transitions empty → streaming for new conversation', () async {
       final repo = _StubRepository();
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -303,7 +345,7 @@ void main() {
     test('tool_use event updates toolProgress', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -321,7 +363,7 @@ void main() {
         ..conversationResult = _conv()
         ..eventsResult = [_event(), _event(id: 'evt-2')];
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -340,7 +382,7 @@ void main() {
     test('SSE error event emits error with preSendState', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -358,7 +400,7 @@ void main() {
     test('stream Dart error maps ApiNotConfigured', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -374,7 +416,7 @@ void main() {
     test('stream Dart error maps ApiPermanentFailure', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -391,7 +433,7 @@ void main() {
     test('stream Dart error maps ApiTransientFailure', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -408,7 +450,7 @@ void main() {
     test('post-result fetch failure emits error with streaming state', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -433,7 +475,7 @@ void main() {
     test('is no-op when not streaming', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -444,7 +486,7 @@ void main() {
     test('reverts to preSendState and calls cancelChat', () async {
       final repo = _StubRepository()..conversationResult = _conv(sessionId: 'sess-abc');
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -467,7 +509,7 @@ void main() {
         ..recordsResult = [_record(id: 'rec-1', endorsed: false)]
         ..toggleResult = true;
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -482,7 +524,7 @@ void main() {
         ..conversationResult = _conv()
         ..recordsResult = [_record(id: 'rec-42')];
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -496,7 +538,7 @@ void main() {
     test('selectModel updates loaded state', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -509,7 +551,7 @@ void main() {
     test('selectModel updates empty state', () async {
       final repo = _StubRepository();
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -522,7 +564,7 @@ void main() {
     test('selectModel during loading stores as pending', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       // Immediately after creation, state is ThreadLoading
       expect(notifier.state, isA<ThreadLoading>());
 
@@ -538,7 +580,7 @@ void main() {
     test('selectBackend updates loaded state', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -552,7 +594,7 @@ void main() {
         () async {
       final repo = _StubRepository();
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
       expect(notifier.state, isA<ThreadLoading>());
 
       notifier.selectBackend('backend-b');
@@ -567,7 +609,7 @@ void main() {
     test('selectModel updates streaming state', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -583,7 +625,7 @@ void main() {
     test('selectModel during error state is a no-op', () async {
       final repo = _StubRepository()..conversationResult = null;
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -591,6 +633,138 @@ void main() {
       notifier.selectModel('model-ignored');
 
       expect(notifier.state, isA<ThreadError>());
+    });
+  });
+
+  group('pin flow (P046)', () {
+    Future<ThreadNotifier> loadedNotifier(
+      _StubRepository repo,
+      _FakePinWriter pin,
+    ) async {
+      repo.conversationResult = _conv();
+      repo.eventsResult = [_event(id: 'evt-agent', role: EventRole.agent)];
+      final notifier = ThreadNotifier(
+        conversationId: 'conv-1',
+        repository: repo,
+        pinWriter: pin,
+      );
+      await Future.microtask(() {});
+      await Future.microtask(() {});
+      return notifier;
+    }
+
+    test('beginPin marks in-flight during suggest, clears when it settles',
+        () async {
+      final pin = _FakePinWriter();
+      final notifier = await loadedNotifier(_StubRepository(), pin);
+
+      final future = notifier.beginPin('conv-1', 'evt-agent');
+      // In-flight while the suggest call is pending (drives the spinner).
+      expect(notifier.isPinInFlight('evt-agent'), isTrue);
+
+      final suggestion = await future;
+      expect(suggestion?.name, 'Suggested');
+      expect(pin.suggestCalls.single, ('conv-1', 'evt-agent'));
+      // Cleared once suggest resolves — the dialog runs behind a modal barrier.
+      expect(notifier.isPinInFlight('evt-agent'), isFalse);
+    });
+
+    test('a second beginPin while in-flight is a no-op (single-flight)',
+        () async {
+      final pin = _FakePinWriter();
+      final notifier = await loadedNotifier(_StubRepository(), pin);
+
+      final first = notifier.beginPin('conv-1', 'evt-agent');
+      final second = await notifier.beginPin('conv-1', 'evt-agent');
+      await first;
+
+      expect(second, isNull);
+      expect(pin.suggestCalls, hasLength(1));
+    });
+
+    test('beginPin clears in-flight and rethrows on suggest failure', () async {
+      final pin = _FakePinWriter()..suggestError = Exception('boom');
+      final notifier = await loadedNotifier(_StubRepository(), pin);
+
+      await expectLater(
+        notifier.beginPin('conv-1', 'evt-agent'),
+        throwsA(isA<Exception>()),
+      );
+      expect(notifier.isPinInFlight('evt-agent'), isFalse);
+    });
+
+    test('confirmPin creates with the exact payload and marks pinned',
+        () async {
+      final pin = _FakePinWriter();
+      final notifier = await loadedNotifier(_StubRepository(), pin);
+      await notifier.beginPin('conv-1', 'evt-agent');
+
+      final result = await notifier.confirmPin(
+        'conv-1',
+        'evt-agent',
+        name: 'Garage pinout',
+        topicLabel: 'Electronics',
+      );
+
+      final req = pin.createdRequests.single;
+      expect(req.conversationId, 'conv-1');
+      expect(req.eventId, 'evt-agent');
+      expect(req.name, 'Garage pinout');
+      expect(req.topicLabel, 'Electronics');
+      expect(req.toMap().containsKey('aliases'), isFalse);
+      expect(result.created, isTrue);
+      expect(notifier.isPinned('evt-agent'), isTrue);
+      expect(notifier.isPinInFlight('evt-agent'), isFalse);
+    });
+
+    test('confirmPin clears in-flight and rethrows on create failure',
+        () async {
+      final pin = _FakePinWriter()..createError = Exception('server 500');
+      final notifier = await loadedNotifier(_StubRepository(), pin);
+      await notifier.beginPin('conv-1', 'evt-agent');
+
+      await expectLater(
+        notifier.confirmPin('conv-1', 'evt-agent', name: 'n'),
+        throwsA(isA<Exception>()),
+      );
+      expect(notifier.isPinned('evt-agent'), isFalse);
+      expect(notifier.isPinInFlight('evt-agent'), isFalse);
+    });
+
+    test('cancelPin clears the in-flight mark', () async {
+      final pin = _FakePinWriter();
+      final notifier = await loadedNotifier(_StubRepository(), pin);
+      await notifier.beginPin('conv-1', 'evt-agent');
+
+      notifier.cancelPin('evt-agent');
+
+      expect(notifier.isPinInFlight('evt-agent'), isFalse);
+      expect(notifier.isPinned('evt-agent'), isFalse);
+    });
+
+    test('beginPin on an already-pinned event is a no-op', () async {
+      final pin = _FakePinWriter();
+      final notifier = await loadedNotifier(_StubRepository(), pin);
+      await notifier.beginPin('conv-1', 'evt-agent');
+      await notifier.confirmPin('conv-1', 'evt-agent', name: 'n');
+
+      final again = await notifier.beginPin('conv-1', 'evt-agent');
+
+      expect(again, isNull);
+      expect(pin.suggestCalls, hasLength(1));
+    });
+
+    test('pinned state survives a send (streaming) transition', () async {
+      final pin = _FakePinWriter();
+      final repo = _StubRepository();
+      final notifier = await loadedNotifier(repo, pin);
+      await notifier.beginPin('conv-1', 'evt-agent');
+      await notifier.confirmPin('conv-1', 'evt-agent', name: 'n');
+
+      notifier.send('another message');
+
+      expect(notifier.state, isA<ThreadStreaming>());
+      expect(notifier.isPinned('evt-agent'), isTrue);
     });
   });
 }
