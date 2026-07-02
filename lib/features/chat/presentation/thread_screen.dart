@@ -47,10 +47,11 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     // Already pinned or a flow is already running for this message.
     if (suggestion == null) return;
     if (!mounted) return;
+    final picked = suggestion;
 
     final confirmed = await showDialog<_PinConfirmation>(
       context: context,
-      builder: (_) => _PinConfirmDialog(suggestion: suggestion!),
+      builder: (_) => _PinConfirmDialog(suggestion: picked),
     );
     if (confirmed == null) {
       notifier.cancelPin(event.eventId);
@@ -346,9 +347,9 @@ class _MessageBubble extends StatelessWidget {
       );
     }
 
-    final Widget content0;
+    final Widget bubbleContent;
     if (canPin) {
-      content0 = Column(
+      bubbleContent = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -365,7 +366,7 @@ class _MessageBubble extends StatelessWidget {
         ],
       );
     } else {
-      content0 = body;
+      bubbleContent = body;
     }
 
     return Align(
@@ -384,7 +385,7 @@ class _MessageBubble extends StatelessWidget {
           color: bubbleColor,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: content0,
+        child: bubbleContent,
       ),
     );
   }
