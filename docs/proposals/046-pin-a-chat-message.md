@@ -1,6 +1,15 @@
 # Proposal 046 — Pin a Chat Message from the App
 
-## Status: Draft
+## Status: Implemented (manual device verification pending)
+
+T1 (core `PinWriter` seam) and T2 (chat affordance + notifier orchestration)
+are merged to `main`; `make verify` is green. Reviews passed: `/proposal-review`
+(Ready), `/proposal-architectural-review` (Aligned — no new ADR, amended
+ADR-ARCH-006), and a T2 diff code review (approved, no P0/P1). The on-device
+round-trip is captured in
+[`docs/manual-tests/p046-pin-a-chat-message.md`](../manual-tests/p046-pin-a-chat-message.md);
+the disclaimer comes off once its cases are `passed`. Shipped in app version
+`1.2.0` (T3).
 
 ## Prerequisites
 - P045 (Pins Screen) — Implemented. Provides the `features/pins` module, the
