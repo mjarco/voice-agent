@@ -2,6 +2,7 @@
 
 Status: Accepted
 Proposed in: P015, P016
+Amended in: P046
 
 ## Context
 
@@ -31,3 +32,4 @@ These services are shared infrastructure, not feature-specific logic. Placing th
 - Core's dependency footprint grows with each platform service — acceptable if the service is genuinely shared.
 - Single-consumer services should stay in their feature module until a second consumer appears.
 - Implementations are thin adapters — business logic stays in controllers.
+- A port's implementation may be **feature-owned** (living in `features/<x>/data/`), not only a core-level platform adapter. This is legitimate when one feature must invoke another feature's capability: the abstract port and its provider live in `core/`, the adapter lives in the owning feature, and the binding is an `.override…` in the app composition root (`app_main.dart`, per ADR-ARCH-004 and ADR-ARCH-007). Consumers depend only on the core port, so ADR-ARCH-003 feature isolation is preserved. Precedents: `HandsFreeControlPort` (adapter `HandsFreeController` in `features/recording/`); `PinWriter` (adapter `ApiPinWriter` in `features/pins/data/`, P046).
