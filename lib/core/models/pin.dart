@@ -1,9 +1,14 @@
-// Read-only DTOs for the personal-agent pins API (proposal 045).
+// DTOs for the personal-agent pins API.
 //
-// Two DTOs share this file — matching `agenda.dart`'s several-related-classes
-// layout — because they are a single read contract: the lean list row
-// (`PinSummary`) and the full reference (`PinDetail`). Pins are created only by
-// voice in chat; the client never writes them, so there is no `toMap`.
+// Read contract (proposal 045): the lean list row (`PinSummary`) and the full
+// reference (`PinDetail`).
+//
+// Write contract (proposal 046): pinning a chat message from the app —
+// `PinSuggestion` (proposed name + topic from `POST /pins/suggest`),
+// `PinCreateRequest` (the `POST /pins` body, the only `toMap` here), and
+// `PinCreateResult` (the create response wrapper). The write path is reached
+// through the `core` `PinWriter` port (`core/network/pin_writer.dart`), not by
+// `features/chat` importing `features/pins`.
 
 class PinSummary {
   const PinSummary({
@@ -72,4 +77,83 @@ class PinDetail {
 List<String> _stringList(dynamic value) {
   if (value == null) return const [];
   return (value as List<dynamic>).map((e) => e as String).toList();
+}
+
+/// Proposed name + best-matching existing topic for a message, from
+/// `POST /api/v1/pins/suggest`. Writes nothing on the backend.
+///
+/// `aliases` and `topic_ref` are intentionally ignored: the confirm dialog
+/// edits only name + topic, and the client sends back `topic_label`, not the
+/// ref (proposal 046 §Solution Design).
+class PinSuggestion {
+  const PinSuggestion({required this.name, this.topicLabel});
+
+  final String name;
+
+  /// Canonical name of a matching existing topic, or null/empty when the
+  /// backend found none similar enough.
+  final String? topicLabel;
+
+  factory PinSuggestion.fromMap(Map<String, dynamic> map) {
+    return PinSuggestion(
+      name: map['name'] as String? ?? '',
+      topicLabel: map['topic_label'] as String?,
+    );
+  }
+}
+
+/// Body for `POST /api/v1/pins` — pins a specific chat message by identity.
+///
+/// The client never sends pin content: the backend copies the verbatim body
+/// server-side from `(conversation_id, event_id)`. `topic_label` is omitted
+/// when null/empty to match the backend `omitempty`; `aliases` is out of scope
+/// for V1 and never sent.
+class PinCreateRequest {
+  const PinCreateRequest({
+    required this.conversationId,
+    required this.eventId,
+    required this.name,
+    this.topicLabel,
+  });
+
+  final String conversationId;
+  final String eventId;
+  final String name;
+  final String? topicLabel;
+
+  Map<String, dynamic> toMap() {
+    final map = <String, dynamic>{
+      'conversation_id': conversationId,
+      'event_id': eventId,
+      'name': name,
+    };
+    final topic = topicLabel;
+    if (topic != null && topic.isNotEmpty) {
+      map['topic_label'] = topic;
+    }
+    return map;
+  }
+}
+
+/// Result of `POST /api/v1/pins`: the created (or re-pinned) [PinDetail] plus
+/// idempotency metadata. `created` is false on an idempotent re-pin;
+/// `supersededRecordId` names a prior same-name pin that was replaced, or "".
+class PinCreateResult {
+  const PinCreateResult({
+    required this.pin,
+    required this.created,
+    this.supersededRecordId = '',
+  });
+
+  final PinDetail pin;
+  final bool created;
+  final String supersededRecordId;
+
+  factory PinCreateResult.fromMap(Map<String, dynamic> map) {
+    return PinCreateResult(
+      pin: PinDetail.fromMap(map['pin'] as Map<String, dynamic>),
+      created: map['created'] as bool? ?? false,
+      supersededRecordId: map['superseded_record_id'] as String? ?? '',
+    );
+  }
 }

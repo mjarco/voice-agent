@@ -25,6 +25,7 @@ import 'package:voice_agent/core/background/workmanager_core_boot.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/notifications/data/local_notification_service.dart';
 import 'package:voice_agent/core/notifications/notification_providers.dart';
+import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
@@ -32,6 +33,7 @@ import 'package:voice_agent/core/session_control/toaster.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
+import 'package:voice_agent/features/pins/data/api_pin_writer.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 /// Optional hook for the dev flavor to wire telemetry between the
@@ -111,6 +113,9 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
         appConfigServiceProvider.overrideWithValue(core.configService),
         apiClientProvider.overrideWithValue(core.api),
         notificationServiceProvider.overrideWithValue(core.notifications),
+
+        // Pins write path (P046): core PinWriter port, feature-owned adapter.
+        pinWriterProvider.overrideWithValue(ApiPinWriter(core.api)),
 
         // Agenda feature wiring — same instance as the bg isolate will use.
         agendaRepositoryProvider.overrideWithValue(agenda.repository),
