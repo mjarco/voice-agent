@@ -35,6 +35,14 @@ This file covers only what is specific to this project.
 
 These rules are non-negotiable. Every change must respect them.
 
+### Escalation triggers (this project)
+
+The workspace escalation list (costly-to-reverse work -> design note + ADR +
+deep review) maps here to: sync-queue semantics, transcript durability,
+database migrations with data-loss risk, microphone/audio-session ownership,
+background execution behavior, navigation shell restructure, the permission
+model, and personal-agent API contract changes.
+
 ### Dependency Rule
 
 ```
