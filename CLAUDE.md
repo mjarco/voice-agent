@@ -12,11 +12,36 @@ user's own API endpoint.
 **State management**: Riverpod (manual providers, no codegen).
 **Navigation**: GoRouter with StatefulShellRoute.
 
+## Workflow
+
+The development workflow — GitHub-issue ledger, derived states, the three
+owner gates, branch/PR/merge rules, ADR rules, frozen proposals — is defined
+once for all projects in the workspace root CLAUDE.md (one directory up).
+This file covers only what is specific to this project.
+
+### Docs Map
+
+- `docs/proposals/` — a **frozen, read-only design-history library**. Consult
+  it for context (`trove search` works); never add or edit files there. Citing
+  proposal numbers (`Pnnn`, `0nn`) in code comments, PRs, and docs is fine.
+- `docs/decisions/` — ADRs (see Architecture Decision Records below).
+- `docs/manual-tests/` — device verification runbooks (see Manual Test Plans).
+- `docs/spikes/` — exploratory notes.
+- `docs/observability.md` — dev telemetry reference.
+
 ---
 
 ## Architecture Rules — MANDATORY
 
 These rules are non-negotiable. Every change must respect them.
+
+### Escalation triggers (this project)
+
+The workspace escalation list (costly-to-reverse work -> design note + ADR +
+deep review) maps here to: sync-queue semantics, transcript durability,
+database migrations with data-loss risk, microphone/audio-session ownership,
+background execution behavior, navigation shell restructure, the permission
+model, and personal-agent API contract changes.
 
 ### Dependency Rule
 
@@ -92,157 +117,35 @@ lib/
 
 ### Architecture Decision Records (ADRs)
 
-Architectural decisions are tracked in `docs/decisions/` as ADR files. The `/proposal-architectural-review` skill checks proposals against existing ADRs and drafts new ADRs for undocumented decisions.
+Architectural decisions are tracked in `docs/decisions/` as ADR files.
 
-- ADR naming: `ADR-{NNN}-{short-description}.md`
-- ADRs are committed alongside the proposal they originate from (Phase B)
-- When modifying code, check relevant ADRs for constraints
+- ADR naming: `ADR-<CAT>-<NNN>-<short-description>.md`, where `<CAT>` is a
+  category prefix (`ARCH`, `AUDIO`, `DATA`, `NET`, `NOTIF`, `OBS`, `PLATFORM`).
+- New ADRs merge in the same PR as the change they justify and are born
+  Accepted; supersede rather than edit.
+- When modifying code, check relevant ADRs for constraints.
 
 ---
 
-## Development Workflow
-
-Use proposals as the default tracking and research artifact for feature work,
-behavior changes, and substantial refactors. Keep the process proportional to
-risk: design before code, but do not spend full review budget on local or
-behavior-preserving work.
-
-### Proposal Usage
-
-- Lightweight proposal: problem, research notes, scope, approach, tasks, acceptance criteria, verification.
-- Full proposal: use `/create-proposal` when the change affects architecture, routing, storage, sync contracts, platform/audio behavior, API integration, or multiple feature areas.
-- No proposal: truly tiny docs/test/formatting fixes where the PR itself is sufficient history.
-
-### Review Stop Rule
-
-Proposal review is a gate, not a loop.
-
-- If the latest proposal review has no P0, P1, or P2 findings, stop proposal review. Do not run another reviewer just for confidence.
-- P3/nits may be fixed opportunistically or left to implementer judgment without re-review.
-- If P0/P1 findings are fixed, re-review only the changed proposal sections or run one fresh review if the design changed materially.
-- If P2 findings are fixed or explicitly accepted as known trade-offs, re-review only when the fix changes contracts, tasks, acceptance criteria, or architectural decisions.
-- Do not run both `/proposal-review` and `/claude-review` for the same purpose; `/claude-review` is the Claude-backed way to run proposal review.
-
-### Risk Tiers
-
-**Tier 0: mechanical, docs, tests, and behavior-preserving refactors**
-
-- Use a lightweight proposal when the work is worth tracking or researching; otherwise use a short PR description or local note.
-- Run targeted tests plus `make verify` when feasible.
-- Request `/review-pr` only when the diff is non-trivial, production-facing, platform-sensitive, or easy to misread.
-- Do not run ADR or implementation reviews.
-- Run proposal review only when the proposal records a non-obvious design/research decision.
-
-**Tier 1: small local behavior change**
-
-Examples: UI-only change, single-feature behavior tweak, small settings/storage
-extension following an existing pattern.
-
-- Write a lightweight proposal for tracking and research.
-- Run one primary proposal review (`/proposal-review` or `/claude-review`).
-- Run `/codex-review` only when an independent second opinion is likely to change the design.
-- Follow the Review Stop Rule: no P0/P1/P2 means no further proposal review.
-- No architectural review unless the change triggers the criteria below.
-
-**Tier 2: normal feature, API integration, storage, navigation, or platform behavior change**
-
-- Create a full proposal in `docs/proposals/` using `/create-proposal`.
-- Run one primary proposal review and fix all P0/P1 findings before implementation.
-- Fix P2 findings or document them as accepted trade-offs before implementation.
-- Run one independent second-opinion review (`/codex-review` or `/claude-review`) when the change touches multiple features/layers, storage schema, API sync contracts, navigation structure, platform audio behavior, permissions, or production integration.
-- Follow the Review Stop Rule; re-run reviewers only after substantial proposal rewrites, not after minor wording fixes.
-- Run `/proposal-architectural-review` only when the change affects layered architecture, feature boundaries, storage ownership, cross-feature state, routing structure, platform integration patterns, or introduces/amends an ADR.
-- If architectural review creates or updates ADRs, wait for explicit user approval before implementing.
-
-**Tier 3: high-risk mobile architecture, data, or platform change**
-
-Examples: sync queue semantics, transcript durability, database migration with
-data-loss risk, microphone/session ownership, background behavior, navigation
-shell restructure, permission model, or personal-agent API contract changes.
-
-- Use the full Tier 2 flow.
-- Require both a primary proposal review and an independent second-opinion review.
-- Run `/proposal-architectural-review`.
-- Re-review after architectural fixes if they changed proposal contracts, tasks, or acceptance criteria.
-- Run `/proposal-implementation-review <proposal-path>` before marking the proposal implemented.
-
-### Proposal and ADR Commit
-
-When a proposal exists, it must be merged to `main` before any implementation
-begins. For Tier 2/3 work, ADR changes follow the same flow:
-
-- The proposal document (`docs/proposals/`)
-- All new ADR files (`docs/decisions/`)
-- All updates to existing ADR files (`docs/decisions/`)
-
-Workflow:
-
-1. Create a branch (e.g. `<NNN>/proposal`).
-2. Commit the proposal + ADR changes on that branch.
-3. Push and open a PR.
-4. Merge to `main` after approval.
-5. Only then create a new branch from `main` for implementation
-   (`feat/<short-description>` or similar — see Branch Naming).
-
-The proposal is the contract: it must be on `main` before implementation
-references it. Implementation PRs reference a stable, merged proposal — not one
-in flight on a feature branch.
-
-### Implementation
-
-Every change still goes through a branch and PR; see Git Conventions below.
-Proposal tasks may be grouped into one PR when the grouped diff is coherent,
-behavior-preserving, and keeps `make verify` green.
-
-1. Create a branch from `main` before editing.
-2. Implement the changes.
-3. Run `make verify`; all checks must pass unless the change is docs-only.
-4. Commit and push, then create a PR. Reference the proposal or issue when one exists.
-5. Run `/review-pr` for Tier 2/3 work, non-trivial Tier 1 work, and any production hotfix after the immediate fix is safe.
-6. Fix all blocker findings before merge.
-7. Merge the PR to `main`.
-
-Implement approved proposals end-to-end autonomously. Avoid commands that require
-human interaction: use non-interactive flags, temp files for multiline content,
-and `gh pr merge --auto` or direct merge when appropriate.
-
-### Hotfix Lane
-
-For production or device-blocking incidents, prioritize the smallest safe fix:
-
-1. Diagnose and patch the immediate failure.
-2. Run the narrowest reliable verification plus broader checks when time allows.
-3. Ship or merge if needed.
-4. After stable, add proposal/ADR/review follow-up only if the fix introduced new intended behavior or an architectural decision.
-
-### Close Out
-
-After Tier 2/3 proposal work is merged, run `/proposal-implementation-review`
-only when the proposal had multiple PRs, changed contracts/invariants, or carried
-high data/architecture/platform risk. Update proposal status to `Implemented`
-after required review gates pass.
-
-### Before Writing Code
-
-1. **Read the relevant proposal** in `docs/proposals/` to understand the design intent.
-2. **Read existing code** in the area you're modifying. Understand patterns before changing them.
-
-### Writing Code
-
-1. Start with domain types/interfaces if they don't exist yet.
-2. Write the data implementation that implements the interface.
-3. Write the controller (StateNotifier) that orchestrates the domain logic.
-4. Write the screen (ConsumerWidget/ConsumerStatefulWidget) that renders state.
-5. Add Riverpod providers and register routes in `router.dart`.
-
-### After Writing Code — Mandatory Checks
+## Verification Gates
 
 ```bash
 make verify        # Runs analyze + test
 ```
 
-`make verify` must pass before any commit or PR. Use `make analyze` or
-`make test` only when you need a narrower diagnostic command.
+`make verify` must pass before any commit or PR (docs-only changes excepted).
+Use `make analyze` or `make test` only when you need a narrower diagnostic
+command.
+
+Before committing, also verify:
+
+- Architecture dependency rule is respected (no cross-feature imports)
+- New code has tests
+- No hardcoded secrets, tokens, or credentials
+- No TODO without a linked issue
+- No debugging artifacts (`print()`, `debugPrint()`)
+- Version bumped in `pubspec.yaml` per **Versioning & Releases** (skip only for
+  docs/test/CI-only changes)
 
 ---
 
@@ -289,11 +192,15 @@ test/
 - Flutter framework internals (MaterialApp renders, Navigator works).
 - Trivial getters on model classes.
 - Platform behavior that can only be verified on a physical device (mark those
-  acceptance criteria as "manual verification" in proposals).
+  acceptance criteria as requiring manual verification and cover them in a
+  manual test plan — see below).
 
-### Manual Test Plans
+---
 
-When a proposal contains contracts that can only be verified on a physical
+## Manual Test Plans
+
+Physical devices are the only verifier for audio and notification contracts.
+When a change ships contracts that can only be verified on a physical
 device — push/local notification delivery, BGTask / WorkManager scheduling,
 permission prompts, deep-link routing, audio session ownership, OEM-specific
 Android behavior, hardware media buttons — write a **manual test plan**
@@ -301,10 +208,13 @@ that captures the verification cold so anyone can run it without archaeology.
 
 **Location and naming**
 
-- One file per proposal slice that needs device verification.
-- Path: `docs/manual-tests/p{NNN}-{short-description}.md`
-- Reference it from the proposal's Status block once the proposal is marked
-  Implemented but device verification is still pending.
+- One file per work slice that needs device verification.
+- Path: `docs/manual-tests/<slug>.md`. Existing plans are named after the
+  design doc that introduced them (`p{NNN}-{short-description}.md`); name new
+  plans after the issue or feature slice.
+- Reference the plan from the PR that ships the change. Work whose device-only
+  contracts are unverified stays marked "device verification pending" until
+  every must-pass case in its plan is `passed`.
 
 **Required structure**
 
@@ -312,9 +222,9 @@ Mirror the existing templates ([`p040-agenda-notifications.md`](docs/manual-test
 [`p039-t5b-handsfree-telemetry.md`](docs/manual-tests/p039-t5b-handsfree-telemetry.md))
 so readers can pick up any plan without re-learning the format.
 
-1. **Header block** — proposal link, **Overall status** (`pending` /
-   `in-progress` / `passed` / `failed`), "Why now", time budget, "What we
-   are testing".
+1. **Header block** — link to the design doc or issue, **Overall status**
+   (`pending` / `in-progress` / `passed` / `failed`), "Why now", time budget,
+   "What we are testing".
 2. **Status legend** — define the per-step status vocabulary (see below).
    Newer plans link to the canonical legend in `p040-agenda-notifications.md`
    rather than copying it.
@@ -324,9 +234,9 @@ so readers can pick up any plan without re-learning the format.
 5. **Test cases** — `T1`, `T2`, … each with:
    - **Status:** marker (see legend).
    - **Do:** numbered steps the runner executes verbatim.
-   - **Why:** which proposal/ADR contract this case actually verifies.
-     Without this, future readers will skip the case without realising what
-     they're skipping.
+   - **Why:** which contract (ADR, design doc, or issue) this case actually
+     verifies. Without this, future readers will skip the case without
+     realising what they're skipping.
    - **Expected:** the concrete observable outcome. Reference specific
      log lines, OS UI elements, or `pendingNotificationRequests()` counts —
      not vague "should work".
@@ -351,12 +261,12 @@ Update statuses **in-place during execution** and commit when the plan is
 fully run. Avoid re-running silently — the on-disk record is the source of
 truth for whether a contract has been verified.
 
-**When the proposal can drop the verification disclaimer**
+**When the verification disclaimer can be dropped**
 
-A proposal marked `Implemented (manual device verification pending)`
-becomes fully `Implemented` once every must-pass case in its manual plan
-is `passed`. OEM-conditional failures get documented in the proposal's
-§Risks rather than re-opening the proposal status.
+Work marked "Implemented (manual device verification pending)" becomes fully
+verified once every must-pass case in its manual plan is `passed`.
+OEM-conditional failures get documented as known limitations rather than
+re-opening the work.
 
 **When NOT to write a manual test plan**
 
@@ -364,98 +274,9 @@ is `passed`. OEM-conditional failures get documented in the proposal's
 - Behavior-preserving refactors (no new device contract introduced).
 - Docs / config / build changes that don't touch runtime behavior.
 
-If a Tier 2/3 proposal has *zero* device-only contracts, say so explicitly
-in the proposal's §Test Impact rather than leaving the reader wondering
-whether the plan was forgotten.
-
----
-
-## Git Conventions
-
-### Avoid Heredocs in Shell Commands
-
-**Never use heredocs (`<<EOF`, `<<'EOF'`) in `gh` or `git` commands.**
-They cause quoting issues, break in some shells, and are hard to debug.
-Instead, use the `-F` flag with a temp file, or pass short strings directly
-with `--body "..."` / `-m "..."`.
-
-```bash
-# BAD — heredoc
-gh pr create --body "$(cat <<'EOF'
-...
-EOF
-)"
-
-# GOOD — temp file
-echo "PR body here" > /tmp/pr-body.md
-gh pr create --body-file /tmp/pr-body.md
-
-# GOOD — short inline string
-gh pr create --body "Summary of changes"
-```
-
-### The Golden Rule — Never Push Directly to `main`
-
-**Every change goes through a branch and a PR. No exceptions. This includes
-documentation fixes, config changes, one-line edits, and wiring changes.**
-
-```bash
-# Before starting any work — always:
-git checkout -b feat/my-feature   # or fix/, docs/, chore/, refactor/
-
-# After make verify passes:
-git push -u origin feat/my-feature
-gh pr create --title "..." --body "..."
-```
-
-`main` is the integration branch. Direct pushes to `main` are **forbidden**.
-The only commits that land on `main` are merged PRs.
-
-**This rule applies to Claude Code unconditionally.**
-- Never use `git commit` on `main`.
-- Never use `git push` on `main`.
-- If already on `main` with uncommitted changes: create a branch first, then commit.
-- If already on `main` with committed-but-unpushed changes: create a branch,
-  cherry-pick or reset main, push the branch, open a PR.
-- Always create a branch at the start of any task, before writing the first line of code.
-
-### Branch Naming
-
-```
-feat/<short-description>     # New feature
-fix/<short-description>      # Bug fix
-refactor/<short-description> # Refactoring
-docs/<short-description>     # Documentation
-chore/<short-description>    # Build, CI, tooling
-```
-
-### Commit Messages
-
-Use conventional commits:
-
-```
-feat(recording): add RecordingService with 16kHz WAV capture
-
-Implements the RecordingService interface and RecordingServiceImpl
-using the record package. Configures AudioEncoder.wav at 16kHz mono.
-```
-
-Format: `type(scope): description`
-
-Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `ci`
-Scope: feature or layer name (e.g., `recording`, `core/storage`, `app`)
-
-### PR Checklist
-
-Before requesting review, verify:
-
-- [ ] `make verify` passes
-- [ ] Architecture dependency rule is respected (no cross-feature imports)
-- [ ] New code has tests
-- [ ] No hardcoded secrets, tokens, or credentials
-- [ ] No TODO without a linked issue
-- [ ] No debugging artifacts (`print()`, `debugPrint()`)
-- [ ] Version bumped in `pubspec.yaml` per **Versioning & Releases** (skip only for docs/test/CI-only changes)
+If a device-adjacent change has *zero* device-only contracts, say so
+explicitly in the PR rather than leaving the reader wondering whether the
+plan was forgotten.
 
 ---
 
@@ -516,12 +337,13 @@ git push origin v1.1.0
 One tag per `MAJOR.MINOR.PATCH`; the BUILD number is not tagged. If several
 device builds share a version, only the version is tagged.
 
-### Versions vs. proposals
+### Versions vs. design docs
 
-Proposal numbers (`Pnnn`, `0nn`) track *design*; the version tracks the
-*shipped app*. They are not 1:1 — a single release may land several proposals,
-and a proposal may ship across several releases. Reference proposals in the
-commit/PR; reference the version in the tag.
+Design-doc numbers (`Pnnn`, `0nn`, from the frozen `docs/proposals/` library)
+track *design*; the version tracks the *shipped app*. They are not 1:1 — a
+single release may land several design slices, and one design may ship across
+several releases. Reference the design doc or issue in the commit/PR;
+reference the version in the tag.
 
 ### Building a release
 
@@ -532,6 +354,18 @@ currently declares and installs it on the connected device. Bump the version
 ---
 
 ## Coding Conventions
+
+### Feature Implementation Order
+
+Before changing an area, read the existing code (and any related design docs
+in the frozen `docs/proposals/` library). Understand patterns before changing
+them. Then build in this order:
+
+1. Start with domain types/interfaces if they don't exist yet.
+2. Write the data implementation that implements the interface.
+3. Write the controller (StateNotifier) that orchestrates the domain logic.
+4. Write the screen (ConsumerWidget/ConsumerStatefulWidget) that renders state.
+5. Add Riverpod providers and register routes in `router.dart`.
 
 ### State Management
 
@@ -565,9 +399,9 @@ All navigation uses GoRouter:
 - The shell uses `StatefulShellRoute.indexedStack` with 5 tabs (Agenda, Plan, Record, Routines, Chat).
 - Child routes (e.g., `/record/history`) stay within their branch.
 - Navigation arguments pass via GoRouter `extra` parameter.
-- P020 established the 5-branch route structure. Feature proposals (P021–P024)
-  **replace placeholder screens** in existing routes — they do not add new
-  top-level routes.
+- P020 established the 5-branch route structure. Feature work (P021–P024)
+  **replaced placeholder screens** in existing routes — new features do not
+  add new top-level routes.
 - Infrequently accessed screens (e.g., Settings) are top-level GoRoutes outside
   the shell. Navigate to them with `context.push()` (not `context.go()`) to
   preserve shell state.
@@ -613,16 +447,55 @@ class SttException implements Exception {
 - Don't create `constants.dart` — put constants with the types they relate to.
 - Feature directory structure: `data/`, `domain/`, `presentation/`.
 
+### Commit Messages
+
+Use conventional commits:
+
+```
+feat(recording): add RecordingService with 16kHz WAV capture
+
+Implements the RecordingService interface and RecordingServiceImpl
+using the record package. Configures AudioEncoder.wav at 16kHz mono.
+```
+
+Format: `type(scope): description`
+
+Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `ci`
+Scope: feature or layer name (e.g., `recording`, `core/storage`, `app`)
+
+### Tool Gotcha: Avoid Heredocs in gh/git Commands
+
+**Never use heredocs (`<<EOF`, `<<'EOF'`) in `gh` or `git` commands.**
+They cause quoting issues, break in some shells, and are hard to debug.
+Instead, use the `--body-file` / `-F` flag with a temp file, or pass short
+strings directly with `--body "..."` / `-m "..."`.
+
+```bash
+# BAD — heredoc
+gh pr create --body "$(cat <<'EOF'
+...
+EOF
+)"
+
+# GOOD — temp file
+echo "PR body here" > /tmp/pr-body.md
+gh pr create --body-file /tmp/pr-body.md
+
+# GOOD — short inline string
+gh pr create --body "Summary of changes"
+```
+
 ---
 
-## Cross-Proposal Contracts
+## Cross-Feature Contracts
 
-These are the key integration points between proposals. When modifying code near
+These are the key integration points between features. The numbers cite the
+frozen design-history library in `docs/proposals/`. When modifying code near
 these boundaries, verify both sides match.
 
 ### Audio Format Contract (001 → 002)
 
-Proposal 001 produces WAV files. Proposal 002 consumes them.
+Design 001 produces WAV files. Design 002 consumes them.
 
 | Setting | Value | Owner |
 |---------|-------|-------|
@@ -680,8 +553,8 @@ StorageService {
 
 ### Route Ownership (008, 020 → 001, 006, 007, 021–024)
 
-P020 restructured the shell to 5 branches. Feature proposals replace
-placeholder screens within this structure — they do not add routes.
+P020 restructured the shell to 5 branches. Feature work replaces placeholder
+screens within this structure — it does not add routes.
 
 | Route | Owner | Content owner |
 |-------|-------|---------------|
@@ -699,7 +572,7 @@ placeholder screens within this structure — they do not add routes.
 
 ### Stub Provider Pattern (005, 008 → 006)
 
-Two proposals define stub providers that 006 replaces:
+Two design slices defined stub providers that 006 replaced:
 
 | Stub | Defined by | Returns | Replaced by 006 with |
 |------|-----------|---------|---------------------|

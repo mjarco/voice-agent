@@ -1,5 +1,14 @@
 # P000: Backlog
 
+> **FROZEN (2026-07-11).** This backlog is closed and read-only, like the rest
+> of `docs/proposals/`. Do not add or edit items — new work is tracked as
+> GitHub issues on `mjarco/voice-agent` per the workspace workflow.
+> Export outcome: the one still-open item (VAD hangover tuning, promoted to
+> the never-implemented draft 031) was exported as issue
+> [#341](https://github.com/mjarco/voice-agent/issues/341). All other items
+> shipped: 029, 030, and 032 are Implemented; 033 is implemented on the
+> voice-agent side and waits only on a personal-agent aggregation endpoint.
+
 Known issues and design gaps that don't yet warrant a standalone proposal. Each item should be resolved in the context of the slice where it becomes concrete.
 
 Cross-project items reference `personal-agent/docs/proposals/P000-backlog.md` where backend work must land together.

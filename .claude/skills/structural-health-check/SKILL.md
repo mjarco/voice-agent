@@ -23,7 +23,7 @@ and split this class first?"
 - When a constructor takes ≥7 injected dependencies (services/repositories)
 
 **Recommended:**
-- As part of `/proposal-review` — check target classes the proposal will modify
+- During analysis/planning — check target classes the planned change will modify
 - Before creating a PR that significantly grows a single class
 - When you notice a class doing "one more thing" beyond its original scope
 
@@ -143,8 +143,8 @@ When the verdict is not all-green, provide a concrete split plan:
 
 ## Integration Points
 
-- **During `/proposal-review`**: reviewer should run this check on any class the
-  proposal adds ≥2 methods to.
+- **During analysis/planning**: run this check on any class the planned change
+  adds ≥2 methods to.
 - **During `/review-pr`**: if the PR grows a single class by ≥3 methods or ≥100 LOC,
   flag it and run this check.
 
