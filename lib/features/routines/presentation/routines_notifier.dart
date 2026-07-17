@@ -91,10 +91,13 @@ class RoutinesNotifier extends StateNotifier<RoutinesState> {
     }
   }
 
-  Future<bool> approveProposal(String proposalId) async {
+  Future<bool> approveProposal(
+    String proposalId, {
+    RoutineProposalOverrides? overrides,
+  }) async {
     lastActionError = null;
     try {
-      await _repository.approveProposal(proposalId);
+      await _repository.approveProposal(proposalId, overrides: overrides);
       await loadRoutines();
       return true;
     } on RoutinesException catch (e) {

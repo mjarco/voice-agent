@@ -75,9 +75,15 @@ class _MockRepository implements RoutinesRepository {
   ) async =>
       throw UnimplementedError();
 
+  RoutineProposalOverrides? lastApproveOverrides;
+
   @override
-  Future<void> approveProposal(String proposalId) async {
+  Future<void> approveProposal(
+    String proposalId, {
+    RoutineProposalOverrides? overrides,
+  }) async {
     lastApproveId = proposalId;
+    lastApproveOverrides = overrides;
     if (actionError != null) throw actionError!;
   }
 
@@ -300,6 +306,24 @@ void main() {
       expect(repo.lastApproveId, 'prop-1');
       expect(repo.fetchRoutinesCount, 1);
       expect(repo.fetchProposalsCount, 1);
+    });
+
+    test('approveProposal forwards overrides to the repository', () async {
+      final notifier = RoutinesNotifier(repo);
+      await Future<void>.delayed(Duration.zero);
+
+      final result = await notifier.approveProposal(
+        'prop-1',
+        overrides: const RoutineProposalOverrides(
+          name: 'Evening meds',
+          startTime: '20:00',
+        ),
+      );
+
+      expect(result, isTrue);
+      expect(repo.lastApproveId, 'prop-1');
+      expect(repo.lastApproveOverrides?.name, 'Evening meds');
+      expect(repo.lastApproveOverrides?.startTime, '20:00');
     });
 
     test('approveProposal returns false on failure', () async {
