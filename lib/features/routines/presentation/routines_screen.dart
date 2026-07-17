@@ -127,6 +127,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
                   ),
                   ...proposals.map((p) => _ProposalCard(
                         proposal: p,
+                        isBusy: _busyIds.contains(p.id),
                         onApprove: () => _handleApprove(p.id),
                         onEdit: () => _handleEditApprove(p),
                         onReject: () => _handleReject(p.id),
@@ -226,9 +227,15 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
     }
   }
 
-  Future<void> _handleApprove(String proposalId) async {
+  Future<void> _handleApprove(
+    String proposalId, {
+    RoutineProposalOverrides? overrides,
+  }) async {
+    setState(() => _busyIds.add(proposalId));
     final notifier = ref.read(routinesNotifierProvider.notifier);
-    final success = await notifier.approveProposal(proposalId);
+    final success =
+        await notifier.approveProposal(proposalId, overrides: overrides);
+    if (mounted) setState(() => _busyIds.remove(proposalId));
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -244,19 +251,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
       builder: (ctx) => _ProposalEditDialog(proposal: proposal),
     );
     if (overrides == null || !mounted) return;
-
-    final notifier = ref.read(routinesNotifierProvider.notifier);
-    final success = await notifier.approveProposal(
-      proposal.id,
-      overrides: overrides.isEmpty ? null : overrides,
-    );
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-                Text(notifier.lastActionError ?? 'Failed to approve')),
-      );
-    }
+    await _handleApprove(proposal.id, overrides: overrides);
   }
 
   Future<void> _handleReject(String proposalId) async {
@@ -279,10 +274,12 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
+    setState(() => _busyIds.add(proposalId));
     final notifier = ref.read(routinesNotifierProvider.notifier);
     final success = await notifier.rejectProposal(proposalId);
+    if (mounted) setState(() => _busyIds.remove(proposalId));
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -321,11 +318,13 @@ class _SectionHeader extends StatelessWidget {
 class _ProposalCard extends StatelessWidget {
   const _ProposalCard({
     required this.proposal,
+    required this.isBusy,
     required this.onApprove,
     required this.onEdit,
     required this.onReject,
   });
   final RoutineProposal proposal;
+  final bool isBusy;
   final VoidCallback onApprove;
   final VoidCallback onEdit;
   final VoidCallback onReject;
@@ -370,21 +369,23 @@ class _ProposalCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(
+                // Icon, not a labeled button: three labeled buttons overflow
+                // the card on 320dp-wide devices.
+                IconButton(
                   key: Key('proposal-edit-${proposal.id}'),
-                  onPressed: onEdit,
-                  child: const Text('Edit'),
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: 'Edit & approve',
+                  onPressed: isBusy ? null : onEdit,
                 ),
-                const SizedBox(width: 8),
                 TextButton(
                   key: Key('proposal-reject-${proposal.id}'),
-                  onPressed: onReject,
+                  onPressed: isBusy ? null : onReject,
                   child: const Text('Reject'),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   key: Key('proposal-approve-${proposal.id}'),
-                  onPressed: onApprove,
+                  onPressed: isBusy ? null : onApprove,
                   child: const Text('Approve'),
                 ),
               ],
@@ -430,22 +431,29 @@ class _ProposalEditDialogState extends State<_ProposalEditDialog> {
   void _submit() {
     final name = _nameController.text.trim();
     final startTime = _startTimeController.text.trim();
+    final originalName = widget.proposal.name.trim();
+    final originalStart = (widget.proposal.startTime ?? '').trim();
+    final startChanged = startTime != originalStart;
     setState(() {
       _nameError = name.isEmpty ? 'Name is required' : null;
-      _startTimeError =
-          startTime.isNotEmpty && !_startTimePattern.hasMatch(startTime)
-              ? 'Use 24h HH:MM'
-              : null;
+      // Only a time the user actually changed is validated (and sent) — an
+      // unchanged pre-filled value is omitted, so a malformed extracted time
+      // must not block approving an unrelated edit.
+      _startTimeError = startChanged &&
+              startTime.isNotEmpty &&
+              !_startTimePattern.hasMatch(startTime)
+          ? 'Use 24h HH:MM'
+          : null;
     });
     if (_nameError != null || _startTimeError != null) return;
 
-    // An unchanged or cleared field is omitted so the backend keeps the
-    // proposal's own value.
+    // Unchanged fields are omitted so the backend keeps the proposal's own
+    // value; clearing a previously-set time sends an explicit null.
     Navigator.of(context).pop(RoutineProposalOverrides(
-      name: name == widget.proposal.name ? null : name,
-      startTime: startTime.isEmpty || startTime == widget.proposal.startTime
-          ? null
-          : startTime,
+      name: name == originalName ? null : name,
+      startTime: startChanged && startTime.isNotEmpty ? startTime : null,
+      clearStartTime:
+          startChanged && startTime.isEmpty && originalStart.isNotEmpty,
     ));
   }
 
@@ -466,6 +474,9 @@ class _ProposalEditDialogState extends State<_ProposalEditDialog> {
             ),
           ),
           const SizedBox(height: 16),
+          // A text field rather than showTimePicker: clearing the field is a
+          // meaningful input (remove the reminder time), which a picker
+          // cannot express.
           TextField(
             key: const Key('proposal-edit-start-time-field'),
             controller: _startTimeController,

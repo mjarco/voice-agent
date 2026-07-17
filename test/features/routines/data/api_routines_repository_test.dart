@@ -290,6 +290,14 @@ void main() {
       );
       expect(client.lastPostData, isNull);
     });
+
+    test('sends explicit null start_time when clearing', () async {
+      await repo.approveProposal(
+        'prop-1',
+        overrides: const RoutineProposalOverrides(clearStartTime: true),
+      );
+      expect(client.lastPostData, {'start_time': null});
+    });
   });
 
   group('rejectProposal', () {
