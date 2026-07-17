@@ -54,8 +54,17 @@ class _StubRepository implements RoutinesRepository {
     OccurrenceStatus status,
   ) async {}
 
+  String? lastApproveId;
+  RoutineProposalOverrides? lastApproveOverrides;
+
   @override
-  Future<void> approveProposal(String proposalId) async {}
+  Future<void> approveProposal(
+    String proposalId, {
+    RoutineProposalOverrides? overrides,
+  }) async {
+    lastApproveId = proposalId;
+    lastApproveOverrides = overrides;
+  }
 
   @override
   Future<void> rejectProposal(String proposalId) async {}
@@ -321,6 +330,75 @@ void main() {
       expect(find.text('Reject proposal?'), findsNothing);
     });
 
+    testWidgets('edit opens dialog and approves with overrides',
+        (tester) async {
+      final repo = _StubRepository(
+        proposals: [_sampleProposal()],
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit & approve'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('proposal-edit-name-field')),
+        'Weekly review (edited)',
+      );
+      await tester.enterText(
+        find.byKey(const Key('proposal-edit-start-time-field')),
+        '08:30',
+      );
+      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
+      await tester.pumpAndSettle();
+
+      expect(repo.lastApproveId, 'prop-1');
+      expect(repo.lastApproveOverrides?.name, 'Weekly review (edited)');
+      expect(repo.lastApproveOverrides?.startTime, '08:30');
+    });
+
+    testWidgets('edit dialog with no changes approves without overrides',
+        (tester) async {
+      final repo = _StubRepository(
+        proposals: [_sampleProposal()],
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
+      await tester.pumpAndSettle();
+
+      expect(repo.lastApproveId, 'prop-1');
+      expect(repo.lastApproveOverrides, isNull);
+    });
+
+    testWidgets('edit dialog rejects an invalid start time', (tester) async {
+      final repo = _StubRepository(
+        proposals: [_sampleProposal()],
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('proposal-edit-start-time-field')),
+        '25:99',
+      );
+      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Use 24h HH:MM'), findsOneWidget);
+      expect(find.text('Edit & approve'), findsOneWidget);
+      expect(repo.lastApproveId, isNull);
+    });
+
     testWidgets('error state shows retry button', (tester) async {
       await _pumpScreen(tester, repository: _FailingRepository());
 
@@ -420,7 +498,10 @@ class _FailingRepository implements RoutinesRepository {
   ) async {}
 
   @override
-  Future<void> approveProposal(String proposalId) async {}
+  Future<void> approveProposal(
+    String proposalId, {
+    RoutineProposalOverrides? overrides,
+  }) async {}
 
   @override
   Future<void> rejectProposal(String proposalId) async {}

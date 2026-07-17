@@ -283,6 +283,35 @@ class RoutineProposal {
   }
 }
 
+/// Optional overrides sent as the approve-as-routine body. Only fields the
+/// user actually changed are included; an omitted field keeps the proposal's
+/// own value on the backend.
+class RoutineProposalOverrides {
+  const RoutineProposalOverrides({
+    this.name,
+    this.startTime,
+    this.rrule,
+    this.items,
+  });
+
+  final String? name;
+  final String? startTime;
+  final String? rrule;
+  final List<RoutineProposalItem>? items;
+
+  bool get isEmpty =>
+      name == null && startTime == null && rrule == null && items == null;
+
+  Map<String, dynamic> toMap() {
+    return {
+      if (name != null) 'name': name,
+      if (startTime != null) 'start_time': startTime,
+      if (rrule != null) 'rrule': rrule,
+      if (items != null) 'items': items!.map((i) => i.toMap()).toList(),
+    };
+  }
+}
+
 class RoutineProposalItem {
   const RoutineProposalItem({
     required this.text,

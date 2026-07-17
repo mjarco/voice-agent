@@ -65,7 +65,10 @@ class _StubRepository implements RoutinesRepository {
   ) async {}
 
   @override
-  Future<void> approveProposal(String proposalId) async {}
+  Future<void> approveProposal(
+    String proposalId, {
+    RoutineProposalOverrides? overrides,
+  }) async {}
 
   @override
   Future<void> rejectProposal(String proposalId) async {}

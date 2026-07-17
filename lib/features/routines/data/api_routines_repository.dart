@@ -77,9 +77,14 @@ class ApiRoutinesRepository implements RoutinesRepository {
   }
 
   @override
-  Future<void> approveProposal(String proposalId) async {
-    final result =
-        await _apiClient.postJson('/records/$proposalId/approve-as-routine');
+  Future<void> approveProposal(
+    String proposalId, {
+    RoutineProposalOverrides? overrides,
+  }) async {
+    final result = await _apiClient.postJson(
+      '/records/$proposalId/approve-as-routine',
+      data: (overrides == null || overrides.isEmpty) ? null : overrides.toMap(),
+    );
     _throwOnFailure(result);
   }
 
