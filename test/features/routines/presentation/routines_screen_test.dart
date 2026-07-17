@@ -89,10 +89,12 @@ Routine _sampleRoutine({
       updatedAt: DateTime(2026, 4, 18),
     );
 
-RoutineProposal _sampleProposal({String id = 'prop-1'}) => RoutineProposal(
+RoutineProposal _sampleProposal({String id = 'prop-1', String? startTime}) =>
+    RoutineProposal(
       id: id,
       name: 'Weekly review',
       cadence: 'weekly',
+      startTime: startTime,
       items: const [RoutineProposalItem(text: 'Review items', sortOrder: 1)],
       confidence: 0.85,
       conversationId: 'conv-1',
@@ -359,7 +361,7 @@ void main() {
       expect(repo.lastApproveOverrides?.startTime, '08:30');
     });
 
-    testWidgets('edit dialog with no changes approves without overrides',
+    testWidgets('edit dialog with no changes approves with empty overrides',
         (tester) async {
       final repo = _StubRepository(
         proposals: [_sampleProposal()],
@@ -374,7 +376,55 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.lastApproveId, 'prop-1');
-      expect(repo.lastApproveOverrides, isNull);
+      expect(repo.lastApproveOverrides?.isEmpty ?? true, isTrue);
+    });
+
+    testWidgets('clearing a pre-filled start time sends an explicit clear',
+        (tester) async {
+      final repo = _StubRepository(
+        proposals: [_sampleProposal(startTime: '07:00')],
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('proposal-edit-start-time-field')),
+        '',
+      );
+      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
+      await tester.pumpAndSettle();
+
+      expect(repo.lastApproveId, 'prop-1');
+      expect(repo.lastApproveOverrides?.clearStartTime, isTrue);
+      expect(repo.lastApproveOverrides?.startTime, isNull);
+    });
+
+    testWidgets('untouched malformed pre-filled time does not block approval',
+        (tester) async {
+      final repo = _StubRepository(
+        proposals: [_sampleProposal(startTime: '7:00')],
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('proposal-edit-name-field')),
+        'Weekly review (renamed)',
+      );
+      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Use 24h HH:MM'), findsNothing);
+      expect(repo.lastApproveId, 'prop-1');
+      expect(repo.lastApproveOverrides?.name, 'Weekly review (renamed)');
+      expect(repo.lastApproveOverrides?.startTime, isNull);
+      expect(repo.lastApproveOverrides?.clearStartTime, isFalse);
     });
 
     testWidgets('edit dialog rejects an invalid start time', (tester) async {
