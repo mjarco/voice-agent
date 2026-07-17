@@ -128,6 +128,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
                   ...proposals.map((p) => _ProposalCard(
                         proposal: p,
                         onApprove: () => _handleApprove(p.id),
+                        onEdit: () => _handleEditApprove(p),
                         onReject: () => _handleReject(p.id),
                       )),
                   const Divider(),
@@ -237,6 +238,27 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
     }
   }
 
+  Future<void> _handleEditApprove(RoutineProposal proposal) async {
+    final overrides = await showDialog<RoutineProposalOverrides>(
+      context: context,
+      builder: (ctx) => _ProposalEditDialog(proposal: proposal),
+    );
+    if (overrides == null || !mounted) return;
+
+    final notifier = ref.read(routinesNotifierProvider.notifier);
+    final success = await notifier.approveProposal(
+      proposal.id,
+      overrides: overrides.isEmpty ? null : overrides,
+    );
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text(notifier.lastActionError ?? 'Failed to approve')),
+      );
+    }
+  }
+
   Future<void> _handleReject(String proposalId) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -300,10 +322,12 @@ class _ProposalCard extends StatelessWidget {
   const _ProposalCard({
     required this.proposal,
     required this.onApprove,
+    required this.onEdit,
     required this.onReject,
   });
   final RoutineProposal proposal;
   final VoidCallback onApprove;
+  final VoidCallback onEdit;
   final VoidCallback onReject;
 
   @override
@@ -347,6 +371,12 @@ class _ProposalCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
+                  key: Key('proposal-edit-${proposal.id}'),
+                  onPressed: onEdit,
+                  child: const Text('Edit'),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
                   key: Key('proposal-reject-${proposal.id}'),
                   onPressed: onReject,
                   child: const Text('Reject'),
@@ -362,6 +392,106 @@ class _ProposalCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ProposalEditDialog extends StatefulWidget {
+  const _ProposalEditDialog({required this.proposal});
+  final RoutineProposal proposal;
+
+  @override
+  State<_ProposalEditDialog> createState() => _ProposalEditDialogState();
+}
+
+class _ProposalEditDialogState extends State<_ProposalEditDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _startTimeController;
+  String? _nameError;
+  String? _startTimeError;
+
+  static final _startTimePattern = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.proposal.name);
+    _startTimeController =
+        TextEditingController(text: widget.proposal.startTime ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _startTimeController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    final startTime = _startTimeController.text.trim();
+    setState(() {
+      _nameError = name.isEmpty ? 'Name is required' : null;
+      _startTimeError =
+          startTime.isNotEmpty && !_startTimePattern.hasMatch(startTime)
+              ? 'Use 24h HH:MM'
+              : null;
+    });
+    if (_nameError != null || _startTimeError != null) return;
+
+    // An unchanged or cleared field is omitted so the backend keeps the
+    // proposal's own value.
+    Navigator.of(context).pop(RoutineProposalOverrides(
+      name: name == widget.proposal.name ? null : name,
+      startTime: startTime.isEmpty || startTime == widget.proposal.startTime
+          ? null
+          : startTime,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit & approve'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            key: const Key('proposal-edit-name-field'),
+            controller: _nameController,
+            decoration: InputDecoration(
+              labelText: 'Name',
+              border: const OutlineInputBorder(),
+              errorText: _nameError,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            key: const Key('proposal-edit-start-time-field'),
+            controller: _startTimeController,
+            keyboardType: TextInputType.datetime,
+            decoration: InputDecoration(
+              labelText: 'Reminder time (HH:MM)',
+              helperText: widget.proposal.cadence == null
+                  ? null
+                  : 'Cadence: ${widget.proposal.cadence}',
+              border: const OutlineInputBorder(),
+              errorText: _startTimeError,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('proposal-edit-approve-button'),
+          onPressed: _submit,
+          child: const Text('Approve'),
+        ),
+      ],
     );
   }
 }
