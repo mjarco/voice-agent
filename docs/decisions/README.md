@@ -80,6 +80,8 @@ and focused on a single decision. See any existing ADR for reference.
 | --- | ----- | ------ |
 | [ADR-NET-001](ADR-NET-001-dio-sealed-error-classification.md) | Dio HTTP client with sealed ApiResult error classification | Accepted |
 | [ADR-NET-002](ADR-NET-002-foreground-only-sync.md) | Foreground-only sync with no background processing | Accepted |
+| [ADR-NET-003](ADR-NET-003-sse-streaming-client.md) | SSE streaming client | Accepted |
+| [ADR-NET-004](ADR-NET-004-app-version-sync-header.md) | Report installed app version via X-App-Version sync header | Accepted |
 
 ### PLATFORM — Mobile Platform & UX
 

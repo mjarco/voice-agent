@@ -84,7 +84,9 @@ class _StubAudioFeedbackService implements AudioFeedbackService {
 }
 
 List<Override> _baseOverrides() => [
-  appVersionProvider.overrideWith((ref) async => '1.2.0 (4)'),
+  appVersionProvider.overrideWith(
+    (ref) async => const AppVersion(version: '1.2.0', build: '4'),
+  ),
   storageServiceProvider.overrideWithValue(_StubStorage()),
   connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
   ttsServiceProvider.overrideWithValue(_StubTtsService()),

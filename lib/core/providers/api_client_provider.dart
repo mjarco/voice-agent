@@ -2,12 +2,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
+import 'package:voice_agent/core/providers/app_version_provider.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
+  // Reports the installed build to the backend via X-App-Version. Null until
+  // the version future resolves; the client then rebuilds with it set.
+  final appVersion = ref.watch(appVersionProvider).valueOrNull;
   return ApiClient(
     baseUrl: deriveBaseUrl(config.apiUrl),
     token: config.apiToken,
+    appVersion: appVersion?.wire,
   );
 });
 

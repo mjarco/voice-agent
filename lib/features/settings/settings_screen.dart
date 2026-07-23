@@ -302,7 +302,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Version'),
             trailing: Text(
               appVersion.maybeWhen(
-                data: (v) => v,
+                data: (v) => v.display,
                 orElse: () => '…',
               ),
             ),
