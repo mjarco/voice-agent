@@ -19,6 +19,7 @@ import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/tts/tts_service.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
+import 'package:voice_agent/core/providers/app_version_provider.dart';
 
 import '../../helpers/stub_background_service.dart';
 import '../../helpers/stub_notifications.dart';
@@ -83,6 +84,7 @@ class _StubAudioFeedbackService implements AudioFeedbackService {
 }
 
 List<Override> _baseOverrides() => [
+  appVersionProvider.overrideWith((ref) async => '1.2.0 (4)'),
   storageServiceProvider.overrideWithValue(_StubStorage()),
   connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
   ttsServiceProvider.overrideWithValue(_StubTtsService()),
@@ -284,6 +286,31 @@ void main() {
       expect(find.byKey(const Key('picovoice-key-field')), findsNothing);
       expect(find.byKey(const Key('wake-word-sensitivity-slider')), findsNothing);
       expect(find.byKey(const Key('wake-word-keyword-dropdown')), findsNothing);
+    });
+
+    testWidgets('Version tile shows the runtime app version, not a hardcode',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _baseOverrides(),
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _navigateToSettings(tester);
+
+      // The About → Version tile is at the bottom of the list; scroll it in.
+      await tester.scrollUntilVisible(
+        find.text('1.2.0 (4)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      // It renders the value from appVersionProvider (overridden to 1.2.0 (4)),
+      // never the old hardcoded '1.0.0'.
+      expect(find.text('1.2.0 (4)'), findsOneWidget);
+      expect(find.text('1.0.0'), findsNothing);
     });
 
     testWidgets('Groq API Key field saves on focus lost', (tester) async {

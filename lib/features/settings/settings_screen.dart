@@ -8,6 +8,7 @@ import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
+import 'package:voice_agent/core/providers/app_version_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -114,6 +115,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final config = ref.watch(appConfigProvider);
+    final appVersion = ref.watch(appVersionProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -298,7 +300,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _buildSectionHeader('About'),
           ListTile(
             title: const Text('Version'),
-            trailing: const Text('1.0.0'),
+            trailing: Text(
+              appVersion.maybeWhen(
+                data: (v) => v,
+                orElse: () => '…',
+              ),
+            ),
           ),
           FutureBuilder<String>(
             future: ref.read(storageServiceProvider).getDeviceId(),
