@@ -28,12 +28,25 @@ class ApiNotConfigured extends ApiResult {
 }
 
 class ApiClient {
-  ApiClient({Dio? dio, this.baseUrl, this.token})
+  ApiClient({Dio? dio, this.baseUrl, this.token, this.appVersion})
       : _dio = dio ?? _createDefaultDio();
 
   final Dio _dio;
   final String? baseUrl;
   final String? token;
+
+  /// Installed app version in wire form (e.g. `1.2.1+5`), reported to the
+  /// backend via the `X-App-Version` header so the build on this device is
+  /// queryable server-side. Null when not yet resolved — the header is simply
+  /// omitted, and the backend treats its absence as unknown.
+  final String? appVersion;
+
+  Map<String, String> _headers({String? token}) => {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        if (appVersion != null && appVersion!.isNotEmpty)
+          'X-App-Version': appVersion!,
+      };
 
   static Dio _createDefaultDio() {
     return Dio(BaseOptions(
@@ -59,13 +72,7 @@ class ApiClient {
           'language': transcript.language,
           'deviceId': transcript.deviceId,
         },
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            if (token != null && token.isNotEmpty)
-              'Authorization': 'Bearer $token',
-          },
-        ),
+        options: Options(headers: _headers(token: token)),
       );
 
       final statusCode = response.statusCode ?? 0;
@@ -91,13 +98,7 @@ class ApiClient {
       final response = await _dio.post<dynamic>(
         url,
         data: {'test': true},
-        options: Options(
-          headers: {
-            'Content-Type': 'application/json',
-            if (token != null && token.isNotEmpty)
-              'Authorization': 'Bearer $token',
-          },
-        ),
+        options: Options(headers: _headers(token: token)),
       );
 
       final statusCode = response.statusCode ?? 0;
@@ -151,11 +152,7 @@ class ApiClient {
         queryParameters: queryParameters,
         options: Options(
           method: method,
-          headers: {
-            'Content-Type': 'application/json',
-            if (token != null && token!.isNotEmpty)
-              'Authorization': 'Bearer $token',
-          },
+          headers: _headers(token: token),
         ),
       );
 

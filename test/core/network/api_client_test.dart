@@ -177,6 +177,41 @@ void main() {
       expect(_MockAdapter.lastHeaders?['Authorization'], isNull);
     });
 
+    test('sends X-App-Version header when appVersion provided', () async {
+      _MockAdapter.nextStatusCode = 200;
+      _MockAdapter.lastHeaders = null;
+      final versioned = ApiClient(dio: dio, appVersion: '1.2.1+5');
+
+      await versioned.post(
+        transcript,
+        url: 'https://example.com/api',
+      );
+
+      expect(_MockAdapter.lastHeaders?['X-App-Version'], '1.2.1+5');
+    });
+
+    test('omits X-App-Version header when appVersion is null', () async {
+      _MockAdapter.nextStatusCode = 200;
+      _MockAdapter.lastHeaders = null;
+
+      await client.post(
+        transcript,
+        url: 'https://example.com/api',
+      );
+
+      expect(_MockAdapter.lastHeaders?['X-App-Version'], isNull);
+    });
+
+    test('testConnection also carries X-App-Version', () async {
+      _MockAdapter.nextStatusCode = 200;
+      _MockAdapter.lastHeaders = null;
+      final versioned = ApiClient(dio: dio, appVersion: '1.2.1+5');
+
+      await versioned.testConnection(url: 'https://example.com/api');
+
+      expect(_MockAdapter.lastHeaders?['X-App-Version'], '1.2.1+5');
+    });
+
     test('body in ApiSuccess is valid JSON when server returns JSON object',
         () async {
       _MockAdapter.nextStatusCode = 200;
