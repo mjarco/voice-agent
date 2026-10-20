@@ -362,7 +362,9 @@ with the current Android CLI; Gradle downloads missing platforms itself.
 
 - `make install-android` / `make install-android-dev` build the release APK of
   the flavour and install it over adb; exactly one Android device must be
-  connected (USB debugging or wireless debugging).
+  connected (USB debugging or wireless debugging). Over USB, `adb devices` shows
+  "no permissions" until the udev rules are installed
+  (`sudo apt install android-sdk-platform-tools-common`, then replug).
 - The Silero VAD model is not in git: `make vad-model` (a prerequisite of both
   targets) fetches it; copy `.env.mobile` into a new worktree by hand.
 - After changing the JDK run `./gradlew --stop` in `android/`: a running
