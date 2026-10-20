@@ -283,6 +283,34 @@ class RoutineProposal {
   }
 }
 
+/// Optional overrides sent as the approve-as-routine body. Only fields the
+/// user actually changed are included; an omitted field keeps the proposal's
+/// own value on the backend. [clearStartTime] sends an explicit
+/// `start_time: null`, which the backend treats as "remove the reminder time".
+class RoutineProposalOverrides {
+  const RoutineProposalOverrides({
+    this.name,
+    this.startTime,
+    this.clearStartTime = false,
+  });
+
+  final String? name;
+  final String? startTime;
+  final bool clearStartTime;
+
+  bool get isEmpty => name == null && startTime == null && !clearStartTime;
+
+  Map<String, dynamic> toMap() {
+    return {
+      if (name != null) 'name': name,
+      if (clearStartTime)
+        'start_time': null
+      else if (startTime != null)
+        'start_time': startTime,
+    };
+  }
+}
+
 class RoutineProposalItem {
   const RoutineProposalItem({
     required this.text,

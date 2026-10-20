@@ -79,7 +79,10 @@ class _MockRepository implements RoutinesRepository {
   Future<List<RoutineProposal>> fetchProposals() async => [];
 
   @override
-  Future<void> approveProposal(String proposalId) async {}
+  Future<void> approveProposal(
+    String proposalId, {
+    RoutineProposalOverrides? overrides,
+  }) async {}
 
   @override
   Future<void> rejectProposal(String proposalId) async {}

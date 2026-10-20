@@ -262,9 +262,41 @@ void main() {
   });
 
   group('approveProposal', () {
-    test('calls correct endpoint', () async {
+    test('calls correct endpoint without body by default', () async {
       await repo.approveProposal('prop-1');
       expect(client.lastPostPath, '/records/prop-1/approve-as-routine');
+      expect(client.lastPostData, isNull);
+    });
+
+    test('sends only the provided override fields as body', () async {
+      await repo.approveProposal(
+        'prop-1',
+        overrides: const RoutineProposalOverrides(
+          name: 'Evening meds',
+          startTime: '20:00',
+        ),
+      );
+      expect(client.lastPostPath, '/records/prop-1/approve-as-routine');
+      expect(client.lastPostData, {
+        'name': 'Evening meds',
+        'start_time': '20:00',
+      });
+    });
+
+    test('sends no body when overrides are empty', () async {
+      await repo.approveProposal(
+        'prop-1',
+        overrides: const RoutineProposalOverrides(),
+      );
+      expect(client.lastPostData, isNull);
+    });
+
+    test('sends explicit null start_time when clearing', () async {
+      await repo.approveProposal(
+        'prop-1',
+        overrides: const RoutineProposalOverrides(clearStartTime: true),
+      );
+      expect(client.lastPostData, {'start_time': null});
     });
   });
 

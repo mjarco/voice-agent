@@ -40,6 +40,9 @@ abstract class RoutinesRepository {
     String occurrenceId,
     OccurrenceStatus status,
   );
-  Future<void> approveProposal(String proposalId);
+  Future<void> approveProposal(
+    String proposalId, {
+    RoutineProposalOverrides? overrides,
+  });
   Future<void> rejectProposal(String proposalId);
 }
