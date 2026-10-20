@@ -150,6 +150,9 @@ install-ios-dev-debug:
 # the platform column reads e.g. "android-arm64". Exactly one device must be
 # connected over adb (USB or wireless debugging), so a build never lands on
 # the wrong phone.
+# adb install -r keeps the app's data (settings, token); flutter install
+# uninstalls the old version first and wipes it.
+ADB := $(or $(ANDROID_HOME),$(HOME)/Android/Sdk)/platform-tools/adb
 ANDROID_DEVICE_IDS = flutter devices 2>/dev/null | awk -F' *• *' '$$3 ~ /^android/{print $$2}'
 ANDROID_DEVICE_CHECK = IDS=$$($(ANDROID_DEVICE_IDS)); COUNT=$$(echo "$$IDS" | grep -c .); \
 	if [ "$$COUNT" -ne 1 ]; then \
@@ -163,7 +166,7 @@ install-android: vad-model
 	echo "Building stable (release)..."; \
 	flutter build apk --flavor stable --release $(DART_DEFINE_FLAG) && \
 	echo "Installing on: $$DEVICE_ID" && \
-	flutter install -d "$$DEVICE_ID" --flavor stable --release
+	$(ADB) -s "$$DEVICE_ID" install -r build/app/outputs/flutter-apk/app-stable-release.apk
 
 ## install-android-dev: Build and install dev (release) on the connected Android device
 install-android-dev: vad-model
@@ -171,7 +174,7 @@ install-android-dev: vad-model
 	echo "Building dev (release)..."; \
 	flutter build apk --flavor dev --release $(DART_DEFINE_FLAG) && \
 	echo "Installing on: $$DEVICE_ID" && \
-	flutter install -d "$$DEVICE_ID" --flavor dev --release
+	$(ADB) -s "$$DEVICE_ID" install -r build/app/outputs/flutter-apk/app-dev-release.apk
 
 ## devices: List available devices
 devices:

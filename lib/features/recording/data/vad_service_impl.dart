@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:vad/vad.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/domain/vad_service.dart';
@@ -14,10 +12,12 @@ import 'package:voice_agent/features/recording/domain/vad_service.dart';
 /// [classify] call.
 ///
 /// The Silero ONNX model is bundled as a Flutter asset at
-/// `assets/models/silero_vad_v5.onnx` and extracted to the app temp directory
-/// on first [init]. Subsequent calls reuse the cached file.
+/// `assets/models/silero_vad_v5.onnx`. The `vad` package loads a non-URL
+/// `baseAssetPath` through `rootBundle`, so it gets the asset directory, not a
+/// file-system path: on Android assets live inside the APK and a copied file
+/// path cannot be loaded as an asset.
 class VadServiceImpl implements VadService {
-  static const _assetPath = 'assets/models/silero_vad_v5.onnx';
+  static const _assetDir = 'assets/models/';
   static const _frameSamples = 512; // 32 ms at 16 kHz
 
   VadIterator? _iterator;
@@ -32,16 +32,6 @@ class VadServiceImpl implements VadService {
   @override
   Future<void> init(VadConfig config) async {
     _config = config;
-    final tempDir = await getTemporaryDirectory();
-    final modelDir = '${tempDir.path}/silero_vad/';
-    await Directory(modelDir).create(recursive: true);
-
-    final modelFile = File('${modelDir}silero_vad_v5.onnx');
-    if (!modelFile.existsSync()) {
-      final data = await rootBundle.load(_assetPath);
-      await modelFile.writeAsBytes(data.buffer.asUint8List());
-    }
-
     try {
       _iterator = await VadIterator.create(
         isDebug: false,
@@ -56,7 +46,7 @@ class VadServiceImpl implements VadService {
         preSpeechPadFrames: 1,
         minSpeechFrames: 1,
         model: 'v5',
-        baseAssetPath: modelDir,
+        baseAssetPath: _assetDir,
       );
       _iterator!.setVadEventCallback(_onEvent);
     } catch (e) {
