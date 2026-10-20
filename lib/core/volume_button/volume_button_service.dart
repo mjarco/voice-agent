@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -83,19 +84,26 @@ Stream<VolumeButtonEvent> filterVolumeRouteArtefacts({
 /// P042: the raw native event stream is passed through
 /// [filterVolumeRouteArtefacts] so route-change `outputVolume` artefacts
 /// are not misread as hardware presses.
+///
+/// The volume-button gesture is iOS-only: off iOS there are no events and
+/// the channels are not called (a listen logged a `MissingPluginException`
+/// at every Android start, #351).
 class VolumeButtonService implements VolumeButtonPort {
   VolumeButtonService({
     required AudioRouteService audioRouteService,
     MethodChannel? methodChannel,
     EventChannel? eventChannel,
     Duration settleWindow = const Duration(milliseconds: 300),
-  })  : _audioRouteService = audioRouteService,
+    bool? isIOS,
+  })  : _isIOS = isIOS ?? Platform.isIOS,
+        _audioRouteService = audioRouteService,
         _settleWindow = settleWindow,
         _methodChannel = methodChannel ??
             const MethodChannel('com.voiceagent/volume_button'),
         _eventChannel = eventChannel ??
             const EventChannel('com.voiceagent/volume_button/events');
 
+  final bool _isIOS;
   final AudioRouteService _audioRouteService;
   final Duration _settleWindow;
   final MethodChannel _methodChannel;
@@ -104,11 +112,13 @@ class VolumeButtonService implements VolumeButtonPort {
   Stream<VolumeButtonEvent>? _events;
 
   @override
-  Stream<VolumeButtonEvent> get events => _events ??= filterVolumeRouteArtefacts(
-        raw: _rawEvents(),
-        routeChanges: _audioRouteService.changes,
-        settleWindow: _settleWindow,
-      );
+  Stream<VolumeButtonEvent> get events => _events ??= !_isIOS
+      ? const Stream.empty()
+      : filterVolumeRouteArtefacts(
+          raw: _rawEvents(),
+          routeChanges: _audioRouteService.changes,
+          settleWindow: _settleWindow,
+        );
 
   /// Raw, unfiltered volume events straight from the native EventChannel.
   Stream<VolumeButtonEvent> _rawEvents() {
@@ -130,6 +140,7 @@ class VolumeButtonService implements VolumeButtonPort {
 
   @override
   Future<void> activate() async {
+    if (!_isIOS) return;
     debugPrint('[VolumeBtnDbg] Dart→native activate() invoked');
     try {
       await _methodChannel.invokeMethod<void>('activate');
@@ -144,6 +155,7 @@ class VolumeButtonService implements VolumeButtonPort {
 
   @override
   Future<void> deactivate() async {
+    if (!_isIOS) return;
     debugPrint('[VolumeBtnDbg] Dart→native deactivate() invoked');
     try {
       await _methodChannel.invokeMethod<void>('deactivate');

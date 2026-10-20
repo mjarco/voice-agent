@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/audio/audio_route_service.dart';
 import 'package:voice_agent/core/volume_button/volume_button_port.dart';
@@ -71,4 +72,57 @@ void main() {
       expect(got, [VolumeButtonEvent.up], reason: 'genuine press, not artefact');
     });
   });
+
+  group('VolumeButtonService off iOS (#351)', () {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const methodChannel = MethodChannel('test/volume_button');
+    const eventMethodChannel = MethodChannel('test/volume_button/events');
+    late List<String> calls;
+
+    setUp(() {
+      calls = [];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      for (final channel in [methodChannel, eventMethodChannel]) {
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          calls.add('${channel.name}:${call.method}');
+          return null;
+        });
+      }
+    });
+
+    tearDown(() {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(methodChannel, null);
+      messenger.setMockMethodCallHandler(eventMethodChannel, null);
+    });
+
+    VolumeButtonService makeSvc() => VolumeButtonService(
+          audioRouteService: _NoRoutes(),
+          methodChannel: methodChannel,
+          eventChannel: const EventChannel('test/volume_button/events'),
+          isIOS: false,
+        );
+
+    test('has no events and never listens to the channel', () async {
+      final events = await makeSvc().events.toList();
+
+      expect(events, isEmpty);
+      expect(calls, isEmpty);
+    });
+
+    test('activate and deactivate do not call the channel', () async {
+      final svc = makeSvc();
+      await svc.activate();
+      await svc.deactivate();
+
+      expect(calls, isEmpty);
+    });
+  });
+}
+
+class _NoRoutes implements AudioRouteService {
+  @override
+  Stream<AudioRouteChange> get changes => const Stream.empty();
 }
