@@ -1,4 +1,4 @@
-.PHONY: deps vad-model analyze test verify clean setup doctor env run-web run-ios run-ios-dev run-macos simulator install-ios install-ios-dev install-ios-dev-debug help
+.PHONY: deps vad-model analyze test verify clean setup doctor env run-web run-ios run-ios-dev run-macos simulator install-ios install-ios-dev install-ios-dev-debug install-android install-android-dev help
 
 MODEL_DIR := assets/models
 
@@ -145,6 +145,36 @@ install-ios-dev-debug:
 	DEVICE_NAME=$$($(IOS_DEVICE_NAME)); \
 	echo "Installing dev (debug) on: $$DEVICE_NAME ($$DEVICE_ID)"; \
 	flutter run -d "$$DEVICE_ID" --flavor dev $(DART_DEFINE_FLAG)
+
+# Android devices from flutter-devices output (same field layout as above);
+# the platform column reads e.g. "android-arm64". Exactly one device must be
+# connected over adb (USB or wireless debugging), so a build never lands on
+# the wrong phone.
+# adb install -r keeps the app's data (settings, token); flutter install
+# uninstalls the old version first and wipes it.
+ADB := $(or $(ANDROID_HOME),$(HOME)/Android/Sdk)/platform-tools/adb
+ANDROID_DEVICE_IDS = flutter devices 2>/dev/null | awk -F' *• *' '$$3 ~ /^android/{print $$2}'
+ANDROID_DEVICE_CHECK = IDS=$$($(ANDROID_DEVICE_IDS)); COUNT=$$(echo "$$IDS" | grep -c .); \
+	if [ "$$COUNT" -ne 1 ]; then \
+	echo "ERROR: expected exactly one Android device, found $$COUNT."; \
+	echo "Connect the Pixel over USB (or adb wireless debugging) and check: adb devices"; \
+	exit 1; fi; DEVICE_ID=$$IDS
+
+## install-android: Build and install stable (release) on the connected Android device
+install-android: vad-model
+	@$(ANDROID_DEVICE_CHECK); \
+	echo "Building stable (release)..."; \
+	flutter build apk --flavor stable --release $(DART_DEFINE_FLAG) && \
+	echo "Installing on: $$DEVICE_ID" && \
+	$(ADB) -s "$$DEVICE_ID" install -r build/app/outputs/flutter-apk/app-stable-release.apk
+
+## install-android-dev: Build and install dev (release) on the connected Android device
+install-android-dev: vad-model
+	@$(ANDROID_DEVICE_CHECK); \
+	echo "Building dev (release)..."; \
+	flutter build apk --flavor dev --release $(DART_DEFINE_FLAG) && \
+	echo "Installing on: $$DEVICE_ID" && \
+	$(ADB) -s "$$DEVICE_ID" install -r build/app/outputs/flutter-apk/app-dev-release.apk
 
 ## devices: List available devices
 devices:

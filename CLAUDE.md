@@ -351,6 +351,27 @@ reference the version in the tag.
 currently declares and installs it on the connected device. Bump the version
 *before* building so the installed artifact carries the right number.
 
+### Android build (laptop.lan)
+
+Android is built on the workspace host (laptop.lan), not on the Mac; the Mac
+builds only iOS. Toolchain: Flutter in `~/development/flutter` (3.47.x),
+OpenJDK 21 **JDK** (`openjdk-21-jdk-headless` — a JRE alone fails with
+"does not provide the required capabilities: [JAVA_COMPILER]"), Android SDK in
+`~/Android/Sdk` (`ANDROID_HOME`). SDK licences need no `sdkmanager --licenses`
+with the current Android CLI; Gradle downloads missing platforms itself.
+
+- `make install-android` / `make install-android-dev` build the release APK of
+  the flavour and install it over adb; exactly one Android device must be
+  connected (USB debugging or wireless debugging). Over USB, `adb devices` shows
+  "no permissions" until the udev rules are installed
+  (`sudo apt install android-sdk-platform-tools-common`, then replug).
+- The Silero VAD model is not in git: `make vad-model` (a prerequisite of both
+  targets) fetches it; copy `.env.mobile` into a new worktree by hand.
+- After changing the JDK run `./gradlew --stop` in `android/`: a running
+  Gradle daemon keeps the old toolchain probe.
+- `flutter_local_notifications` needs core library desugaring
+  (`android/app/build.gradle.kts`); do not remove it.
+
 ---
 
 ## Coding Conventions
@@ -592,6 +613,7 @@ make verify                  # Run analyze + test
 make analyze                 # Static analysis only
 make test                    # Run tests only
 make clean                   # Remove build artifacts and downloaded models
+make install-android-dev     # Build + install dev (release) on the connected Android device
 
 # Direct Flutter commands
 flutter analyze              # Static analysis — zero issues required
