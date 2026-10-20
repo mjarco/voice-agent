@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:voice_agent/core/audio/audio_route_service.dart';
 
@@ -5,19 +7,23 @@ import 'package:voice_agent/core/audio/audio_route_service.dart';
 /// `com.voiceagent/audio_session/route_changes` EventChannel, registered
 /// on iOS by `AudioSessionBridge`.
 ///
-/// On platforms that do not implement the channel (Android, tests), the
-/// first listen surfaces a `MissingPluginException`; it is swallowed so
-/// the stream is simply silent rather than crashing.
+/// Off iOS the channel is not implemented, so the stream is empty and the
+/// channel is never listened to: a listen would fail with a
+/// `MissingPluginException` that Flutter logs before [Stream.handleError]
+/// sees it (seen on Android at every start, #351).
 class PlatformAudioRouteService implements AudioRouteService {
-  PlatformAudioRouteService({EventChannel? eventChannel})
+  PlatformAudioRouteService({EventChannel? eventChannel, bool? isIOS})
       : _eventChannel = eventChannel ??
-            const EventChannel('com.voiceagent/audio_session/route_changes');
+            const EventChannel('com.voiceagent/audio_session/route_changes'),
+        _isIOS = isIOS ?? Platform.isIOS;
 
   final EventChannel _eventChannel;
+  final bool _isIOS;
   Stream<AudioRouteChange>? _changes;
 
   @override
   Stream<AudioRouteChange> get changes {
+    if (!_isIOS) return _changes ??= const Stream.empty();
     return _changes ??= _eventChannel
         .receiveBroadcastStream()
         .map<AudioRouteChange>(
@@ -25,7 +31,7 @@ class PlatformAudioRouteService implements AudioRouteService {
               AudioRouteChange(AudioRouteChangeReason.fromString('$event')),
         )
         .handleError((Object _) {
-      // Missing platform implementation (Android / tests) — treat as
+      // Missing platform implementation (e.g. tests) — treat as
       // "no route events" rather than propagating the error.
     });
   }

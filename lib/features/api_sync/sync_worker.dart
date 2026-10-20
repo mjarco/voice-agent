@@ -215,7 +215,7 @@ class SyncWorker {
           span.end(status: SpanStatus.ok);
           await storageService.markSent(item.id);
           unawaited(audioFeedbackService.playSuccess());
-          await _handleReply(body);
+          await _handleReply(body, utteranceLanguage: transcript.language);
         case ApiPermanentFailure(:final message, :final statusCode):
           Telemetry.instance.event('sync.failure', attrs: {
             'kind': 'permanent',
@@ -298,7 +298,12 @@ class SyncWorker {
     }
   }
 
-  Future<void> _handleReply(String? body) async {
+  /// [utteranceLanguage] is the language the STT detected in the user's
+  /// utterance. personal-agent echoes `language: "auto"` for every reply
+  /// (`voiceLanguage`), and "auto" falls back to the phone's locale in TTS —
+  /// on a phone set to English that read Polish replies with an English
+  /// voice (#351). An explicit reply language still wins.
+  Future<void> _handleReply(String? body, {String? utteranceLanguage}) async {
     if (body == null) return;
     try {
       final decoded = jsonDecode(body) as Map<String, dynamic>;
@@ -309,7 +314,12 @@ class SyncWorker {
       final json = data is Map<String, dynamic> ? data : decoded;
       final message = json['message'] as String?;
       if (message == null || message.isEmpty) return;
-      final language = json['language'] as String?;
+      final replyLanguage = json['language'] as String?;
+      final language = (replyLanguage == null || replyLanguage == 'auto') &&
+              utteranceLanguage != null &&
+              utteranceLanguage != 'auto'
+          ? utteranceLanguage
+          : replyLanguage;
       // P028 lifted the P027 foreground gate — TTS plays in both foreground
       // and background. iOS: covered by UIBackgroundModes:audio + playAndRecord.
       // Android: covered by FOREGROUND_SERVICE_MEDIA_PLAYBACK + mediaPlayback

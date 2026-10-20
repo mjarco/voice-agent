@@ -144,12 +144,7 @@ class FlutterTtsService implements TtsService {
 
   /// The original single-utterance path, unchanged from pre-P030 behavior.
   Future<void> _speakSingle(String text, String? languageCode) async {
-    final lang = _resolveLanguage(languageCode);
-    await _tts.setLanguage(lang);
-    if (_isIOS) {
-      final voice = await _bestVoice(lang);
-      if (voice != null) await _tts.setVoice(voice);
-    }
+    await _applyLanguage(_resolveLanguage(languageCode));
     await _tts.speak(text);
   }
 
@@ -160,11 +155,7 @@ class FlutterTtsService implements TtsService {
 
     final lang = segment.languageCode ??
         _resolveLanguage(queue.defaultLanguageCode);
-    await _tts.setLanguage(lang);
-    if (_isIOS) {
-      final voice = await _bestVoice(lang);
-      if (voice != null) await _tts.setVoice(voice);
-    }
+    await _applyLanguage(lang);
     await _tts.speak(segment.text);
   }
 
@@ -292,18 +283,37 @@ class FlutterTtsService implements TtsService {
     'welsh': 'cy',
   };
 
+  /// Resolves [code] to a BCP-47 tag (`pl-PL`, not `pl_PL`): flutter_tts on
+  /// Android passes it to `Locale.forLanguageTag`, which cuts an underscore
+  /// tag to its first subtag (`en_PL` → `en`). iOS accepts both forms.
   String _resolveLanguage(String? code) {
     if (code == null || code == 'auto') {
-      return Platform.localeName;
+      return Platform.localeName.replaceAll('_', '-');
     }
     final normalized = _langNameToCode[code.toLowerCase()];
     if (normalized != null) return normalized;
-    return code;
+    return code.replaceAll('_', '-');
   }
 
-  /// Returns the best available iOS voice for [lang], preferring premium >
-  /// enhanced > normal quality. Returns null when no voice matches or voices
-  /// cannot be listed (falls back to AVSpeechSynthesizer default selection).
+  /// Sets the language, then the best voice for it on both platforms (before
+  /// #351 Android got `setLanguage` alone, and on the Pixel every reply was
+  /// read by an English voice). Logs the outcome once per language.
+  Future<void> _applyLanguage(String lang) async {
+    final firstLookup = !_voiceCache.containsKey(lang);
+    final dynamic accepted = await _tts.setLanguage(lang);
+    final voice = await _bestVoice(lang);
+    if (voice != null) await _tts.setVoice(voice);
+    if (firstLookup) {
+      debugPrint('[TtsDbg] language=$lang setLanguage=$accepted '
+          'voice=${voice?['name'] ?? 'system default'}');
+    }
+  }
+
+  /// Returns the best available voice for [lang], or null when no voice
+  /// matches or voices cannot be listed (the platform default is kept).
+  /// iOS: premium > enhanced > normal, from the voice name.
+  /// Android: installed voices only, local before network, then by
+  /// `quality` (very high > high > normal > …).
   Future<Map<String, String>?> _bestVoice(String lang) async {
     if (_voiceCache.containsKey(lang)) return _voiceCache[lang];
 
@@ -316,6 +326,12 @@ class FlutterTtsService implements TtsService {
       if (voices == null) {
         _voiceCache[lang] = null;
         return null;
+      }
+
+      if (!_isIOS) {
+        final best = _bestAndroidVoice(voices, langPrefix);
+        _voiceCache[lang] = best;
+        return best;
       }
 
       Map<String, String>? premium;
@@ -342,10 +358,45 @@ class FlutterTtsService implements TtsService {
       _voiceCache[lang] = best;
       return best;
     } catch (_) {
-      // Platform call failed — fall back to AVSpeechSynthesizer default.
+      // Platform call failed — fall back to the platform default voice.
       _voiceCache[lang] = null;
       return null;
     }
+  }
+
+  static const _androidQualityRank = {
+    'very high': 4,
+    'high': 3,
+    'normal': 2,
+    'low': 1,
+    'very low': 0,
+  };
+
+  /// Android voices as flutter_tts lists them: `name`, `locale`, `quality`,
+  /// `network_required` ("1"/"0") and tab-separated `features`, where
+  /// `notInstalled` marks a voice whose data is not on the device.
+  static Map<String, String>? _bestAndroidVoice(
+    List<dynamic> voices,
+    String langPrefix,
+  ) {
+    Map<String, String>? best;
+    var bestScore = -1;
+    for (final entry in voices) {
+      final voice = Map<String, String>.from(entry as Map);
+      final locale = (voice['locale'] ?? '').toLowerCase();
+      if (!locale.startsWith(langPrefix)) continue;
+      if ((voice['features'] ?? '').split('\t').contains('notInstalled')) {
+        continue;
+      }
+      final local = voice['network_required'] != '1';
+      final quality = _androidQualityRank[voice['quality']] ?? 0;
+      final score = (local ? 10 : 0) + quality;
+      if (score > bestScore) {
+        best = voice;
+        bestScore = score;
+      }
+    }
+    return best;
   }
 }
 

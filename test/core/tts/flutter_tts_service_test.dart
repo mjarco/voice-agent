@@ -135,8 +135,8 @@ void main() {
       expect(mock.setLanguageCalls, hasLength(1));
       final lang = mock.setLanguageCalls.first;
       expect(lang, isNot('auto'));
-      // Full locale: at minimum two chars separated by _ or just the locale.
-      expect(lang, equals(Platform.localeName));
+      // Full locale as a BCP-47 tag (`en-PL`, not `en_PL`).
+      expect(lang, equals(Platform.localeName.replaceAll('_', '-')));
     });
 
     test('speak() with null languageCode also uses Platform.localeName',
@@ -146,7 +146,8 @@ void main() {
 
       await svc.speak('Hi');
 
-      expect(mock.setLanguageCalls, [Platform.localeName]);
+      expect(
+          mock.setLanguageCalls, [Platform.localeName.replaceAll('_', '-')]);
     });
 
     test('stop() delegates to FlutterTts.stop()', () async {
@@ -276,17 +277,106 @@ void main() {
       expect(mock.setVoiceCalls, hasLength(1));
     });
 
-    test('does not call setVoice on non-iOS', () async {
+  });
+
+  group('FlutterTtsService voice selection (Android)', () {
+    FlutterTtsService makeSvc(_MockFlutterTts mock) =>
+        FlutterTtsService(tts: mock, isIOS: false);
+
+    Map<String, String> voice(
+      String name, {
+      String locale = 'pl-PL',
+      String quality = 'normal',
+      bool network = false,
+      String features = '',
+    }) =>
+        {
+          'name': name,
+          'locale': locale,
+          'quality': quality,
+          'latency': 'normal',
+          'network_required': network ? '1' : '0',
+          'features': features,
+        };
+
+    test('sets a Polish voice for a Polish reply', () async {
       final mock = _MockFlutterTts()
         ..voiceList = [
-          {'name': 'com.apple.voice.premium.en-US.Zoe', 'locale': 'en-US'},
+          voice('en-us-x-sfg-local', locale: 'en-US', quality: 'very high'),
+          voice('pl-pl-x-bmg-local', quality: 'high'),
         ];
-      // Default isIOS = Platform.isIOS — in test host (macOS/Linux) this is false.
-      final svc = FlutterTtsService(tts: mock, isIOS: false);
+      final svc = makeSvc(mock);
 
-      await svc.speak('Hello', languageCode: 'en');
+      await svc.speak('Dodałem zadanie', languageCode: 'polish');
 
+      expect(mock.setLanguageCalls, ['pl']);
+      expect(mock.setVoiceCalls.single['name'], 'pl-pl-x-bmg-local');
+    });
+
+    test('prefers a local voice over a network one of higher quality',
+        () async {
+      final mock = _MockFlutterTts()
+        ..voiceList = [
+          voice('pl-pl-x-oda-network', quality: 'very high', network: true),
+          voice('pl-pl-x-oda-local', quality: 'normal'),
+        ];
+      final svc = makeSvc(mock);
+
+      await svc.speak('Cześć', languageCode: 'pl');
+
+      expect(mock.setVoiceCalls.single['name'], 'pl-pl-x-oda-local');
+    });
+
+    test('prefers higher quality among local voices', () async {
+      final mock = _MockFlutterTts()
+        ..voiceList = [
+          voice('pl-pl-x-a-local', quality: 'normal'),
+          voice('pl-pl-x-b-local', quality: 'very high'),
+          voice('pl-pl-x-c-local', quality: 'high'),
+        ];
+      final svc = makeSvc(mock);
+
+      await svc.speak('Cześć', languageCode: 'pl');
+
+      expect(mock.setVoiceCalls.single['name'], 'pl-pl-x-b-local');
+    });
+
+    test('skips voices whose data is not installed', () async {
+      final mock = _MockFlutterTts()
+        ..voiceList = [
+          voice('pl-pl-x-a-local',
+              quality: 'very high',
+              features: 'legacySetLanguageVoice\tnotInstalled'),
+          voice('pl-pl-x-b-network', network: true),
+        ];
+      final svc = makeSvc(mock);
+
+      await svc.speak('Cześć', languageCode: 'pl');
+
+      expect(mock.setVoiceCalls.single['name'], 'pl-pl-x-b-network');
+    });
+
+    test('keeps the system default when no voice matches the language',
+        () async {
+      final mock = _MockFlutterTts()
+        ..voiceList = [voice('en-us-x-sfg-local', locale: 'en-US')];
+      final svc = makeSvc(mock);
+
+      await svc.speak('Cześć', languageCode: 'pl');
+
+      expect(mock.setLanguageCalls, ['pl']);
       expect(mock.setVoiceCalls, isEmpty);
+    });
+
+    test('passes an underscore locale to setLanguage as a BCP-47 tag',
+        () async {
+      final mock = _MockFlutterTts()..voiceList = [voice('pl-pl-x-a-local')];
+      final svc = makeSvc(mock);
+
+      await svc.speak('Cześć', languageCode: 'pl_PL');
+
+      expect(mock.setLanguageCalls, ['pl-PL']);
+      expect(mock.setVoiceCalls, hasLength(1));
     });
   });
 

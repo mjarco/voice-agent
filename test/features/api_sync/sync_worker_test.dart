@@ -510,6 +510,44 @@ void main() {
         expect(tts.log, ['stop', 'speak:Understood:pl']);
       });
 
+      test('reply language "auto" falls back to the utterance language',
+          () async {
+        await storage.saveTranscript(Transcript(
+          id: 'tx-1',
+          text: 'Dodaj zadanie',
+          language: 'polish',
+          deviceId: 'dev',
+          createdAt: 1000,
+        ));
+        await storage.enqueue('tx-1');
+        apiClient.nextBody = '{"message": "Dodałem", "language": "auto"}';
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        expect(tts.log, ['stop', 'speak:Dodałem:polish']);
+      });
+
+      test('reply language "auto" stays auto when the utterance language is auto',
+          () async {
+        await storage.saveTranscript(Transcript(
+          id: 'tx-1',
+          text: 'Hej',
+          language: 'auto',
+          deviceId: 'dev',
+          createdAt: 1000,
+        ));
+        await storage.enqueue('tx-1');
+        apiClient.nextBody = '{"message": "Hej", "language": "auto"}';
+
+        worker.start();
+        await Future.delayed(const Duration(milliseconds: 100));
+        worker.stop();
+
+        expect(tts.log, ['stop', 'speak:Hej:auto']);
+      });
+
       test('stop() is called before speak()', () async {
         await storage.saveTranscript(transcript);
         await storage.enqueue('tx-1');
@@ -1278,7 +1316,8 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 200));
       worker.stop();
 
-      expect(tts.log, ['stop', 'speak:inner:null']);
+      // No reply language → the utterance's language (#351).
+      expect(tts.log, ['stop', 'speak:inner:en']);
     });
 
     test('malformed/non-JSON body → silent', () async {
