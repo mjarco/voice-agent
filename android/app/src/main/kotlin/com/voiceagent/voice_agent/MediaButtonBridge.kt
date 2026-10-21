@@ -1,6 +1,12 @@
 package com.voiceagent.voice_agent
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import io.flutter.plugin.common.EventChannel
@@ -45,10 +51,12 @@ class MediaButtonBridge(
         val session = MediaSessionCompat(context, "VoiceAgentMediaSession").apply {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() {
+                    Log.d(TAG, "onPlay")
                     eventSink?.success("togglePlayPause")
                 }
 
                 override fun onPause() {
+                    Log.d(TAG, "onPause")
                     eventSink?.success("togglePlayPause")
                 }
 
@@ -78,9 +86,56 @@ class MediaButtonBridge(
             isActive = true
         }
         mediaSession = session
+        claimMediaButtonRouting()
     }
 
-    private fun deactivateSession() {
+    /// Android routes media buttons to the session of the app that most
+    /// recently played audio, not to any active session. TTS is played by
+    /// the TTS engine's UID, so the app never qualifies on its own: play a
+    /// short burst of PCM silence under the app's UID (#358). Called when
+    /// the session activates and when the activity resumes, since another
+    /// app's playback in between takes the routing away.
+    fun claimMediaButtonRouting() {
+        if (mediaSession == null) return
+        var track: AudioTrack? = null
+        try {
+            val sampleRate = 16000
+            val samples = ShortArray(sampleRate * SILENCE_MS / 1000)
+            val built = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build(),
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build(),
+                )
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .setBufferSizeInBytes(samples.size * 2)
+                .build()
+            track = built
+            built.write(samples, 0, samples.size)
+            built.play()
+            Log.d(TAG, "claimMediaButtonRouting: silence played")
+            Handler(Looper.getMainLooper()).postDelayed({
+                built.stop()
+                built.release()
+            }, SILENCE_MS + 200L)
+        } catch (e: Exception) {
+            Log.w(TAG, "claimMediaButtonRouting failed", e)
+            track?.release()
+        }
+    }
+
+    /// Releases the session when the engine that owns this bridge goes
+    /// away. A session left active by a destroyed engine keeps the media
+    /// button routing while its event sink leads nowhere (#358).
+    fun deactivateSession() {
         mediaSession?.isActive = false
         mediaSession?.release()
         mediaSession = null
@@ -94,5 +149,10 @@ class MediaButtonBridge(
 
     override fun onCancel(arguments: Any?) {
         eventSink = null
+    }
+
+    private companion object {
+        const val TAG = "MediaButtonBridge"
+        const val SILENCE_MS = 300
     }
 }
