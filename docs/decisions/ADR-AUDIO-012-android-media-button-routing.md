@@ -1,7 +1,7 @@
 # ADR-AUDIO-012: Android media-button routing — claim with a burst of silence, one session per engine
 
 Status: Accepted
-Decided in: #358
+Decided in: #358, PR #361
 Related: [ADR-AUDIO-010](./ADR-AUDIO-010-ios-media-button-routing-constraints.md) (the iOS counterpart)
 
 ## Context
@@ -18,16 +18,19 @@ Two causes, found on the device:
    plays audio under its own UID: TTS replies are played by the TTS engine
    (`com.google.android.tts`), and the silent keep-alive loops of ADR-AUDIO-010 are disabled
    (they took over the iOS audio session and killed the mic).
-2. At start the app created two sessions: one left behind by a Flutter engine that had already
-   gone away. That session held the routing, and its event sink led nowhere, so presses reached
-   `onPlay` natively but never Dart.
+2. The app could hold two sessions: one left behind by an earlier `MainActivity` instance whose
+   engine was destroyed while the process stayed alive (destroy and relaunch; `configChanges`
+   covers almost every recreation, and the foreground-service engine never runs
+   `configureFlutterEngine`). That session held the routing, and its event sink led nowhere, so
+   presses reached `onPlay` natively but never Dart.
 
 ## Decision
 
 1. `MediaButtonBridge.claimMediaButtonRouting()` plays 300 ms of PCM zeros through a native
    `AudioTrack` (`USAGE_MEDIA`, static mode, released right after) when the session activates
-   and when `MainActivity` resumes. Zeros are inaudible at any volume; the player is not muted,
-   because a muted player may not count as playback. No audio focus is requested, so other apps'
+   and when `MainActivity` resumes. The samples are silent; the player is not muted, because a
+   muted player may not count as playback. Starting a media stream can still wake an idle
+   Bluetooth (A2DP) link, which some headsets mark with a click. No audio focus is requested, so other apps'
    playback is not interrupted, and the recorder is not touched.
 2. `MainActivity.cleanUpFlutterEngine` releases the bridge's session, so there is at most one
    `VoiceAgentMediaSession` per live engine.
@@ -52,5 +55,8 @@ reply does not take the routing away; another media app's playback does, hence t
 - A press while hands-free is listening is delivered on Android (on iOS it is blocked) and hits the
   `listening-noop` branch in `recording_screen.dart`; what it should do there is a product
   decision outside this ADR.
+- The claim on resume also runs while hands-free is listening (e.g. after unlocking the screen).
+  No click was reported with the owner's Bluetooth headset; if one appears, gate the claim on the
+  capture state.
 - If Android changes the selection rule (e.g. ignores silent playback), the claim stops working;
   the symptom is `Media button session is null` again.

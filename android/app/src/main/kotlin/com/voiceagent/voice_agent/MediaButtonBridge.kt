@@ -26,6 +26,7 @@ class MediaButtonBridge(
 
     private var mediaSession: MediaSessionCompat? = null
     private var eventSink: EventChannel.EventSink? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     // -- MethodChannel handler ------------------------------------------------
 
@@ -119,12 +120,18 @@ class MediaButtonBridge(
                 .setBufferSizeInBytes(samples.size * 2)
                 .build()
             track = built
-            built.write(samples, 0, samples.size)
+            val written = built.write(samples, 0, samples.size)
+            if (written < 0) Log.w(TAG, "claimMediaButtonRouting: write returned $written")
             built.play()
             Log.d(TAG, "claimMediaButtonRouting: silence played")
-            Handler(Looper.getMainLooper()).postDelayed({
-                built.stop()
-                built.release()
+            handler.postDelayed({
+                try {
+                    built.stop()
+                } catch (e: IllegalStateException) {
+                    Log.w(TAG, "claimMediaButtonRouting: stop failed", e)
+                } finally {
+                    built.release()
+                }
             }, SILENCE_MS + 200L)
         } catch (e: Exception) {
             Log.w(TAG, "claimMediaButtonRouting failed", e)
