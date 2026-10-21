@@ -1,7 +1,7 @@
 # Manual test: Android baseline on the Pixel
 
 **Issue:** [#352](https://github.com/mjarco/voice-agent/issues/352), the last task of the workspace epic `voice-agent-on-pixel` (after [#349](https://github.com/mjarco/voice-agent/issues/349) build, [#350](https://github.com/mjarco/voice-agent/issues/350) manifest, [#351](https://github.com/mjarco/voice-agent/issues/351) Polish TTS).
-**Overall status:** **pending**: no case executed yet.
+**Overall status:** **failed** (first run 2026-10-21): T1, T4, T6 passed; T2 and T3 failed ([#358](https://github.com/mjarco/voice-agent/issues/358)), T5 failed ([#357](https://github.com/mjarco/voice-agent/issues/357)). Re-run T2, T3, T5 after those fixes.
 **Why now:** voice-agent has been built for Android only since v1.4.1. The voice loop, the headset button, scheduled reminders and WorkManager are device-only contracts, and none of them has a recorded pass on Android.
 **Time budget:** ~30 min active, plus waiting for T5 (a reminder 3 minutes ahead).
 **What we are testing:** that the Pixel can replace the iPhone for talking to personal-agent: hands-free turns in Polish, the headset play/pause button, routine reminders and the background agenda refresh. Unit tests (`make verify`) cover the logic; this plan covers only what they cannot.
@@ -14,15 +14,15 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 | # | Case | Status |
 |---|---|---|
-| S1 | Install on the Pixel | pending |
-| S2 | Backend state | pending |
-| S3 | Log capture | pending |
-| T1 | Five hands-free turns in one session | pending |
-| T2 | Headset button starts hands-free from idle, 3 of 3 | pending |
-| T3 | Headset button interrupts TTS, 3 of 3 | pending |
-| T4 | Hands-free with the screen off | pending |
-| T5 | Routine reminder fires at `start_time` (p040 T5) | pending |
-| T6 | WorkManager agenda refresh registered (p040 T9) | pending |
+| S1 | Install on the Pixel | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
+| S2 | Backend state | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
+| S3 | Log capture | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
+| T1 | Five hands-free turns in one session | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
+| T2 | Headset button starts hands-free from idle, 3 of 3 | failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): 0 of 3, no `[MediaButtonDbg]` event; `Media button session is null` ([#358](https://github.com/mjarco/voice-agent/issues/358)) |
+| T3 | Headset button interrupts TTS, 3 of 3 | failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): speech not interrupted, no `[MediaButtonDbg]` event (same cause as T2, [#358](https://github.com/mjarco/voice-agent/issues/358)) |
+| T4 | Hands-free with the screen off | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
+| T5 | Routine reminder fires at `start_time` (p040 T5) | failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): no alarm scheduled, pending occurrence has `occurrence_id: null` ([#357](https://github.com/mjarco/voice-agent/issues/357)) |
+| T6 | WorkManager agenda refresh registered (p040 T9) | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
 
 ---
 
@@ -30,7 +30,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### S1 — Install on the Pixel
 
-**Status:** pending
+**Status:** passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11))
 
 **Do:** on laptop.lan, with the Pixel connected over USB or wireless debugging:
 
@@ -45,7 +45,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### S2 — Backend state
 
-**Status:** pending
+**Status:** passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11))
 
 **Do:** in the personal-agent web UI, create a routine with an occurrence today whose `start_time` is about 5 minutes ahead (for T5). Note the routine's name.
 
@@ -53,7 +53,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### S3 — Log capture
 
-**Status:** pending
+**Status:** passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11))
 
 **Do:** on laptop.lan, before each test session:
 
@@ -70,7 +70,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### T1 — Five hands-free turns in one session (~5 min)
 
-**Status:** pending
+**Status:** passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): owner confirmed five Polish replies and the task added then removed; log shows `[TtsDbg] language=pl … voice=pl-pl-x-oda-local`, four spoken replies 20:34–20:36 in one process, no errors; `kupić mleko` absent from the agenda afterwards
 
 **Do:**
 1. Open the Record tab and tap the mic to engage hands-free ("Listening").
@@ -93,7 +93,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### T2 — Headset button starts hands-free from idle, 3 of 3 (~3 min)
 
-**Status:** pending
+**Status:** failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): 0 of 3, no `[MediaButtonDbg]` event; `Media button session is null` ([#358](https://github.com/mjarco/voice-agent/issues/358))
 
 **Do:**
 1. Connect a Bluetooth headset. Open the app on the Record tab, hands-free idle.
@@ -110,7 +110,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### T3 — Headset button interrupts TTS, 3 of 3 (~3 min)
 
-**Status:** pending
+**Status:** failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): speech not interrupted, no `[MediaButtonDbg]` event (same cause as T2, [#358](https://github.com/mjarco/voice-agent/issues/358))
 
 **Do:**
 1. Ask something with a long answer ("opowiedz mi o moich zadaniach na ten tydzień").
@@ -125,7 +125,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### T4 — Hands-free with the screen off (~2 min)
 
-**Status:** pending
+**Status:** passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): reply spoken with the screen off (owner); `dumpsys activity services` shows `ForegroundService` `isForeground=true types=0x00000082`; no foreground-service exception in logcat
 
 **Do:**
 1. Engage hands-free. Check the notification shade for the "Voice Agent" foreground notification.
@@ -140,7 +140,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### T5 — Routine reminder fires at `start_time` (p040 T5, ~5 min wait)
 
-**Status:** pending
+**Status:** failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): no alarm scheduled, pending occurrence has `occurrence_id: null` ([#357](https://github.com/mjarco/voice-agent/issues/357))
 
 **Do:**
 1. With the occurrence from S2 ahead, open the Agenda tab (this reconciles the schedule).
@@ -157,7 +157,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### T6 — WorkManager agenda refresh registered (p040 T9, ~2 min)
 
-**Status:** pending
+**Status:** passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): job `#BackgroundWorker#` for `SystemJobService` present, network constraint, past runs at gaps of 2–5 h (standby bucket 20, working set).
 
 **Do:**
 1. Open the app once after install.
@@ -165,7 +165,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 **Why:** [p040 T9](p040-agenda-notifications.md#t9--workmanager-bg-task-registers-on-android-android-only-3-min) after the `workmanager` 0.10 upgrade in #349: `registerAgendaRefresh()` enqueues the periodic task.
 
-**Expected:** one job for `androidx.work.impl.background.systemjob.SystemJobService`, periodic, interval `+1h0m0s` (3,600,000 ms).
+**Expected:** one `JOB androidx.work.systemjobscheduler:…` entry for `com.voiceagent.voice_agent.dev/androidx.work.impl.background.systemjob.SystemJobService` (tag `#BackgroundWorker#`), with `Network type` set (the `NetworkType.connected` constraint). WorkManager hands JobScheduler one run at a time, so the 1 h period does not appear as such; the job's run history (`grep 10467/com.voiceagent` in the same dump) shows past runs. Android stretches the gaps by the app's standby bucket (`adb shell am get-standby-bucket com.voiceagent.voice_agent.dev`); gaps of a few hours are expected, not a failure.
 
 **On failure:** `lib/app/background/register_agenda_refresh.dart` was not reached; look for `[agendaRefreshDispatcher]` lines and Dart exceptions at start-up.
 
