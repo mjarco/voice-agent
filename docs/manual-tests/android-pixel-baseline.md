@@ -1,7 +1,7 @@
 # Manual test: Android baseline on the Pixel
 
 **Issue:** [#352](https://github.com/mjarco/voice-agent/issues/352), the last task of the workspace epic `voice-agent-on-pixel` (after [#349](https://github.com/mjarco/voice-agent/issues/349) build, [#350](https://github.com/mjarco/voice-agent/issues/350) manifest, [#351](https://github.com/mjarco/voice-agent/issues/351) Polish TTS).
-**Overall status:** **failed** (first run 2026-10-21): T1, T4, T6 passed; T2 and T3 failed ([#358](https://github.com/mjarco/voice-agent/issues/358)), T5 failed ([#357](https://github.com/mjarco/voice-agent/issues/357)). Re-run T2, T3, T5 after those fixes.
+**Overall status:** **failed** (first run 2026-10-21): T1, T4, T6 passed; T5 passed on re-run after [#357](https://github.com/mjarco/voice-agent/issues/357); T2 and T3 failed ([#358](https://github.com/mjarco/voice-agent/issues/358)). Re-run T2, T3 after that fix.
 **Why now:** voice-agent has been built for Android only since v1.4.1. The voice loop, the headset button, scheduled reminders and WorkManager are device-only contracts, and none of them has a recorded pass on Android.
 **Time budget:** ~30 min active, plus waiting for T5 (a reminder 3 minutes ahead).
 **What we are testing:** that the Pixel can replace the iPhone for talking to personal-agent: hands-free turns in Polish, the headset play/pause button, routine reminders and the background agenda refresh. Unit tests (`make verify`) cover the logic; this plan covers only what they cannot.
@@ -21,7 +21,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T2 | Headset button starts hands-free from idle, 3 of 3 | failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): 0 of 3, no `[MediaButtonDbg]` event; `Media button session is null` ([#358](https://github.com/mjarco/voice-agent/issues/358)) |
 | T3 | Headset button interrupts TTS, 3 of 3 | failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): speech not interrupted, no `[MediaButtonDbg]` event (same cause as T2, [#358](https://github.com/mjarco/voice-agent/issues/358)) |
 | T4 | Hands-free with the screen off | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
-| T5 | Routine reminder fires at `start_time` (p040 T5) | failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): no alarm scheduled, pending occurrence has `occurrence_id: null` ([#357](https://github.com/mjarco/voice-agent/issues/357)) |
+| T5 | Routine reminder fires at `start_time` (p040 T5) | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.4 (12)) |
 | T6 | WorkManager agenda refresh registered (p040 T9) | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
 
 ---
@@ -140,7 +140,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### T5 — Routine reminder fires at `start_time` (p040 T5, ~5 min wait)
 
-**Status:** failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): no alarm scheduled, pending occurrence has `occurrence_id: null` ([#357](https://github.com/mjarco/voice-agent/issues/357))
+**Status:** passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.4 (12)): re-run after [#357](https://github.com/mjarco/voice-agent/issues/357) (PR #360): exact alarm at 21:40 for an occurrence with `occurrence_id: null`, reminder shown, tap opened Agenda (owner). First run failed on 1.4.3 (11): no alarm
 
 **Do:**
 1. With the occurrence from S2 ahead, open the Agenda tab (this reconciles the schedule).
