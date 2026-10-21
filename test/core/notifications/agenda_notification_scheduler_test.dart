@@ -273,16 +273,59 @@ void main() {
       expect(routineIds, isEmpty);
     });
 
-    test('null occurrenceId is not scheduled', () async {
+    test('pending occurrence without occurrenceId is scheduled (#357)',
+        () async {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       await scheduler.reconcile(
         responseFor('2026-05-17', routineItems: [
-          routine('r1', name: 'No occurrence', occurrenceId: null),
+          routine('r1', name: 'Not acted on yet', occurrenceId: null),
         ]),
         sessionActive: false,
       );
       final snapshot = await service.currentlyScheduled();
-      expect(snapshot.keys.where((id) => id >= 3000000), isEmpty);
+      final routineIds = snapshot.keys.where((id) => id >= 3000000);
+      expect(routineIds.length, 1);
+      expect(snapshot[routineIds.first]!.title, 'Not acted on yet');
+    });
+
+    test('reminder id does not change when occurrenceId appears', () async {
+      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
+      await scheduler.reconcile(
+        responseFor('2026-05-17', routineItems: [
+          routine('r1', name: 'Same reminder', occurrenceId: null),
+        ]),
+        sessionActive: false,
+      );
+      final before = (await service.currentlyScheduled()).keys.toSet();
+      await scheduler.reconcile(
+        responseFor('2026-05-17', routineItems: [
+          routine('r1', name: 'Same reminder', occurrenceId: 'occ-001'),
+        ]),
+        sessionActive: false,
+      );
+      final after = (await service.currentlyScheduled()).keys.toSet();
+      expect(after, before);
+      expect(service.cancelCount, 0);
+    });
+
+    test('same routine on two days gets two reminders', () async {
+      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
+      await scheduler.reconcile(
+        responseFor('2026-05-17', routineItems: [
+          routine('r1', name: 'Today', scheduledFor: '2026-05-17'),
+          routine('r1', name: 'Tomorrow', scheduledFor: '2026-05-18'),
+        ]),
+        sessionActive: false,
+      );
+      final snapshot = await service.currentlyScheduled();
+      expect(snapshot.keys.where((id) => id >= 3000000).length, 2);
+    });
+
+    test('reminder ids stay within the 32-bit notification id range', () {
+      for (final hash in [0, 1, 0x7FFFFFFF, 0x80000000, 0xFFFFFFFF]) {
+        final id = routineReminderIdFromHash(hash);
+        expect(id, inInclusiveRange(3000000, 0x7FFFFFFF), reason: '$hash');
+      }
     });
 
     test('null start_time is not scheduled', () async {

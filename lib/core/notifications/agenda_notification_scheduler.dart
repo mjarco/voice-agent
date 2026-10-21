@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
@@ -136,7 +137,6 @@ class AgendaNotificationScheduler {
     // Routine occurrences — gated by sessionActive.
     if (!sessionActive) {
       for (final r in response.routineItems) {
-        if (r.occurrenceId == null) continue;
         if (r.startTime == null) continue;
         if (r.status == OccurrenceStatus.skipped ||
             r.status == OccurrenceStatus.done) {
@@ -146,7 +146,7 @@ class AgendaNotificationScheduler {
         if (fireAt == null) continue;
         if (!fireAt.isAfter(now)) continue;
         out.add(ScheduledNotification(
-          id: _routineReminderId(r.occurrenceId!),
+          id: _routineReminderId(r.routineId, r.scheduledFor),
           title: r.routineName,
           body: r.startTime!,
           fireAt: fireAt,
@@ -241,10 +241,21 @@ class _SummaryCounts {
   }
 }
 
-/// Routine reminder ID = 3_000_000 + (CRC32(occurrenceId) & 0x7FFFFFFF).
-/// Range reserved per ADR-NOTIF-001.
-int _routineReminderId(String occurrenceId) {
-  return 3000000 + (_crc32(occurrenceId) & 0x7FFFFFFF);
+/// Routine reminder ID, keyed by routine and day (ADR-NOTIF-002): PA returns
+/// `occurrence_id: null` until an occurrence is acted on, so the occurrence id
+/// cannot be the key.
+int _routineReminderId(String routineId, String scheduledFor) {
+  return routineReminderIdFromHash(_crc32('$routineId@$scheduledFor'));
+}
+
+/// Maps a CRC-32 into `3_000_000..0x7FFFFFFF`: the reserved range
+/// (ADR-NOTIF-001) capped at the 32-bit limit that `flutter_local_notifications`
+/// enforces (ADR-NOTIF-002).
+@visibleForTesting
+int routineReminderIdFromHash(int hash) {
+  const base = 3000000;
+  const maxId = 0x7FFFFFFF;
+  return base + hash % (maxId - base + 1);
 }
 
 /// CRC-32/ISO-HDLC. Standalone implementation to avoid pulling a hash

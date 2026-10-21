@@ -83,6 +83,13 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-NET-003](ADR-NET-003-sse-streaming-client.md) | SSE streaming client | Accepted |
 | [ADR-NET-004](ADR-NET-004-app-version-sync-header.md) | Report installed app version via X-App-Version sync header | Accepted |
 
+### NOTIF — Local Notifications
+
+| ADR | Title | Status |
+| --- | ----- | ------ |
+| [ADR-NOTIF-001](ADR-NOTIF-001-diff-based-reconciliation-with-id-partitioning.md) | Local notifications via diff-based reconciliation with reserved ID partitioning | Proposed; id formula superseded by NOTIF-002 |
+| [ADR-NOTIF-002](ADR-NOTIF-002-routine-reminder-key.md) | Routine reminders keyed by routine and day, within the 32-bit id range | Accepted |
+
 ### PLATFORM — Mobile Platform & UX
 
 | ADR | Title | Status |
