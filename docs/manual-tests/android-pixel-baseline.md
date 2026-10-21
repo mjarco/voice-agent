@@ -1,7 +1,7 @@
 # Manual test: Android baseline on the Pixel
 
 **Issue:** [#352](https://github.com/mjarco/voice-agent/issues/352), the last task of the workspace epic `voice-agent-on-pixel` (after [#349](https://github.com/mjarco/voice-agent/issues/349) build, [#350](https://github.com/mjarco/voice-agent/issues/350) manifest, [#351](https://github.com/mjarco/voice-agent/issues/351) Polish TTS).
-**Overall status:** **failed** (first run 2026-10-21): T1, T4, T6 passed; T5 passed on re-run after [#357](https://github.com/mjarco/voice-agent/issues/357); T2 and T3 failed ([#358](https://github.com/mjarco/voice-agent/issues/358)). Re-run T2, T3 after that fix.
+**Overall status:** **passed** (2026-10-21, Pixel 11 Pro, Android 17): T1, T4, T6 passed on the first run (1.4.3 (11)); T5 after [#357](https://github.com/mjarco/voice-agent/issues/357) (1.4.4 (12)); T2 and T3 after [#358](https://github.com/mjarco/voice-agent/issues/358) (1.4.5 (13)).
 **Why now:** voice-agent has been built for Android only since v1.4.1. The voice loop, the headset button, scheduled reminders and WorkManager are device-only contracts, and none of them has a recorded pass on Android.
 **Time budget:** ~30 min active, plus waiting for T5 (a reminder 3 minutes ahead).
 **What we are testing:** that the Pixel can replace the iPhone for talking to personal-agent: hands-free turns in Polish, the headset play/pause button, routine reminders and the background agenda refresh. Unit tests (`make verify`) cover the logic; this plan covers only what they cannot.
@@ -18,8 +18,8 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | S2 | Backend state | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
 | S3 | Log capture | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
 | T1 | Five hands-free turns in one session | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
-| T2 | Headset button starts hands-free from idle, 3 of 3 | failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): 0 of 3, no `[MediaButtonDbg]` event; `Media button session is null` ([#358](https://github.com/mjarco/voice-agent/issues/358)) |
-| T3 | Headset button interrupts TTS, 3 of 3 | failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): speech not interrupted, no `[MediaButtonDbg]` event (same cause as T2, [#358](https://github.com/mjarco/voice-agent/issues/358)) |
+| T2 | Headset button starts hands-free from idle, 3 of 3 | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.5 (13)) |
+| T3 | Headset button interrupts TTS, 3 of 3 | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.5 (13)) |
 | T4 | Hands-free with the screen off | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
 | T5 | Routine reminder fires at `start_time` (p040 T5) | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.4 (12)) |
 | T6 | WorkManager agenda refresh registered (p040 T9) | passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)) |
@@ -93,7 +93,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### T2 — Headset button starts hands-free from idle, 3 of 3 (~3 min)
 
-**Status:** failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): 0 of 3, no `[MediaButtonDbg]` event; `Media button session is null` ([#358](https://github.com/mjarco/voice-agent/issues/358))
+**Status:** passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.5 (13)): re-run after [#358](https://github.com/mjarco/voice-agent/issues/358) (PR #361), 3 of 3 (owner); log `[MediaButtonDbg] branch=engage`. First run failed on 1.4.3 (11): no `[MediaButtonDbg]` event, `Media button session is null`
 
 **Do:**
 1. Connect a Bluetooth headset. Open the app on the Record tab, hands-free idle.
@@ -110,7 +110,7 @@ Record the installed build in every status line: Settings shows it (e.g. `1.4.3 
 
 ### T3 — Headset button interrupts TTS, 3 of 3 (~3 min)
 
-**Status:** failed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.3 (11)): speech not interrupted, no `[MediaButtonDbg]` event (same cause as T2, [#358](https://github.com/mjarco/voice-agent/issues/358))
+**Status:** passed (2026-10-21, Pixel 11 Pro, Android 17, 1.4.5 (13)): re-run after [#358](https://github.com/mjarco/voice-agent/issues/358) (PR #361), 3 of 3 (owner); log `[MediaButtonDbg] branch=stopTts` (2 of the 3 presses captured). First run failed on 1.4.3 (11): no `[MediaButtonDbg]` event, `Media button session is null`
 
 **Do:**
 1. Ask something with a long answer ("opowiedz mi o moich zadaniach na ten tydzień").
