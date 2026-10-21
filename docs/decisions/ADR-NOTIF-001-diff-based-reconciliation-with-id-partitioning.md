@@ -1,6 +1,6 @@
 # ADR-NOTIF-001: Local notifications via diff-based reconciliation with reserved ID partitioning
 
-Status: Proposed
+Status: Proposed. Routine-reminder id formula (item 5) superseded by [ADR-NOTIF-002](./ADR-NOTIF-002-routine-reminder-key.md).
 Proposed in: P040
 
 ## Context
