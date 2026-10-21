@@ -1,7 +1,7 @@
 # ADR-NOTIF-002: Routine reminders keyed by routine and day, within the 32-bit id range
 
 Status: Accepted
-Decided in: #357 (PR to follow the issue)
+Decided in: #357, PR #360
 Supersedes: the routine-reminder id formula in item 5 of [ADR-NOTIF-001](./ADR-NOTIF-001-diff-based-reconciliation-with-id-partitioning.md)
 
 ## Context
