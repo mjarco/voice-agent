@@ -62,6 +62,7 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-AUDIO-006](ADR-AUDIO-006-immutable-vad-config.md) | Session-scoped immutable VAD configuration | Accepted |
 | [ADR-AUDIO-007](ADR-AUDIO-007-ios-ambient-audio-session.md) | iOS ambient audio session category for playback | Accepted |
 | [ADR-AUDIO-008](ADR-AUDIO-008-eager-audio-file-deletion.md) | Eager audio file deletion after transcription | Accepted |
+| [ADR-AUDIO-012](ADR-AUDIO-012-android-media-button-routing.md) | Android media-button routing: claim with a burst of silence, one session per engine | Accepted |
 
 ### DATA — Storage & Persistence
 
