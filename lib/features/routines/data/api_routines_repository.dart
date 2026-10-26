@@ -55,15 +55,6 @@ class ApiRoutinesRepository implements RoutinesRepository {
   }
 
   @override
-  Future<void> triggerRoutine(String id, String scheduledFor) async {
-    final result = await _apiClient.postJson(
-      '/routines/$id/trigger',
-      data: {'scheduled_for': scheduledFor},
-    );
-    _throwOnFailure(result, is409Trigger: true);
-  }
-
-  @override
   Future<void> updateOccurrenceStatus(
     String routineId,
     String occurrenceId,
@@ -136,14 +127,11 @@ class ApiRoutinesRepository implements RoutinesRepository {
     }
   }
 
-  void _throwOnFailure(ApiResult result, {bool is409Trigger = false}) {
+  void _throwOnFailure(ApiResult result) {
     switch (result) {
       case ApiSuccess():
         return;
       case ApiPermanentFailure(statusCode: 409):
-        if (is409Trigger) {
-          throw RoutineAlreadyTriggedException();
-        }
         throw RoutineConflictException('Operation conflict');
       case ApiPermanentFailure(message: final msg, statusCode: final code):
         throw RoutinesGeneralException('Server error $code: $msg');

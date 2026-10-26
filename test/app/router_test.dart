@@ -71,9 +71,9 @@ class _StubAgendaRepository implements AgendaRepository {
   @override
   Future<void> markActionItemDone(String recordId) async {}
   @override
-  Future<void> updateOccurrenceStatus(
+  Future<void> resolveOccurrence(
     String routineId,
-    String occurrenceId,
+    String scheduledFor,
     OccurrenceStatus status,
   ) async {}
 }

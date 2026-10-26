@@ -67,13 +67,18 @@ class _StubRepository implements AgendaRepository {
     if (!markDoneSuccess) throw Exception('Failed');
   }
 
+  final resolved = <String>[];
+  AgendaException? resolveError;
+
   @override
-  Future<void> updateOccurrenceStatus(
+  Future<void> resolveOccurrence(
     String routineId,
-    String occurrenceId,
+    String scheduledFor,
     OccurrenceStatus status,
   ) async {
     if (!updateStatusSuccess) throw Exception('Failed');
+    if (resolveError != null) throw resolveError!;
+    resolved.add('$routineId $scheduledFor ${status.toJson()}');
   }
 }
 
@@ -296,6 +301,76 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('agenda-today-btn')), findsOneWidget);
+    });
+
+    AgendaResponse routineAgenda(List<AgendaRoutineItem> items) => AgendaResponse(
+          date: '2026-10-26',
+          granularity: 'day',
+          from: '2026-10-26',
+          to: '2026-10-26',
+          items: [],
+          routineItems: items,
+        );
+
+    const waiting = AgendaRoutineItem(
+      routineId: 'rtn-inv',
+      routineName: 'Invoice',
+      scheduledFor: '2026-09-10',
+      overdue: true,
+      status: OccurrenceStatus.pending,
+      templates: [],
+    );
+
+    testWidgets(
+        'a routine row without a stored occurrence is ticked off through resolve (#363)',
+        (tester) async {
+      final repo = _StubRepository(response: routineAgenda([waiting]));
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.byKey(const Key('routine-since-rtn-inv')), findsOneWidget);
+      expect(find.text('since 2026-09-10'), findsOneWidget);
+
+      await tester.tap(find.text('Invoice'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-complete-rtn-inv')));
+      await tester.pumpAndSettle();
+
+      expect(repo.resolved, ['rtn-inv 2026-09-10 done']);
+    });
+
+    testWidgets('a refused tick-off shows its reason', (tester) async {
+      final repo = _StubRepository(response: routineAgenda([waiting]))
+        ..resolveError = AgendaException('Server error 409', statusCode: 409);
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.text('Invoice'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-complete-rtn-inv')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Already done'), findsOneWidget);
+    });
+
+    testWidgets('a peer-mirrored row and a today row', (tester) async {
+      final repo = _StubRepository(
+        response: routineAgenda([
+          const AgendaRoutineItem(
+            routineId: 'rtn-peer',
+            routineName: 'Upstream walk',
+            scheduledFor: '2026-10-26',
+            overdue: false,
+            status: OccurrenceStatus.pending,
+            templates: [],
+            peerId: 'upstream',
+          ),
+        ]),
+      );
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.textContaining('since'), findsNothing);
+      await tester.tap(find.text('Upstream walk'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('routine-complete-rtn-peer')), findsNothing);
     });
   });
 }

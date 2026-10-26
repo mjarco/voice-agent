@@ -138,10 +138,6 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
                       routine: r,
                       isBusy: _busyIds.contains(r.id),
                       onTap: () => _navigateToDetail(r.id),
-                      onTrigger:
-                          r.status == RoutineStatus.active
-                              ? () => _handleTrigger(r.id)
-                              : null,
                       onPause:
                           r.status == RoutineStatus.active
                               ? () => _handlePause(r.id)
@@ -182,22 +178,6 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
     }
   }
 
-  Future<void> _handleTrigger(String id) async {
-    setState(() => _busyIds.add(id));
-    final now = DateTime.now();
-    final date =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final notifier = ref.read(routinesNotifierProvider.notifier);
-    final success = await notifier.triggerRoutine(id, date);
-    if (mounted) setState(() => _busyIds.remove(id));
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-                Text(notifier.lastActionError ?? 'Failed to trigger')),
-      );
-    }
-  }
 
   Future<void> _handlePause(String id) async {
     setState(() => _busyIds.add(id));
@@ -512,14 +492,12 @@ class _RoutineCard extends StatelessWidget {
     required this.routine,
     required this.isBusy,
     required this.onTap,
-    this.onTrigger,
     this.onPause,
     this.onResume,
   });
   final Routine routine;
   final bool isBusy;
   final VoidCallback onTap;
-  final VoidCallback? onTrigger;
   final VoidCallback? onPause;
   final VoidCallback? onResume;
 
@@ -565,13 +543,6 @@ class _RoutineCard extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               else ...[
-                if (onTrigger != null)
-                  IconButton(
-                    key: Key('routine-trigger-${routine.id}'),
-                    icon: const Icon(Icons.play_arrow),
-                    tooltip: 'Trigger now',
-                    onPressed: onTrigger,
-                  ),
                 if (onPause != null)
                   IconButton(
                     key: Key('routine-pause-${routine.id}'),

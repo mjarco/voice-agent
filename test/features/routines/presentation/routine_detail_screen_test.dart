@@ -42,7 +42,6 @@ class _StubRepository implements RoutinesRepository {
   Future<void> activateRoutine(String id) async {}
 
   Completer<void>? pauseCompleter;
-  Completer<void>? triggerCompleter;
 
   @override
   Future<void> pauseRoutine(String id) async {
@@ -51,11 +50,6 @@ class _StubRepository implements RoutinesRepository {
 
   @override
   Future<void> archiveRoutine(String id) async {}
-
-  @override
-  Future<void> triggerRoutine(String id, String scheduledFor) async {
-    if (triggerCompleter != null) await triggerCompleter!.future;
-  }
 
   @override
   Future<void> updateOccurrenceStatus(
@@ -246,7 +240,7 @@ void main() {
           find.byKey(const Key('occurrence-skip-occ-1')), findsNothing);
     });
 
-    testWidgets('active routine shows pause, trigger, archive buttons',
+    testWidgets('active routine shows pause and archive, no trigger (#363)',
         (tester) async {
       await _pumpScreen(tester);
 
@@ -256,7 +250,7 @@ void main() {
       );
       expect(
         find.byKey(const Key('detail-trigger-button')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.byKey(const Key('detail-archive-button')),
@@ -342,11 +336,6 @@ void main() {
     testWidgets('action buttons are enabled before any action',
         (tester) async {
       await _pumpScreen(tester);
-
-      final triggerButton = tester.widget<FilledButton>(
-        find.byKey(const Key('detail-trigger-button')),
-      );
-      expect(triggerButton.onPressed, isNotNull);
 
       final pauseButton = tester.widget<OutlinedButton>(
         find.byKey(const Key('detail-pause-button')),

@@ -15,6 +15,7 @@ class _StubApiClient extends ApiClient {
   String? lastGetPath;
   Map<String, dynamic>? lastGetParams;
   String? lastPostPath;
+  Map<String, dynamic>? lastPostData;
   String? lastPatchPath;
   Map<String, dynamic>? lastPatchData;
 
@@ -30,6 +31,7 @@ class _StubApiClient extends ApiClient {
   Future<ApiResult> postJson(String path,
       {Map<String, dynamic>? data}) async {
     lastPostPath = path;
+    lastPostData = data;
     return nextPostResult;
   }
 
@@ -216,44 +218,51 @@ void main() {
     });
   });
 
-  group('updateOccurrenceStatus', () {
-    test('sends PATCH with correct path and data', () async {
-      apiClient.nextPatchResult = const ApiSuccess();
-
-      await repo.updateOccurrenceStatus(
+  group('resolveOccurrence', () {
+    test('sends POST resolve with the day and status (#363)', () async {
+      await repo.resolveOccurrence(
         'rtn-1',
-        'occ-1',
+        '2026-09-10',
         OccurrenceStatus.skipped,
       );
 
-      expect(apiClient.lastPatchPath, '/routines/rtn-1/occurrences/occ-1');
-      expect(apiClient.lastPatchData, {'status': 'skipped'});
+      expect(apiClient.lastPostPath, '/routines/rtn-1/resolve');
+      expect(apiClient.lastPostData,
+          {'scheduled_for': '2026-09-10', 'status': 'skipped'});
+      expect(apiClient.lastPatchPath, isNull);
     });
 
     test('sends done status', () async {
-      apiClient.nextPatchResult = const ApiSuccess();
+      await repo.resolveOccurrence('rtn-1', '2026-10-26', OccurrenceStatus.done);
 
-      await repo.updateOccurrenceStatus(
-        'rtn-1',
-        'occ-1',
-        OccurrenceStatus.done,
-      );
-
-      expect(apiClient.lastPatchData, {'status': 'done'});
+      expect(apiClient.lastPostData,
+          {'scheduled_for': '2026-10-26', 'status': 'done'});
     });
 
-    test('throws on failure', () async {
-      apiClient.nextPatchResult = const ApiTransientFailure(
+    test('a refusal carries the server status', () async {
+      apiClient.nextPostResult = const ApiPermanentFailure(
+        statusCode: 409,
+        message: 'already resolved',
+      );
+
+      expect(
+        () => repo.resolveOccurrence(
+            'rtn-1', '2026-10-26', OccurrenceStatus.done),
+        throwsA(isA<AgendaException>()
+            .having((e) => e.statusCode, 'statusCode', 409)),
+      );
+    });
+
+    test('a transient failure has no status', () async {
+      apiClient.nextPostResult = const ApiTransientFailure(
         reason: 'Connection error',
       );
 
       expect(
-        () => repo.updateOccurrenceStatus(
-          'rtn-1',
-          'occ-1',
-          OccurrenceStatus.skipped,
-        ),
-        throwsA(isA<AgendaException>()),
+        () => repo.resolveOccurrence(
+            'rtn-1', '2026-10-26', OccurrenceStatus.skipped),
+        throwsA(isA<AgendaException>()
+            .having((e) => e.statusCode, 'statusCode', isNull)),
       );
     });
   });

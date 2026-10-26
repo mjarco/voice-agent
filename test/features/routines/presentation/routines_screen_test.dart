@@ -1,4 +1,3 @@
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,12 +39,6 @@ class _StubRepository implements RoutinesRepository {
   @override
   Future<void> archiveRoutine(String id) async {}
 
-  Completer<void>? triggerCompleter;
-
-  @override
-  Future<void> triggerRoutine(String id, String scheduledFor) async {
-    if (triggerCompleter != null) await triggerCompleter!.future;
-  }
 
   @override
   Future<void> updateOccurrenceStatus(
@@ -217,7 +210,7 @@ void main() {
       expect(find.text('Next: 2026-04-20'), findsOneWidget);
     });
 
-    testWidgets('active routine shows trigger and pause buttons',
+    testWidgets('active routine shows pause and no trigger (#363)',
         (tester) async {
       final repo = _StubRepository(
         routines: [_sampleRoutine(status: RoutineStatus.active)],
@@ -225,10 +218,7 @@ void main() {
 
       await _pumpScreen(tester, repository: repo);
 
-      expect(
-        find.byKey(const Key('routine-trigger-rtn-1')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('routine-trigger-rtn-1')), findsNothing);
       expect(
         find.byKey(const Key('routine-pause-rtn-1')),
         findsOneWidget,
@@ -491,23 +481,6 @@ void main() {
       expect(find.text('Confidence: 85%'), findsOneWidget);
     });
 
-    testWidgets('trigger completes and buttons remain after action',
-        (tester) async {
-      final repo = _StubRepository(
-        routines: [_sampleRoutine(status: RoutineStatus.active)],
-      )..triggerCompleter = Completer<void>();
-
-      await _pumpScreen(tester, repository: repo);
-
-      // Trigger is present before action
-      expect(
-        find.byKey(const Key('routine-trigger-rtn-1')),
-        findsOneWidget,
-      );
-
-      repo.triggerCompleter!.complete();
-      await tester.pumpAndSettle();
-    });
   });
 }
 
@@ -536,9 +509,6 @@ class _FailingRepository implements RoutinesRepository {
 
   @override
   Future<void> archiveRoutine(String id) async {}
-
-  @override
-  Future<void> triggerRoutine(String id, String scheduledFor) async {}
 
   @override
   Future<void> updateOccurrenceStatus(

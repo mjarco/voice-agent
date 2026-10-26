@@ -129,32 +129,35 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
     }
   }
 
-  Future<bool> skipOccurrence(String routineId, String occurrenceId) async {
+  /// Ticks off the routine's occurrence of [scheduledFor] (done or skipped)
+  /// through resolve (#363). Returns null when it was stored, otherwise the
+  /// short reason the snackbar shows.
+  Future<String?> resolveOccurrence(
+    String routineId,
+    String scheduledFor,
+    OccurrenceStatus status,
+  ) async {
     try {
-      await _repository.updateOccurrenceStatus(
-        routineId,
-        occurrenceId,
-        OccurrenceStatus.skipped,
-      );
+      await _repository.resolveOccurrence(routineId, scheduledFor, status);
       await loadAgenda();
-      return true;
-    } catch (_) {
-      return false;
+      return null;
+    } catch (e) {
+      return refusalMessage(e, status);
     }
   }
+}
 
-  Future<bool> completeOccurrence(
-      String routineId, String occurrenceId) async {
-    try {
-      await _repository.updateOccurrenceStatus(
-        routineId,
-        occurrenceId,
-        OccurrenceStatus.done,
-      );
-      await loadAgenda();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+/// Why a tick-off was not stored, said by the server's status where it has
+/// one (personal-agent: 409 already resolved, 422 no occurrence that day,
+/// 404 no such routine).
+String refusalMessage(Object error, OccurrenceStatus status) {
+  final code = error is AgendaException ? error.statusCode : null;
+  return switch (code) {
+    409 => 'Already done',
+    422 => 'Nothing due that day',
+    404 => 'Routine not found',
+    _ => status == OccurrenceStatus.skipped
+        ? 'Failed to skip occurrence'
+        : 'Failed to complete occurrence',
+  };
 }

@@ -14,8 +14,6 @@ class _MockRepository implements RoutinesRepository {
   int fetchRoutinesCount = 0;
   int fetchProposalsCount = 0;
   RoutineStatus? lastFetchStatus;
-  String? lastTriggerId;
-  String? lastTriggerDate;
   String? lastActivateId;
   String? lastPauseId;
   String? lastApproveId;
@@ -59,13 +57,6 @@ class _MockRepository implements RoutinesRepository {
   @override
   Future<void> archiveRoutine(String id) async =>
       throw UnimplementedError();
-
-  @override
-  Future<void> triggerRoutine(String id, String scheduledFor) async {
-    lastTriggerId = id;
-    lastTriggerDate = scheduledFor;
-    if (actionError != null) throw actionError!;
-  }
 
   @override
   Future<void> updateOccurrenceStatus(
@@ -218,40 +209,6 @@ void main() {
       expect(notifier.state, isA<RoutinesLoaded>());
     });
 
-    test('triggerRoutine returns true on success', () async {
-      final notifier = RoutinesNotifier(repo);
-      await Future<void>.delayed(Duration.zero);
-
-      final result = await notifier.triggerRoutine('rtn-1', '2026-04-19');
-
-      expect(result, isTrue);
-      expect(repo.lastTriggerId, 'rtn-1');
-      expect(repo.lastTriggerDate, '2026-04-19');
-      expect(notifier.lastActionError, isNull);
-    });
-
-    test('triggerRoutine returns false on RoutineAlreadyTriggered', () async {
-      final notifier = RoutinesNotifier(repo);
-      await Future<void>.delayed(Duration.zero);
-
-      repo.actionError = RoutineAlreadyTriggedException();
-      final result = await notifier.triggerRoutine('rtn-1', '2026-04-19');
-
-      expect(result, isFalse);
-      expect(notifier.lastActionError, 'Already triggered for this date');
-    });
-
-    test('triggerRoutine returns false on general exception', () async {
-      final notifier = RoutinesNotifier(repo);
-      await Future<void>.delayed(Duration.zero);
-
-      repo.actionError = RoutinesGeneralException('Server error');
-      final result = await notifier.triggerRoutine('rtn-1', '2026-04-19');
-
-      expect(result, isFalse);
-      expect(notifier.lastActionError, 'Server error');
-    });
-
     test('pauseRoutine returns true on success', () async {
       final notifier = RoutinesNotifier(repo);
       await Future<void>.delayed(Duration.zero);
@@ -365,7 +322,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       repo.actionError = RoutinesGeneralException('Error');
-      await notifier.triggerRoutine('rtn-1', '2026-04-19');
+      await notifier.activateRoutine('rtn-1');
       expect(notifier.lastActionError, 'Error');
 
       repo.actionError = null;
