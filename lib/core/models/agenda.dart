@@ -106,6 +106,7 @@ class AgendaRoutineItem {
     required this.status,
     this.occurrenceId,
     required this.templates,
+    this.peerId,
   });
 
   final String routineId;
@@ -116,6 +117,10 @@ class AgendaRoutineItem {
   final OccurrenceStatus status;
   final String? occurrenceId;
   final List<RoutineTemplate> templates;
+
+  /// Set on a row mirrored from a peer instance; such a row changes only
+  /// through the peer routes (ADR-FED-052), so the app does not tick it off.
+  final String? peerId;
 
   factory AgendaRoutineItem.fromMap(Map<String, dynamic> map) {
     return AgendaRoutineItem(
@@ -129,6 +134,7 @@ class AgendaRoutineItem {
       templates: (map['templates'] as List<dynamic>)
           .map((e) => RoutineTemplate.fromMap(e as Map<String, dynamic>))
           .toList(),
+      peerId: map['peer_id'] as String?,
     );
   }
 
@@ -142,6 +148,7 @@ class AgendaRoutineItem {
       'status': status.toJson(),
       'occurrence_id': occurrenceId,
       'templates': templates.map((t) => t.toMap()).toList(),
+      if (peerId != null) 'peer_id': peerId,
     };
   }
 }

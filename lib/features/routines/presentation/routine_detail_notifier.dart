@@ -75,21 +75,6 @@ class RoutineDetailNotifier extends StateNotifier<RoutineDetailState> {
     }
   }
 
-  Future<bool> triggerRoutine(String scheduledFor) async {
-    lastActionError = null;
-    try {
-      await _repository.triggerRoutine(_routineId, scheduledFor);
-      await loadDetail();
-      return true;
-    } on RoutineAlreadyTriggedException catch (e) {
-      lastActionError = e.message;
-      return false;
-    } on RoutinesException catch (e) {
-      lastActionError = e.message;
-      return false;
-    }
-  }
-
   Future<bool> updateOccurrenceStatus(
     String occurrenceId,
     OccurrenceStatus status,

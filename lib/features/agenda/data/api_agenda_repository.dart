@@ -7,13 +7,8 @@ import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 
-class AgendaException implements Exception {
-  AgendaException(this.message);
-  final String message;
-
-  @override
-  String toString() => message;
-}
+export 'package:voice_agent/features/agenda/domain/agenda_repository.dart'
+    show AgendaException;
 
 class ApiAgendaRepository implements AgendaRepository {
   ApiAgendaRepository(this._apiClient);
@@ -91,14 +86,14 @@ class ApiAgendaRepository implements AgendaRepository {
   }
 
   @override
-  Future<void> updateOccurrenceStatus(
+  Future<void> resolveOccurrence(
     String routineId,
-    String occurrenceId,
+    String scheduledFor,
     OccurrenceStatus status,
   ) async {
-    final result = await _apiClient.patch(
-      '/routines/$routineId/occurrences/$occurrenceId',
-      data: {'status': status.toJson()},
+    final result = await _apiClient.postJson(
+      '/routines/$routineId/resolve',
+      data: {'scheduled_for': scheduledFor, 'status': status.toJson()},
     );
     _throwOnFailure(result);
   }
@@ -108,7 +103,7 @@ class ApiAgendaRepository implements AgendaRepository {
       case ApiSuccess():
         return;
       case ApiPermanentFailure(message: final msg, statusCode: final code):
-        throw AgendaException('Server error $code: $msg');
+        throw AgendaException('Server error $code: $msg', statusCode: code);
       case ApiTransientFailure(reason: final reason):
         throw AgendaException(reason);
       case ApiNotConfigured():

@@ -15,8 +15,6 @@ class _MockRepository implements RoutinesRepository {
   String? lastActivateId;
   String? lastPauseId;
   String? lastArchiveId;
-  String? lastTriggerId;
-  String? lastTriggerDate;
   String? lastUpdateRoutineId;
   String? lastUpdateOccurrenceId;
   OccurrenceStatus? lastUpdateStatus;
@@ -50,13 +48,6 @@ class _MockRepository implements RoutinesRepository {
   @override
   Future<void> archiveRoutine(String id) async {
     lastArchiveId = id;
-    if (actionError != null) throw actionError!;
-  }
-
-  @override
-  Future<void> triggerRoutine(String id, String scheduledFor) async {
-    lastTriggerId = id;
-    lastTriggerDate = scheduledFor;
     if (actionError != null) throw actionError!;
   }
 
@@ -230,28 +221,6 @@ void main() {
 
       expect(result, isFalse);
       expect(notifier.lastActionError, 'Already archived');
-    });
-
-    test('triggerRoutine returns true on success', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      final result = await notifier.triggerRoutine('2026-04-19');
-
-      expect(result, isTrue);
-      expect(repo.lastTriggerId, 'rtn-1');
-      expect(repo.lastTriggerDate, '2026-04-19');
-    });
-
-    test('triggerRoutine returns false on already triggered', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      repo.actionError = RoutineAlreadyTriggedException();
-      final result = await notifier.triggerRoutine('2026-04-19');
-
-      expect(result, isFalse);
-      expect(notifier.lastActionError, 'Already triggered for this date');
     });
 
     test('updateOccurrenceStatus returns true on success', () async {

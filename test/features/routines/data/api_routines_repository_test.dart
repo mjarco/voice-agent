@@ -232,25 +232,6 @@ void main() {
     });
   });
 
-  group('triggerRoutine', () {
-    test('sends scheduled_for in body', () async {
-      await repo.triggerRoutine('rtn-1', '2026-04-19');
-
-      expect(client.lastPostPath, '/routines/rtn-1/trigger');
-      expect(client.lastPostData, {'scheduled_for': '2026-04-19'});
-    });
-
-    test('throws RoutineAlreadyTriggedException on 409', () async {
-      client.nextPostResult =
-          const ApiPermanentFailure(statusCode: 409, message: 'Conflict');
-
-      expect(
-        () => repo.triggerRoutine('rtn-1', '2026-04-19'),
-        throwsA(isA<RoutineAlreadyTriggedException>()),
-      );
-    });
-  });
-
   group('updateOccurrenceStatus', () {
     test('sends status in body', () async {
       await repo.updateOccurrenceStatus(

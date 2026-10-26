@@ -144,6 +144,23 @@ void main() {
       expect(item.startTime, isNull);
       expect(item.occurrenceId, isNull);
       expect(item.templates, isEmpty);
+      expect(item.peerId, isNull);
+      expect(item.toMap().containsKey('peer_id'), isFalse);
+    });
+
+    test('peer_id survives a round trip (#363)', () {
+      final item = AgendaRoutineItem.fromMap({
+        'routine_id': 'rt-1',
+        'routine_name': 'Upstream walk',
+        'scheduled_for': '2026-10-26',
+        'overdue': false,
+        'status': 'pending',
+        'templates': <dynamic>[],
+        'peer_id': 'upstream',
+      });
+
+      expect(item.peerId, 'upstream');
+      expect(AgendaRoutineItem.fromMap(item.toMap()).peerId, 'upstream');
     });
   });
 }

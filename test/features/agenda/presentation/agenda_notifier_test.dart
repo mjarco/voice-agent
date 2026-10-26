@@ -26,7 +26,7 @@ class _MockRepository implements AgendaRepository {
   int fetchCount = 0;
   String? lastMarkDoneId;
   String? lastUpdateRoutineId;
-  String? lastUpdateOccurrenceId;
+  String? lastUpdateScheduledFor;
   OccurrenceStatus? lastUpdateStatus;
 
   AgendaResponse _defaultResponse(String date) => AgendaResponse(
@@ -58,13 +58,13 @@ class _MockRepository implements AgendaRepository {
   }
 
   @override
-  Future<void> updateOccurrenceStatus(
+  Future<void> resolveOccurrence(
     String routineId,
-    String occurrenceId,
+    String scheduledFor,
     OccurrenceStatus status,
   ) async {
     lastUpdateRoutineId = routineId;
-    lastUpdateOccurrenceId = occurrenceId;
+    lastUpdateScheduledFor = scheduledFor;
     lastUpdateStatus = status;
     if (actionError != null) throw actionError!;
   }
@@ -281,36 +281,56 @@ void main() {
       expect(result, isFalse);
     });
 
-    test('skipOccurrence calls repository with skipped status', () async {
+    test('resolveOccurrence skips through resolve with the row day (#363)',
+        () async {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      final result = await notifier.skipOccurrence('rtn-1', 'occ-1');
+      final refusal = await notifier.resolveOccurrence(
+          'rtn-1', '2026-09-10', OccurrenceStatus.skipped);
 
-      expect(result, isTrue);
+      expect(refusal, isNull);
       expect(repo.lastUpdateRoutineId, 'rtn-1');
-      expect(repo.lastUpdateOccurrenceId, 'occ-1');
+      expect(repo.lastUpdateScheduledFor, '2026-09-10');
       expect(repo.lastUpdateStatus, OccurrenceStatus.skipped);
     });
 
-    test('completeOccurrence calls repository with done status', () async {
+    test('resolveOccurrence marks done', () async {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      final result = await notifier.completeOccurrence('rtn-1', 'occ-1');
+      final refusal = await notifier.resolveOccurrence(
+          'rtn-1', '2026-10-26', OccurrenceStatus.done);
 
-      expect(result, isTrue);
+      expect(refusal, isNull);
       expect(repo.lastUpdateStatus, OccurrenceStatus.done);
     });
 
-    test('skipOccurrence returns false on failure', () async {
+    test('resolveOccurrence gives the reason of a refusal', () async {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
+      final cases = {
+        409: 'Already done',
+        422: 'Nothing due that day',
+        404: 'Routine not found',
+        400: 'Failed to complete occurrence',
+      };
+      for (final MapEntry(key: code, value: text) in cases.entries) {
+        repo.actionError = AgendaException('Server error $code', statusCode: code);
+        expect(
+          await notifier.resolveOccurrence(
+              'rtn-1', '2026-10-26', OccurrenceStatus.done),
+          text,
+          reason: 'status $code',
+        );
+      }
       repo.actionError = Exception('Offline');
-      final result = await notifier.skipOccurrence('rtn-1', 'occ-1');
-
-      expect(result, isFalse);
+      expect(
+        await notifier.resolveOccurrence(
+            'rtn-1', '2026-10-26', OccurrenceStatus.skipped),
+        'Failed to skip occurrence',
+      );
     });
 
     test('refresh reloads data', () async {

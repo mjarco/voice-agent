@@ -134,13 +134,13 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                         ...routineItems.map(
                           (item) => _RoutineItemTile(
                             item: item,
-                            onSkip: item.occurrenceId != null
-                                ? () => _handleSkip(
-                                    item.routineId, item.occurrenceId!)
+                            onSkip: _tickable(item)
+                                ? () => _handleResolve(
+                                    item, OccurrenceStatus.skipped)
                                 : null,
-                            onComplete: item.occurrenceId != null
-                                ? () => _handleComplete(
-                                    item.routineId, item.occurrenceId!)
+                            onComplete: _tickable(item)
+                                ? () => _handleResolve(
+                                    item, OccurrenceStatus.done)
                                 : null,
                           ),
                         ),
@@ -200,23 +200,21 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     }
   }
 
-  Future<void> _handleSkip(String routineId, String occurrenceId) async {
-    final notifier = ref.read(agendaNotifierProvider.notifier);
-    final success = await notifier.skipOccurrence(routineId, occurrenceId);
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to skip occurrence')),
-      );
-    }
-  }
+  /// A routine row is ticked off through resolve, with or without a stored
+  /// occurrence (#363); a resolved row and a peer-mirrored one are not.
+  bool _tickable(AgendaRoutineItem item) =>
+      item.peerId == null &&
+      item.status != OccurrenceStatus.done &&
+      item.status != OccurrenceStatus.skipped;
 
-  Future<void> _handleComplete(String routineId, String occurrenceId) async {
+  Future<void> _handleResolve(
+      AgendaRoutineItem item, OccurrenceStatus status) async {
     final notifier = ref.read(agendaNotifierProvider.notifier);
-    final success =
-        await notifier.completeOccurrence(routineId, occurrenceId);
-    if (!success && mounted) {
+    final refusal = await notifier.resolveOccurrence(
+        item.routineId, item.scheduledFor, status);
+    if (refusal != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to complete occurrence')),
+        SnackBar(content: Text(refusal)),
       );
     }
   }
@@ -381,6 +379,11 @@ class _RoutineItemTile extends StatelessWidget {
             if (item.overdue) ...[
               const SizedBox(width: 8),
               const Icon(Icons.warning, size: 16, color: Colors.orange),
+              const SizedBox(width: 4),
+              Text(
+                'since ${item.scheduledFor}',
+                key: Key('routine-since-${item.routineId}'),
+              ),
             ],
           ],
         ),

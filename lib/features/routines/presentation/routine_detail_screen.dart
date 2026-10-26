@@ -89,7 +89,6 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
             onActivate: () => _handleActivate(notifier),
             onPause: () => _handlePause(notifier),
             onArchive: () => _handleArchive(notifier),
-            onTrigger: () => _handleTrigger(notifier),
           ),
           const SizedBox(height: 32),
         ],
@@ -181,22 +180,6 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
     }
   }
 
-  Future<void> _handleTrigger(RoutineDetailNotifier notifier) async {
-    _setBusy('trigger');
-    final now = DateTime.now();
-    final date =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final success = await notifier.triggerRoutine(date);
-    if (!mounted) return;
-    _clearBusy('trigger');
-    if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-                Text(notifier.lastActionError ?? 'Failed to trigger')),
-      );
-    }
-  }
 
   Future<void> _handleUpdateOccurrence(
     RoutineDetailNotifier notifier,
@@ -360,7 +343,6 @@ class _ActionsSection extends StatelessWidget {
     required this.onActivate,
     required this.onPause,
     required this.onArchive,
-    required this.onTrigger,
   });
   final Routine routine;
   final Set<String> busyActions;
@@ -368,7 +350,6 @@ class _ActionsSection extends StatelessWidget {
   final VoidCallback onActivate;
   final VoidCallback onPause;
   final VoidCallback onArchive;
-  final VoidCallback onTrigger;
 
   @override
   Widget build(BuildContext context) {
@@ -398,16 +379,6 @@ class _ActionsSection extends StatelessWidget {
               isDisabled: isAnyBusy,
               onPressed: onPause,
               filled: false,
-            ),
-          if (routine.status == RoutineStatus.active)
-            _ActionButton(
-              widgetKey: const Key('detail-trigger-button'),
-              label: 'Trigger Now',
-              icon: Icons.bolt,
-              isBusy: busyActions.contains('trigger'),
-              isDisabled: isAnyBusy,
-              onPressed: onTrigger,
-              filled: true,
             ),
           if (routine.status != RoutineStatus.archived)
             _ActionButton(
