@@ -20,8 +20,11 @@ final routinesNotifierProvider =
   return RoutinesNotifier(repository);
 });
 
-final routineDetailNotifierProvider = StateNotifierProvider.family<
-    RoutineDetailNotifier, RoutineDetailState, String>((ref, routineId) {
+/// Disposed with its page: a version opened again (a version link, after an
+/// edit) loads afresh instead of showing what it was before.
+final routineDetailNotifierProvider = StateNotifierProvider.autoDispose
+    .family<RoutineDetailNotifier, RoutineDetailState, String>(
+        (ref, routineId) {
   final repository = ref.watch(routinesRepositoryProvider);
   return RoutineDetailNotifier(repository, routineId);
 });

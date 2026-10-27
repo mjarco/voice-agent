@@ -158,6 +158,8 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
     final saved =
         await context.push<Routine>('/routines/${routine.id}/edit');
     if (!mounted || saved == null) return;
+    // replace drops the list's wait for this page, so the list is told here.
+    ref.read(routinesNotifierProvider.notifier).refresh();
     context.replace('/routines/${saved.id}');
   }
 

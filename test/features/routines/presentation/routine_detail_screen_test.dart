@@ -9,6 +9,8 @@ import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
 
+import '../fake_routines_repository.dart';
+
 class _StubRepository implements RoutinesRepository {
   Routine? routine;
   List<RoutineOccurrence> occurrences;
@@ -368,6 +370,65 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.lastEndDay, '2026-10-27');
+    });
+
+    testWidgets('a saved edit shows the new version and refreshes the list',
+        (tester) async {
+      final repo = FakeRoutinesRepository();
+      final router = GoRouter(
+        initialLocation: '/routines/rtn-1',
+        routes: [
+          GoRoute(
+            path: '/routines/:id',
+            builder: (context, state) =>
+                RoutineDetailScreen(routineId: state.pathParameters['id']!),
+            routes: [
+              GoRoute(
+                path: 'edit',
+                builder: (context, state) => TextButton(
+                  onPressed: () => context.pop(sampleRoutine(id: 'rtn-2')),
+                  child: const Text('Save edit'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          routinesRepositoryProvider.overrideWithValue(repo),
+          routinesClockProvider.overrideWithValue(() => DateTime(2026, 10, 27)),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('detail-edit-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save edit'));
+      await tester.pumpAndSettle();
+
+      expect(repo.calls, ['detail rtn-1', 'detail rtn-2']);
+      // The list loads its tab again.
+      expect(repo.fetchedStatuses, isNotEmpty);
+    });
+
+    test('a version opened again loads afresh', () async {
+      final repo = FakeRoutinesRepository();
+      final container = ProviderContainer(overrides: [
+        routinesRepositoryProvider.overrideWithValue(repo),
+      ]);
+      addTearDown(container.dispose);
+
+      final first = container.listen(
+          routineDetailNotifierProvider('rtn-1'), (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+      first.close();
+      await Future<void>.delayed(Duration.zero);
+      container.listen(routineDetailNotifierProvider('rtn-1'), (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repo.calls, ['detail rtn-1', 'detail rtn-1']);
     });
 
     testWidgets('a replaced version has no Edit and links the newer one',
