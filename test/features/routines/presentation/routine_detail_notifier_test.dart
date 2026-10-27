@@ -66,17 +66,27 @@ class _MockRepository implements RoutinesRepository {
   @override
   Future<List<Routine>> fetchRoutines(RoutineStatus status) async => [];
 
-  @override
-  Future<List<RoutineProposal>> fetchProposals() async => [];
+
+  String? lastEndDay;
 
   @override
-  Future<void> approveProposal(
-    String proposalId, {
-    RoutineProposalOverrides? overrides,
-  }) async {}
+  Future<void> endRoutine(String id, String lastDay) async {
+    lastEndDay = lastDay;
+  }
 
   @override
-  Future<void> rejectProposal(String proposalId) async {}
+  Future<Routine> createRoutine(RoutineInput input) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Routine> editRoutine(String id, RoutineInput input,
+          {required String startsOn}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> resolveOccurrence(String routineId, String scheduledFor,
+          OccurrenceStatus status) =>
+      throw UnimplementedError();
 
   Routine _defaultRoutine(String id) => Routine(
         id: id,
@@ -156,6 +166,17 @@ void main() {
 
       expect(repo.fetchDetailCount, 1);
       expect(repo.fetchOccurrencesCount, 1);
+    });
+
+    test('endRoutine sends the last day and reloads', () async {
+      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
+      await Future<void>.delayed(Duration.zero);
+
+      repo.fetchDetailCount = 0;
+      expect(await notifier.endRoutine('2026-10-26'), isTrue);
+
+      expect(repo.lastEndDay, '2026-10-26');
+      expect(repo.fetchDetailCount, 1);
     });
 
     test('activateRoutine returns true and reloads on success', () async {

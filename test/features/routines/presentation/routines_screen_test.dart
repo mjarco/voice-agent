@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,97 +7,9 @@ import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
 import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
 
-class _StubRepository implements RoutinesRepository {
-  List<Routine> routines;
-  List<RoutineProposal> proposals;
-  _StubRepository({
-    this.routines = const [],
-    this.proposals = const [],
-  });
+import '../fake_routines_repository.dart';
 
-  @override
-  Future<List<Routine>> fetchRoutines(RoutineStatus status) async => routines;
-
-  @override
-  Future<List<RoutineProposal>> fetchProposals() async => proposals;
-
-  @override
-  Future<Routine> fetchRoutineDetail(String id) async =>
-      throw UnimplementedError();
-
-  @override
-  Future<List<RoutineOccurrence>> fetchOccurrences(String id) async =>
-      throw UnimplementedError();
-
-  @override
-  Future<void> activateRoutine(String id) async {}
-
-  @override
-  Future<void> pauseRoutine(String id) async {}
-
-  @override
-  Future<void> archiveRoutine(String id) async {}
-
-
-  @override
-  Future<void> updateOccurrenceStatus(
-    String routineId,
-    String occurrenceId,
-    OccurrenceStatus status,
-  ) async {}
-
-  String? lastApproveId;
-  RoutineProposalOverrides? lastApproveOverrides;
-
-  @override
-  Future<void> approveProposal(
-    String proposalId, {
-    RoutineProposalOverrides? overrides,
-  }) async {
-    lastApproveId = proposalId;
-    lastApproveOverrides = overrides;
-  }
-
-  @override
-  Future<void> rejectProposal(String proposalId) async {}
-}
-
-Routine _sampleRoutine({
-  String id = 'rtn-1',
-  String name = 'Morning routine',
-  RoutineStatus status = RoutineStatus.active,
-  String? cadence = 'daily',
-  RoutineNextOccurrence? nextOccurrence,
-}) =>
-    Routine(
-      id: id,
-      sourceRecordId: 'src-1',
-      name: name,
-      rrule: 'FREQ=DAILY',
-      cadence: cadence,
-      status: status,
-      nextOccurrence: nextOccurrence,
-      createdAt: DateTime(2026, 4, 1),
-      updatedAt: DateTime(2026, 4, 18),
-    );
-
-RoutineProposal _sampleProposal({String id = 'prop-1', String? startTime}) =>
-    RoutineProposal(
-      id: id,
-      name: 'Weekly review',
-      cadence: 'weekly',
-      startTime: startTime,
-      items: const [RoutineProposalItem(text: 'Review items', sortOrder: 1)],
-      confidence: 0.85,
-      conversationId: 'conv-1',
-      createdAt: DateTime(2026, 4, 18),
-    );
-
-Future<void> _pumpScreen(
-  WidgetTester tester, {
-  RoutinesRepository? repository,
-}) async {
-  final repo = repository ?? _StubRepository();
+Future<void> _pumpScreen(WidgetTester tester, FakeRoutinesRepository repo) async {
   final router = GoRouter(
     initialLocation: '/',
     routes: [
@@ -108,8 +19,11 @@ Future<void> _pumpScreen(
       ),
       GoRoute(
         path: '/settings',
-        builder: (context, state) =>
-            const Scaffold(body: Text('Settings')),
+        builder: (context, state) => const Scaffold(body: Text('Settings')),
+      ),
+      GoRoute(
+        path: '/routines/new',
+        builder: (context, state) => const Scaffold(body: Text('New form')),
       ),
       GoRoute(
         path: '/routines/:id',
@@ -123,6 +37,7 @@ Future<void> _pumpScreen(
     ProviderScope(
       overrides: [
         routinesRepositoryProvider.overrideWithValue(repo),
+        routinesClockProvider.overrideWithValue(() => DateTime(2026, 10, 27)),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -131,24 +46,26 @@ Future<void> _pumpScreen(
 }
 
 void main() {
-  group('RoutinesScreen', () {
-    testWidgets('renders AppBar with title', (tester) async {
-      await _pumpScreen(tester);
+  late FakeRoutinesRepository repo;
 
-      expect(
-        find.descendant(
-          of: find.byType(AppBar),
-          matching: find.text('Routines'),
-        ),
-        findsOneWidget,
-      );
+  setUp(() {
+    repo = FakeRoutinesRepository();
+  });
+
+  group('RoutinesScreen', () {
+    testWidgets('has the Active, Paused and Ended tabs', (tester) async {
+      await _pumpScreen(tester, repo);
+
+      expect(find.text('Active'), findsOneWidget);
+      expect(find.text('Paused'), findsOneWidget);
+      expect(find.text('Ended'), findsOneWidget);
+      expect(find.text('Draft'), findsNothing);
+      expect(find.text('Archived'), findsNothing);
+      expect(find.text('Proposals'), findsNothing);
     });
 
-    testWidgets('renders gear icon that navigates to settings',
-        (tester) async {
-      await _pumpScreen(tester);
-
-      expect(find.byKey(const Key('routines-settings-icon')), findsOneWidget);
+    testWidgets('the gear icon opens settings', (tester) async {
+      await _pumpScreen(tester, repo);
 
       await tester.tap(find.byKey(const Key('routines-settings-icon')));
       await tester.pumpAndSettle();
@@ -156,373 +73,97 @@ void main() {
       expect(find.text('Settings'), findsOneWidget);
     });
 
-    testWidgets('renders four tabs', (tester) async {
-      await _pumpScreen(tester);
+    testWidgets('shows the empty state', (tester) async {
+      await _pumpScreen(tester, repo);
 
-      expect(find.text('Active'), findsOneWidget);
-      expect(find.text('Draft'), findsOneWidget);
-      expect(find.text('Paused'), findsOneWidget);
-      expect(find.text('Archived'), findsOneWidget);
-    });
-
-    testWidgets('shows empty state when no routines', (tester) async {
-      await _pumpScreen(tester);
-
-      expect(find.byKey(const Key('routines-empty-state')), findsOneWidget);
       expect(find.text('No active routines'), findsOneWidget);
     });
 
-    testWidgets('renders routine cards', (tester) async {
-      final repo = _StubRepository(
-        routines: [_sampleRoutine()],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.text('Morning routine'), findsOneWidget);
-      expect(find.byKey(const Key('routine-card-rtn-1')), findsOneWidget);
-    });
-
-    testWidgets('routine card shows cadence', (tester) async {
-      final repo = _StubRepository(
-        routines: [_sampleRoutine(cadence: 'daily')],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.text('daily'), findsOneWidget);
-    });
-
-    testWidgets('routine card shows next occurrence date', (tester) async {
-      final repo = _StubRepository(
-        routines: [
-          _sampleRoutine(
-            nextOccurrence: const RoutineNextOccurrence(
-              date: '2026-04-20',
-              timeWindow: TimeWindow.day,
-            ),
-          ),
-        ],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.text('Next: 2026-04-20'), findsOneWidget);
-    });
-
-    testWidgets('active routine shows pause and no trigger (#363)',
+    testWidgets('a card shows the schedule in words and the next day',
         (tester) async {
-      final repo = _StubRepository(
-        routines: [_sampleRoutine(status: RoutineStatus.active)],
-      );
+      repo.byStatus[RoutineStatus.active] = [
+        sampleRoutine(
+            id: 'r1',
+            name: 'Trening',
+            rrule: 'FREQ=WEEKLY;BYDAY=MO,WE',
+            startTime: '18:00',
+            lastDay: '2026-12-31'),
+      ];
+      await _pumpScreen(tester, repo);
 
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.byKey(const Key('routine-trigger-rtn-1')), findsNothing);
-      expect(
-        find.byKey(const Key('routine-pause-rtn-1')),
-        findsOneWidget,
-      );
+      expect(find.text('Trening'), findsOneWidget);
+      expect(find.text('Mon, Wed · at 18:00 · until 2026-12-31'),
+          findsOneWidget);
     });
 
-    testWidgets('tapping routine card navigates to detail', (tester) async {
-      final repo = _StubRepository(
-        routines: [_sampleRoutine()],
-      );
+    testWidgets('a draft under Active carries a badge', (tester) async {
+      repo.byStatus[RoutineStatus.draft] = [
+        sampleRoutine(id: 'd1', status: RoutineStatus.draft),
+      ];
+      await _pumpScreen(tester, repo);
 
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.text('Morning routine'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Detail rtn-1'), findsOneWidget);
+      expect(find.byKey(const Key('routine-badge-d1')), findsOneWidget);
+      expect(find.text('DRAFT'), findsOneWidget);
     });
 
-    testWidgets('renders proposal cards on active tab', (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.text('Proposals'), findsOneWidget);
-      expect(find.text('Weekly review'), findsOneWidget);
-      expect(find.byKey(const Key('proposal-card-prop-1')), findsOneWidget);
-    });
-
-    testWidgets('proposal card shows cadence chip', (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.text('weekly'), findsOneWidget);
-    });
-
-    testWidgets('proposal card shows items', (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.text('- Review items'), findsOneWidget);
-    });
-
-    testWidgets('proposal card has approve and reject buttons',
+    testWidgets('an active routine can be paused from its card',
         (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
+      repo.byStatus[RoutineStatus.active] = [sampleRoutine(id: 'r1')];
+      await _pumpScreen(tester, repo);
 
-      await _pumpScreen(tester, repository: repo);
+      await tester.tap(find.byKey(const Key('routine-pause-r1')));
+      await tester.pumpAndSettle();
 
-      expect(
-        find.byKey(const Key('proposal-approve-prop-1')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('proposal-reject-prop-1')),
-        findsOneWidget,
-      );
+      expect(repo.calls, contains('pause r1'));
     });
 
-    testWidgets('reject shows confirmation dialog', (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
+    testWidgets('Ended shows ended and archived routines', (tester) async {
+      repo.byStatus[RoutineStatus.active] = [
+        sampleRoutine(id: 'live', name: 'Live'),
+        sampleRoutine(
+            id: 'done', name: 'Done', ended: true, lastDay: '2026-10-20'),
+      ];
+      repo.byStatus[RoutineStatus.archived] = [
+        sampleRoutine(id: 'arch', name: 'Old', status: RoutineStatus.archived),
+      ];
+      await _pumpScreen(tester, repo);
 
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('proposal-reject-prop-1')));
+      await tester.tap(find.text('Ended'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Reject proposal?'), findsOneWidget);
-      expect(
-        find.text('This proposal will be permanently dismissed.'),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('reject-confirm-button')), findsOneWidget);
+      expect(find.text('Live'), findsNothing);
+      expect(find.text('Done'), findsOneWidget);
+      expect(find.text('every day · ended after 2026-10-20'), findsOneWidget);
+      expect(find.text('Old'), findsOneWidget);
+      expect(find.text('ARCHIVED'), findsOneWidget);
+      expect(find.byKey(const Key('routine-pause-done')), findsNothing);
     });
 
-    testWidgets('reject cancel dismisses dialog', (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
+    testWidgets('tapping a card opens its detail', (tester) async {
+      repo.byStatus[RoutineStatus.active] = [sampleRoutine(id: 'r1')];
+      await _pumpScreen(tester, repo);
 
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('proposal-reject-prop-1')));
+      await tester.tap(find.byKey(const Key('routine-card-r1')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Reject proposal?'), findsNothing);
+      expect(find.text('Detail r1'), findsOneWidget);
     });
 
-    testWidgets('edit opens dialog and approves with overrides',
-        (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
+    testWidgets('New routine opens the form', (tester) async {
+      await _pumpScreen(tester, repo);
 
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
+      await tester.tap(find.byKey(const Key('routines-new-button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Edit & approve'), findsOneWidget);
-
-      await tester.enterText(
-        find.byKey(const Key('proposal-edit-name-field')),
-        'Weekly review (edited)',
-      );
-      await tester.enterText(
-        find.byKey(const Key('proposal-edit-start-time-field')),
-        '08:30',
-      );
-      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
-      await tester.pumpAndSettle();
-
-      expect(repo.lastApproveId, 'prop-1');
-      expect(repo.lastApproveOverrides?.name, 'Weekly review (edited)');
-      expect(repo.lastApproveOverrides?.startTime, '08:30');
+      expect(find.text('New form'), findsOneWidget);
     });
 
-    testWidgets('edit dialog with no changes approves with empty overrides',
-        (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
+    testWidgets('an error shows Retry', (tester) async {
+      repo.fetchError = RoutinesGeneralException('Network error');
+      await _pumpScreen(tester, repo);
 
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
-      await tester.pumpAndSettle();
-
-      expect(repo.lastApproveId, 'prop-1');
-      expect(repo.lastApproveOverrides?.isEmpty ?? true, isTrue);
-    });
-
-    testWidgets('clearing a pre-filled start time sends an explicit clear',
-        (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal(startTime: '07:00')],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byKey(const Key('proposal-edit-start-time-field')),
-        '',
-      );
-      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
-      await tester.pumpAndSettle();
-
-      expect(repo.lastApproveId, 'prop-1');
-      expect(repo.lastApproveOverrides?.clearStartTime, isTrue);
-      expect(repo.lastApproveOverrides?.startTime, isNull);
-    });
-
-    testWidgets('untouched malformed pre-filled time does not block approval',
-        (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal(startTime: '7:00')],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byKey(const Key('proposal-edit-name-field')),
-        'Weekly review (renamed)',
-      );
-      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Use 24h HH:MM'), findsNothing);
-      expect(repo.lastApproveId, 'prop-1');
-      expect(repo.lastApproveOverrides?.name, 'Weekly review (renamed)');
-      expect(repo.lastApproveOverrides?.startTime, isNull);
-      expect(repo.lastApproveOverrides?.clearStartTime, isFalse);
-    });
-
-    testWidgets('edit dialog rejects an invalid start time', (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('proposal-edit-prop-1')));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byKey(const Key('proposal-edit-start-time-field')),
-        '25:99',
-      );
-      await tester.tap(find.byKey(const Key('proposal-edit-approve-button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Use 24h HH:MM'), findsOneWidget);
-      expect(find.text('Edit & approve'), findsOneWidget);
-      expect(repo.lastApproveId, isNull);
-    });
-
-    testWidgets('error state shows retry button', (tester) async {
-      await _pumpScreen(tester, repository: _FailingRepository());
-
+      expect(find.text('Network error'), findsOneWidget);
       expect(find.byKey(const Key('routines-retry-button')), findsOneWidget);
-      expect(find.text('Fetch failed'), findsOneWidget);
     });
-
-    testWidgets('switching tabs changes empty state text', (tester) async {
-      await _pumpScreen(tester);
-
-      await tester.tap(find.text('Draft'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('No draft routines'), findsOneWidget);
-    });
-
-    testWidgets('paused routine shows resume button', (tester) async {
-      final repo = _StubRepository(
-        routines: [_sampleRoutine(status: RoutineStatus.paused)],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      expect(
-        find.byKey(const Key('routine-resume-rtn-1')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('routine-pause-rtn-1')), findsNothing);
-      expect(find.byKey(const Key('routine-trigger-rtn-1')), findsNothing);
-    });
-
-    testWidgets('proposal card shows confidence indicator', (tester) async {
-      final repo = _StubRepository(
-        proposals: [_sampleProposal()],
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.byKey(const Key('proposal-confidence')), findsOneWidget);
-      expect(find.text('Confidence: 85%'), findsOneWidget);
-    });
-
   });
-}
-
-class _FailingRepository implements RoutinesRepository {
-  @override
-  Future<List<Routine>> fetchRoutines(RoutineStatus status) async =>
-      throw RoutinesGeneralException('Fetch failed');
-
-  @override
-  Future<List<RoutineProposal>> fetchProposals() async =>
-      throw RoutinesGeneralException('Fetch failed');
-
-  @override
-  Future<Routine> fetchRoutineDetail(String id) async =>
-      throw UnimplementedError();
-
-  @override
-  Future<List<RoutineOccurrence>> fetchOccurrences(String id) async =>
-      throw UnimplementedError();
-
-  @override
-  Future<void> activateRoutine(String id) async {}
-
-  @override
-  Future<void> pauseRoutine(String id) async {}
-
-  @override
-  Future<void> archiveRoutine(String id) async {}
-
-  @override
-  Future<void> updateOccurrenceStatus(
-    String routineId,
-    String occurrenceId,
-    OccurrenceStatus status,
-  ) async {}
-
-  @override
-  Future<void> approveProposal(
-    String proposalId, {
-    RoutineProposalOverrides? overrides,
-  }) async {}
-
-  @override
-  Future<void> rejectProposal(String proposalId) async {}
 }

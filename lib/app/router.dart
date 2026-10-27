@@ -7,6 +7,7 @@ import 'package:voice_agent/features/pins/presentation/pin_detail_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pins_screen.dart';
 import 'package:voice_agent/features/plan/presentation/plan_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
+import 'package:voice_agent/features/routines/presentation/routine_form_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
 import 'package:voice_agent/features/history/history_screen.dart';
 import 'package:voice_agent/features/history/transcript_detail_screen.dart';
@@ -74,11 +75,22 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
               builder: (context, state) => const RoutinesScreen(),
               routes: [
                 GoRoute(
+                  path: 'new',
+                  builder: (context, state) => const RoutineFormScreen(),
+                ),
+                GoRoute(
                   path: ':id',
                   builder: (context, state) {
                     final id = state.pathParameters['id']!;
                     return RoutineDetailScreen(routineId: id);
                   },
+                  routes: [
+                    GoRoute(
+                      path: 'edit',
+                      builder: (context, state) => RoutineFormScreen(
+                          editId: state.pathParameters['id']!),
+                    ),
+                  ],
                 ),
               ],
             ),

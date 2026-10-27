@@ -5,84 +5,50 @@ import 'package:voice_agent/features/routines/domain/routines_state.dart';
 
 class RoutinesNotifier extends StateNotifier<RoutinesState> {
   RoutinesNotifier(this._repository) : super(const RoutinesInitial()) {
-    _selectedStatus = RoutineStatus.active;
     loadRoutines();
   }
 
   final RoutinesRepository _repository;
-  late RoutineStatus _selectedStatus;
-  List<RoutineProposal> _cachedProposals = [];
+  RoutinesTab _selectedTab = RoutinesTab.active;
+  int _generation = 0;
   String? lastActionError;
 
-  RoutineStatus get selectedStatus => _selectedStatus;
+  RoutinesTab get selectedTab => _selectedTab;
 
   Future<void> loadRoutines() async {
+    final generation = ++_generation;
+    final tab = _selectedTab;
     state = const RoutinesLoading();
     lastActionError = null;
 
     try {
-      final proposalsFuture = _repository
-          .fetchProposals()
-          .then((v) => v)
-          .catchError((_) => <RoutineProposal>[]);
-      final routinesFuture = _repository.fetchRoutines(_selectedStatus);
-
-      final results = await Future.wait([routinesFuture, proposalsFuture]);
-      final routines = results[0] as List<Routine>;
-      final proposals = results[1] as List<RoutineProposal>;
-      _cachedProposals = proposals;
-
-      state = RoutinesLoaded(routines: routines, proposals: proposals);
+      final routines = await _fetchTab(tab);
+      // A tab switched meanwhile has its own load; this answer is stale.
+      if (generation != _generation) return;
+      state = RoutinesLoaded(routines: routines);
     } catch (e) {
+      if (generation != _generation) return;
       state = RoutinesError(message: e.toString());
     }
   }
 
-  Future<void> selectStatus(RoutineStatus status) async {
-    _selectedStatus = status;
-    state = const RoutinesLoading();
-
-    try {
-      final routines = await _repository.fetchRoutines(status);
-      state = RoutinesLoaded(routines: routines, proposals: _cachedProposals);
-    } catch (e) {
-      state = RoutinesError(message: e.toString());
-    }
+  Future<void> selectTab(RoutinesTab tab) {
+    _selectedTab = tab;
+    return loadRoutines();
   }
 
   Future<void> refresh() => loadRoutines();
 
-  Future<bool> activateRoutine(String id) async {
-    lastActionError = null;
-    try {
-      await _repository.activateRoutine(id);
-      await _reloadCurrentTab();
-      return true;
-    } on RoutinesException catch (e) {
-      lastActionError = e.message;
-      return false;
-    }
-  }
+  Future<bool> activateRoutine(String id) =>
+      _act(() => _repository.activateRoutine(id));
 
-  Future<bool> pauseRoutine(String id) async {
-    lastActionError = null;
-    try {
-      await _repository.pauseRoutine(id);
-      await _reloadCurrentTab();
-      return true;
-    } on RoutinesException catch (e) {
-      lastActionError = e.message;
-      return false;
-    }
-  }
+  Future<bool> pauseRoutine(String id) =>
+      _act(() => _repository.pauseRoutine(id));
 
-  Future<bool> approveProposal(
-    String proposalId, {
-    RoutineProposalOverrides? overrides,
-  }) async {
+  Future<bool> _act(Future<void> Function() action) async {
     lastActionError = null;
     try {
-      await _repository.approveProposal(proposalId, overrides: overrides);
+      await action();
       await loadRoutines();
       return true;
     } on RoutinesException catch (e) {
@@ -91,24 +57,28 @@ class RoutinesNotifier extends StateNotifier<RoutinesState> {
     }
   }
 
-  Future<bool> rejectProposal(String proposalId) async {
-    lastActionError = null;
-    try {
-      await _repository.rejectProposal(proposalId);
-      await loadRoutines();
-      return true;
-    } on RoutinesException catch (e) {
-      lastActionError = e.message;
-      return false;
-    }
-  }
-
-  Future<void> _reloadCurrentTab() async {
-    try {
-      final routines = await _repository.fetchRoutines(_selectedStatus);
-      state = RoutinesLoaded(routines: routines, proposals: _cachedProposals);
-    } catch (e) {
-      state = RoutinesError(message: e.toString());
+  /// The routines of [tab]. Active and Paused leave out ended routines;
+  /// Ended lists ended and archived ones, without the versions an edit
+  /// replaced (the newer version links to them).
+  Future<List<Routine>> _fetchTab(RoutinesTab tab) async {
+    switch (tab) {
+      case RoutinesTab.active:
+        final lists = await Future.wait([
+          _repository.fetchRoutines(RoutineStatus.active),
+          _repository.fetchRoutines(RoutineStatus.draft),
+        ]);
+        return lists.expand((l) => l).where((r) => !r.ended).toList();
+      case RoutinesTab.paused:
+        final paused = await _repository.fetchRoutines(RoutineStatus.paused);
+        return paused.where((r) => !r.ended).toList();
+      case RoutinesTab.ended:
+        final lists = await Future.wait(
+            RoutineStatus.values.map(_repository.fetchRoutines));
+        return lists
+            .expand((l) => l)
+            .where((r) => r.ended || r.status == RoutineStatus.archived)
+            .where((r) => r.nextRoutineId == null)
+            .toList();
     }
   }
 }

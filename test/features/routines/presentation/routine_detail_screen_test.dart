@@ -9,6 +9,8 @@ import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
 
+import '../fake_routines_repository.dart';
+
 class _StubRepository implements RoutinesRepository {
   Routine? routine;
   List<RoutineOccurrence> occurrences;
@@ -35,8 +37,6 @@ class _StubRepository implements RoutinesRepository {
   @override
   Future<List<Routine>> fetchRoutines(RoutineStatus status) async => [];
 
-  @override
-  Future<List<RoutineProposal>> fetchProposals() async => [];
 
   @override
   Future<void> activateRoutine(String id) async {}
@@ -58,14 +58,26 @@ class _StubRepository implements RoutinesRepository {
     OccurrenceStatus status,
   ) async {}
 
-  @override
-  Future<void> approveProposal(
-    String proposalId, {
-    RoutineProposalOverrides? overrides,
-  }) async {}
+  String? lastEndDay;
 
   @override
-  Future<void> rejectProposal(String proposalId) async {}
+  Future<void> endRoutine(String id, String lastDay) async {
+    lastEndDay = lastDay;
+  }
+
+  @override
+  Future<Routine> createRoutine(RoutineInput input) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Routine> editRoutine(String id, RoutineInput input,
+          {required String startsOn}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> resolveOccurrence(String routineId, String scheduledFor,
+          OccurrenceStatus status) =>
+      throw UnimplementedError();
 
   Routine _defaultRoutine(String id) => Routine(
         id: id,
@@ -102,6 +114,13 @@ Future<void> _pumpScreen(
           final id = state.pathParameters['id']!;
           return RoutineDetailScreen(routineId: id);
         },
+        routes: [
+          GoRoute(
+            path: 'edit',
+            builder: (context, state) =>
+                Text('Edit form ${state.pathParameters['id']}'),
+          ),
+        ],
       ),
     ],
   );
@@ -110,6 +129,7 @@ Future<void> _pumpScreen(
     ProviderScope(
       overrides: [
         routinesRepositoryProvider.overrideWithValue(repo),
+        routinesClockProvider.overrideWithValue(() => DateTime(2026, 10, 27)),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -138,10 +158,12 @@ void main() {
       expect(find.text('active'), findsOneWidget);
     });
 
-    testWidgets('shows cadence chip', (tester) async {
+    testWidgets('shows the schedule in words and lapses or waits',
+        (tester) async {
       await _pumpScreen(tester);
 
-      expect(find.text('daily'), findsOneWidget);
+      expect(find.text('every day'), findsOneWidget);
+      expect(find.text('lapses'), findsOneWidget);
     });
 
     testWidgets('shows next occurrence', (tester) async {
@@ -154,7 +176,7 @@ void main() {
     testWidgets('shows templates', (tester) async {
       await _pumpScreen(tester);
 
-      expect(find.text('Templates'), findsOneWidget);
+      expect(find.text('Steps'), findsOneWidget);
       expect(find.text('- Meditate'), findsOneWidget);
       expect(find.text('- Exercise'), findsOneWidget);
     });
@@ -317,9 +339,126 @@ void main() {
       await tester.tap(find.byKey(const Key('detail-archive-button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Archive routine?'), findsOneWidget);
+      expect(find.text('Archive “Morning routine”?'), findsOneWidget);
+      expect(find.text('It leaves the agenda and moves to Ended.'),
+          findsOneWidget);
       expect(find.byKey(const Key('archive-confirm-button')),
           findsOneWidget);
+    });
+
+    testWidgets('an active routine offers Edit and End after…',
+        (tester) async {
+      await _pumpScreen(tester);
+
+      expect(find.byKey(const Key('detail-edit-button')), findsOneWidget);
+      expect(find.byKey(const Key('detail-end-button')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('detail-edit-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit form rtn-1'), findsOneWidget);
+    });
+
+    testWidgets('End after… ends after the picked day', (tester) async {
+      final repo = _StubRepository();
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.ensureVisible(find.byKey(const Key('detail-end-button')));
+      await tester.tap(find.byKey(const Key('detail-end-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Last day it occurs'), findsOneWidget);
+      await tester.tap(find.text('End after'));
+      await tester.pumpAndSettle();
+
+      expect(repo.lastEndDay, '2026-10-27');
+    });
+
+    testWidgets('a saved edit shows the new version and refreshes the list',
+        (tester) async {
+      final repo = FakeRoutinesRepository();
+      final router = GoRouter(
+        initialLocation: '/routines/rtn-1',
+        routes: [
+          GoRoute(
+            path: '/routines/:id',
+            builder: (context, state) =>
+                RoutineDetailScreen(routineId: state.pathParameters['id']!),
+            routes: [
+              GoRoute(
+                path: 'edit',
+                builder: (context, state) => TextButton(
+                  onPressed: () => context.pop(sampleRoutine(id: 'rtn-2')),
+                  child: const Text('Save edit'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          routinesRepositoryProvider.overrideWithValue(repo),
+          routinesClockProvider.overrideWithValue(() => DateTime(2026, 10, 27)),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('detail-edit-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save edit'));
+      await tester.pumpAndSettle();
+
+      expect(repo.calls, ['detail rtn-1', 'detail rtn-2']);
+      // The list loads its tab again.
+      expect(repo.fetchedStatuses, isNotEmpty);
+    });
+
+    test('a version opened again loads afresh', () async {
+      final repo = FakeRoutinesRepository();
+      final container = ProviderContainer(overrides: [
+        routinesRepositoryProvider.overrideWithValue(repo),
+      ]);
+      addTearDown(container.dispose);
+
+      final first = container.listen(
+          routineDetailNotifierProvider('rtn-1'), (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+      first.close();
+      await Future<void>.delayed(Duration.zero);
+      container.listen(routineDetailNotifierProvider('rtn-1'), (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repo.calls, ['detail rtn-1', 'detail rtn-1']);
+    });
+
+    testWidgets('a replaced version has no Edit and links the newer one',
+        (tester) async {
+      final repo = _StubRepository(
+        routine: Routine(
+          id: 'rtn-1',
+          sourceRecordId: 'src-1',
+          name: 'Old version',
+          rrule: 'FREQ=DAILY',
+          status: RoutineStatus.active,
+          lastDay: '2026-10-26',
+          ended: true,
+          nextRoutineId: 'rtn-2',
+          createdAt: DateTime(2026, 4, 1),
+          updatedAt: DateTime(2026, 4, 18),
+        ),
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.byKey(const Key('detail-edit-button')), findsNothing);
+      expect(find.byKey(const Key('detail-end-button')), findsNothing);
+      expect(find.byKey(const Key('detail-pause-button')), findsNothing);
+      expect(find.text('ended'), findsOneWidget);
+      expect(
+          find.text(
+              'every day · ended after 2026-10-26 · replaced by a newer version'),
+          findsOneWidget);
+      expect(find.byKey(const Key('detail-next-version')), findsOneWidget);
     });
 
     testWidgets('error state shows retry button', (tester) async {

@@ -75,6 +75,19 @@ class RoutineDetailNotifier extends StateNotifier<RoutineDetailState> {
     }
   }
 
+  /// Ends the routine after [lastDay], the last day it still occurs.
+  Future<bool> endRoutine(String lastDay) async {
+    lastActionError = null;
+    try {
+      await _repository.endRoutine(_routineId, lastDay);
+      await loadDetail();
+      return true;
+    } on RoutinesException catch (e) {
+      lastActionError = e.message;
+      return false;
+    }
+  }
+
   Future<bool> updateOccurrenceStatus(
     String occurrenceId,
     OccurrenceStatus status,

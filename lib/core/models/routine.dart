@@ -62,6 +62,18 @@ enum TimeWindow {
   }
 }
 
+/// What happens to an occurrence nobody resolved on its day (ADR-CORE-092 of
+/// personal-agent): it lapses, or it waits on the agenda until resolved.
+enum RoutineMissed {
+  lapses,
+  waits;
+
+  static RoutineMissed fromString(String value) {
+    return RoutineMissed.values.firstWhere((e) => e.name == value,
+        orElse: () => throw ArgumentError('Unknown RoutineMissed: $value'));
+  }
+}
+
 class Routine {
   const Routine({
     required this.id,
@@ -73,6 +85,12 @@ class Routine {
     required this.status,
     this.templates = const [],
     this.nextOccurrence,
+    this.missed = RoutineMissed.lapses,
+    this.activeSince,
+    this.lastDay,
+    this.ended = false,
+    this.previousRoutineId,
+    this.nextRoutineId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -86,6 +104,23 @@ class Routine {
   final RoutineStatus status;
   final List<RoutineTemplate> templates;
   final RoutineNextOccurrence? nextOccurrence;
+  final RoutineMissed missed;
+
+  /// The owner's day (`YYYY-MM-DD`) the routine last became active; null for
+  /// a draft. A version made by an edit starts on this day.
+  final String? activeSince;
+
+  /// The last day the routine occurs (`YYYY-MM-DD`, from the rrule's UNTIL).
+  final String? lastDay;
+
+  /// True when no occurrence is left from the owner's today.
+  final bool ended;
+
+  /// The version this routine replaced by an edit, and the one that
+  /// replaced it (ADR-DATA-095 of personal-agent).
+  final String? previousRoutineId;
+  final String? nextRoutineId;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -107,6 +142,14 @@ class Routine {
           ? RoutineNextOccurrence.fromMap(
               map['next_occurrence'] as Map<String, dynamic>)
           : null,
+      missed: map['missed'] != null
+          ? RoutineMissed.fromString(map['missed'] as String)
+          : RoutineMissed.lapses,
+      activeSince: map['active_since'] as String?,
+      lastDay: map['last_day'] as String?,
+      ended: map['ended'] as bool? ?? false,
+      previousRoutineId: map['previous_routine_id'] as String?,
+      nextRoutineId: map['next_routine_id'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );
@@ -123,6 +166,12 @@ class Routine {
       'status': status.name,
       'templates': templates.map((t) => t.toMap()).toList(),
       'next_occurrence': nextOccurrence?.toMap(),
+      'missed': missed.name,
+      'active_since': activeSince,
+      'last_day': lastDay,
+      'ended': ended,
+      'previous_routine_id': previousRoutineId,
+      'next_routine_id': nextRoutineId,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -225,112 +274,6 @@ class RoutineNextOccurrence {
     return {
       'date': date,
       'time_window': timeWindow.toJson(),
-    };
-  }
-}
-
-class RoutineProposal {
-  const RoutineProposal({
-    required this.id,
-    this.topicRef,
-    required this.name,
-    this.cadence,
-    this.startTime,
-    required this.items,
-    required this.confidence,
-    required this.conversationId,
-    required this.createdAt,
-  });
-
-  final String id;
-  final String? topicRef;
-  final String name;
-  final String? cadence;
-  final String? startTime;
-  final List<RoutineProposalItem> items;
-  final double confidence;
-  final String conversationId;
-  final DateTime createdAt;
-
-  factory RoutineProposal.fromMap(Map<String, dynamic> map) {
-    return RoutineProposal(
-      id: map['id'] as String,
-      topicRef: map['topic_ref'] as String?,
-      name: map['name'] as String,
-      cadence: map['cadence'] as String?,
-      startTime: map['start_time'] as String?,
-      items: (map['items'] as List<dynamic>)
-          .map((e) => RoutineProposalItem.fromMap(e as Map<String, dynamic>))
-          .toList(),
-      confidence: (map['confidence'] as num).toDouble(),
-      conversationId: map['conversation_id'] as String,
-      createdAt: DateTime.parse(map['created_at'] as String),
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'topic_ref': topicRef,
-      'name': name,
-      'cadence': cadence,
-      'start_time': startTime,
-      'items': items.map((i) => i.toMap()).toList(),
-      'confidence': confidence,
-      'conversation_id': conversationId,
-      'created_at': createdAt.toIso8601String(),
-    };
-  }
-}
-
-/// Optional overrides sent as the approve-as-routine body. Only fields the
-/// user actually changed are included; an omitted field keeps the proposal's
-/// own value on the backend. [clearStartTime] sends an explicit
-/// `start_time: null`, which the backend treats as "remove the reminder time".
-class RoutineProposalOverrides {
-  const RoutineProposalOverrides({
-    this.name,
-    this.startTime,
-    this.clearStartTime = false,
-  });
-
-  final String? name;
-  final String? startTime;
-  final bool clearStartTime;
-
-  bool get isEmpty => name == null && startTime == null && !clearStartTime;
-
-  Map<String, dynamic> toMap() {
-    return {
-      if (name != null) 'name': name,
-      if (clearStartTime)
-        'start_time': null
-      else if (startTime != null)
-        'start_time': startTime,
-    };
-  }
-}
-
-class RoutineProposalItem {
-  const RoutineProposalItem({
-    required this.text,
-    required this.sortOrder,
-  });
-
-  final String text;
-  final int sortOrder;
-
-  factory RoutineProposalItem.fromMap(Map<String, dynamic> map) {
-    return RoutineProposalItem(
-      text: map['text'] as String,
-      sortOrder: map['sort_order'] as int,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'text': text,
-      'sort_order': sortOrder,
     };
   }
 }

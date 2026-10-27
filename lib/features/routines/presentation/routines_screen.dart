@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/features/routines/domain/routine_schedule.dart';
 import 'package:voice_agent/features/routines/domain/routines_state.dart';
 import 'package:voice_agent/features/routines/presentation/routines_notifier.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
@@ -17,12 +18,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  static const _tabs = [
-    RoutineStatus.active,
-    RoutineStatus.draft,
-    RoutineStatus.paused,
-    RoutineStatus.archived,
-  ];
+  static const _tabs = RoutinesTab.values;
 
   final Set<String> _busyIds = {};
 
@@ -44,7 +40,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
     if (_tabController.indexIsChanging) return;
     ref
         .read(routinesNotifierProvider.notifier)
-        .selectStatus(_tabs[_tabController.index]);
+        .selectTab(_tabs[_tabController.index]);
   }
 
   @override
@@ -66,11 +62,16 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
           controller: _tabController,
           tabs: const [
             Tab(text: 'Active'),
-            Tab(text: 'Draft'),
             Tab(text: 'Paused'),
-            Tab(text: 'Archived'),
+            Tab(text: 'Ended'),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        key: const Key('routines-new-button'),
+        onPressed: _openNew,
+        icon: const Icon(Icons.add),
+        label: const Text('New routine'),
       ),
       body: _buildBody(state, notifier),
     );
@@ -80,24 +81,18 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
     return switch (state) {
       RoutinesInitial() => const Center(child: CircularProgressIndicator()),
       RoutinesLoading() => const Center(child: CircularProgressIndicator()),
-      RoutinesLoaded(routines: final routines, proposals: final proposals) =>
-        _buildContent(routines, proposals, notifier),
+      RoutinesLoaded(routines: final routines) =>
+        _buildContent(routines, notifier),
       RoutinesError(message: final message) =>
         _buildError(message, notifier),
     };
   }
 
-  Widget _buildContent(
-    List<Routine> routines,
-    List<RoutineProposal> proposals,
-    RoutinesNotifier notifier,
-  ) {
-    final showProposals =
-        proposals.isNotEmpty && _tabController.index == 0;
-
+  Widget _buildContent(List<Routine> routines, RoutinesNotifier notifier) {
+    final today = formatRoutineDay(ref.read(routinesClockProvider)());
     return RefreshIndicator(
       onRefresh: notifier.refresh,
-      child: routines.isEmpty && !showProposals
+      child: routines.isEmpty
           ? ListView(
               children: [
                 const SizedBox(height: 120),
@@ -119,35 +114,22 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
               ],
             )
           : ListView(
-              children: [
-                if (showProposals) ...[
-                  _SectionHeader(
-                    title: 'Proposals',
-                    count: proposals.length,
-                  ),
-                  ...proposals.map((p) => _ProposalCard(
-                        proposal: p,
-                        isBusy: _busyIds.contains(p.id),
-                        onApprove: () => _handleApprove(p.id),
-                        onEdit: () => _handleEditApprove(p),
-                        onReject: () => _handleReject(p.id),
-                      )),
-                  const Divider(),
-                ],
-                ...routines.map((r) => _RoutineCard(
-                      routine: r,
-                      isBusy: _busyIds.contains(r.id),
-                      onTap: () => _navigateToDetail(r.id),
-                      onPause:
-                          r.status == RoutineStatus.active
-                              ? () => _handlePause(r.id)
-                              : null,
-                      onResume:
-                          r.status == RoutineStatus.paused
-                              ? () => _handleResume(r.id)
-                              : null,
-                    )),
-              ],
+              // Room for the New routine button over the last card.
+              padding: const EdgeInsets.only(bottom: 88),
+              children: routines
+                  .map((r) => _RoutineCard(
+                        routine: r,
+                        today: today,
+                        isBusy: _busyIds.contains(r.id),
+                        onTap: () => _navigateToDetail(r.id),
+                        onPause: r.status == RoutineStatus.active && !r.ended
+                            ? () => _handlePause(r.id)
+                            : null,
+                        onResume: r.status == RoutineStatus.paused && !r.ended
+                            ? () => _handleResume(r.id)
+                            : null,
+                      ))
+                  .toList(),
             ),
     );
   }
@@ -171,13 +153,18 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
     );
   }
 
+  Future<void> _openNew() async {
+    final created = await context.push<Routine>('/routines/new');
+    if (!mounted || created == null) return;
+    ref.read(routinesNotifierProvider.notifier).refresh();
+  }
+
   Future<void> _navigateToDetail(String routineId) async {
     await context.push('/routines/$routineId');
     if (mounted) {
       ref.read(routinesNotifierProvider.notifier).refresh();
     }
   }
-
 
   Future<void> _handlePause(String id) async {
     setState(() => _busyIds.add(id));
@@ -206,296 +193,19 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
       );
     }
   }
-
-  Future<void> _handleApprove(
-    String proposalId, {
-    RoutineProposalOverrides? overrides,
-  }) async {
-    setState(() => _busyIds.add(proposalId));
-    final notifier = ref.read(routinesNotifierProvider.notifier);
-    final success =
-        await notifier.approveProposal(proposalId, overrides: overrides);
-    if (mounted) setState(() => _busyIds.remove(proposalId));
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-                Text(notifier.lastActionError ?? 'Failed to approve')),
-      );
-    }
-  }
-
-  Future<void> _handleEditApprove(RoutineProposal proposal) async {
-    final overrides = await showDialog<RoutineProposalOverrides>(
-      context: context,
-      builder: (ctx) => _ProposalEditDialog(proposal: proposal),
-    );
-    if (overrides == null || !mounted) return;
-    await _handleApprove(proposal.id, overrides: overrides);
-  }
-
-  Future<void> _handleReject(String proposalId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject proposal?'),
-        content:
-            const Text('This proposal will be permanently dismissed.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            key: const Key('reject-confirm-button'),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _busyIds.add(proposalId));
-    final notifier = ref.read(routinesNotifierProvider.notifier);
-    final success = await notifier.rejectProposal(proposalId);
-    if (mounted) setState(() => _busyIds.remove(proposalId));
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-                Text(notifier.lastActionError ?? 'Failed to reject')),
-      );
-    }
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.count});
-  final String title;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-          ),
-          const SizedBox(width: 8),
-          Text('($count)', style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProposalCard extends StatelessWidget {
-  const _ProposalCard({
-    required this.proposal,
-    required this.isBusy,
-    required this.onApprove,
-    required this.onEdit,
-    required this.onReject,
-  });
-  final RoutineProposal proposal;
-  final bool isBusy;
-  final VoidCallback onApprove;
-  final VoidCallback onEdit;
-  final VoidCallback onReject;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      key: Key('proposal-card-${proposal.id}'),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(proposal.name,
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-                if (proposal.cadence != null)
-                  Chip(label: Text(proposal.cadence!)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Confidence: ${(proposal.confidence * 100).toStringAsFixed(0)}%',
-              key: const Key('proposal-confidence'),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.secondary,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            ...proposal.items.take(3).map(
-                  (item) => Padding(
-                    padding: const EdgeInsets.only(left: 8, bottom: 2),
-                    child: Text('- ${item.text}',
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ),
-                ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // Icon, not a labeled button: three labeled buttons overflow
-                // the card on 320dp-wide devices.
-                IconButton(
-                  key: Key('proposal-edit-${proposal.id}'),
-                  icon: const Icon(Icons.edit_outlined),
-                  tooltip: 'Edit & approve',
-                  onPressed: isBusy ? null : onEdit,
-                ),
-                TextButton(
-                  key: Key('proposal-reject-${proposal.id}'),
-                  onPressed: isBusy ? null : onReject,
-                  child: const Text('Reject'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  key: Key('proposal-approve-${proposal.id}'),
-                  onPressed: isBusy ? null : onApprove,
-                  child: const Text('Approve'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProposalEditDialog extends StatefulWidget {
-  const _ProposalEditDialog({required this.proposal});
-  final RoutineProposal proposal;
-
-  @override
-  State<_ProposalEditDialog> createState() => _ProposalEditDialogState();
-}
-
-class _ProposalEditDialogState extends State<_ProposalEditDialog> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _startTimeController;
-  String? _nameError;
-  String? _startTimeError;
-
-  static final _startTimePattern = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.proposal.name);
-    _startTimeController =
-        TextEditingController(text: widget.proposal.startTime ?? '');
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _startTimeController.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final name = _nameController.text.trim();
-    final startTime = _startTimeController.text.trim();
-    final originalName = widget.proposal.name.trim();
-    final originalStart = (widget.proposal.startTime ?? '').trim();
-    final startChanged = startTime != originalStart;
-    setState(() {
-      _nameError = name.isEmpty ? 'Name is required' : null;
-      // Only a time the user actually changed is validated (and sent) — an
-      // unchanged pre-filled value is omitted, so a malformed extracted time
-      // must not block approving an unrelated edit.
-      _startTimeError = startChanged &&
-              startTime.isNotEmpty &&
-              !_startTimePattern.hasMatch(startTime)
-          ? 'Use 24h HH:MM'
-          : null;
-    });
-    if (_nameError != null || _startTimeError != null) return;
-
-    // Unchanged fields are omitted so the backend keeps the proposal's own
-    // value; clearing a previously-set time sends an explicit null.
-    Navigator.of(context).pop(RoutineProposalOverrides(
-      name: name == originalName ? null : name,
-      startTime: startChanged && startTime.isNotEmpty ? startTime : null,
-      clearStartTime:
-          startChanged && startTime.isEmpty && originalStart.isNotEmpty,
-    ));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Edit & approve'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            key: const Key('proposal-edit-name-field'),
-            controller: _nameController,
-            decoration: InputDecoration(
-              labelText: 'Name',
-              border: const OutlineInputBorder(),
-              errorText: _nameError,
-            ),
-          ),
-          const SizedBox(height: 16),
-          // A text field rather than showTimePicker: clearing the field is a
-          // meaningful input (remove the reminder time), which a picker
-          // cannot express.
-          TextField(
-            key: const Key('proposal-edit-start-time-field'),
-            controller: _startTimeController,
-            keyboardType: TextInputType.datetime,
-            decoration: InputDecoration(
-              labelText: 'Reminder time (HH:MM)',
-              helperText: widget.proposal.cadence == null
-                  ? null
-                  : 'Cadence: ${widget.proposal.cadence}',
-              border: const OutlineInputBorder(),
-              errorText: _startTimeError,
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          key: const Key('proposal-edit-approve-button'),
-          onPressed: _submit,
-          child: const Text('Approve'),
-        ),
-      ],
-    );
-  }
 }
 
 class _RoutineCard extends StatelessWidget {
   const _RoutineCard({
     required this.routine,
+    required this.today,
     required this.isBusy,
     required this.onTap,
     this.onPause,
     this.onResume,
   });
   final Routine routine;
+  final String today;
   final bool isBusy;
   final VoidCallback onTap;
   final VoidCallback? onPause;
@@ -503,6 +213,11 @@ class _RoutineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final badge = switch (routine) {
+      Routine(status: RoutineStatus.archived) => 'archived',
+      Routine(status: RoutineStatus.draft) => 'draft',
+      _ => null,
+    };
     return Card(
       key: Key('routine-card-${routine.id}'),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -516,23 +231,38 @@ class _RoutineCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(routine.name,
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 4),
                     Row(
                       children: [
-                        if (routine.cadence != null) ...[
-                          Text(routine.cadence!,
-                              style: Theme.of(context).textTheme.bodySmall),
-                          const SizedBox(width: 12),
-                        ],
-                        if (routine.nextOccurrence != null)
+                        Flexible(
+                          child: Text(routine.name,
+                              style: Theme.of(context).textTheme.titleMedium),
+                        ),
+                        if (badge != null) ...[
+                          const SizedBox(width: 8),
                           Text(
-                            'Next: ${routine.nextOccurrence!.date}',
-                            style: Theme.of(context).textTheme.bodySmall,
+                            badge.toUpperCase(),
+                            key: Key('routine-badge-${routine.id}'),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.secondary),
                           ),
+                        ],
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      describeRoutine(routine, today: today),
+                      key: Key('routine-schedule-${routine.id}'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (routine.nextOccurrence != null && !routine.ended)
+                      Text(
+                        'Next: ${routine.nextOccurrence!.date}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                   ],
                 ),
               ),

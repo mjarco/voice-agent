@@ -72,20 +72,6 @@ Map<String, dynamic> _sampleOccurrence() => {
       'updated_at': '2026-04-19T08:00:00.000Z',
     };
 
-Map<String, dynamic> _sampleProposal() => {
-      'id': 'prop-1',
-      'topic_ref': 'topic-1',
-      'name': 'Weekly review',
-      'cadence': 'weekly',
-      'start_time': '18:00',
-      'items': [
-        {'text': 'Review completed items', 'sort_order': 1},
-      ],
-      'confidence': 0.85,
-      'conversation_id': 'conv-1',
-      'created_at': '2026-04-18T00:00:00.000Z',
-    };
-
 String _wrapData(dynamic data) => jsonEncode({'data': data});
 
 void main() {
@@ -177,20 +163,6 @@ void main() {
     });
   });
 
-  group('fetchProposals', () {
-    test('parses proposal list', () async {
-      client.nextGetResult =
-          ApiSuccess(body: _wrapData([_sampleProposal()]));
-
-      final proposals = await repo.fetchProposals();
-
-      expect(proposals, hasLength(1));
-      expect(proposals.first.name, 'Weekly review');
-      expect(proposals.first.confidence, 0.85);
-      expect(client.lastGetPath, '/routine-proposals');
-    });
-  });
-
   group('activateRoutine', () {
     test('calls correct endpoint', () async {
       await repo.activateRoutine('rtn-1');
@@ -242,49 +214,125 @@ void main() {
     });
   });
 
-  group('approveProposal', () {
-    test('calls correct endpoint without body by default', () async {
-      await repo.approveProposal('prop-1');
-      expect(client.lastPostPath, '/records/prop-1/approve-as-routine');
-      expect(client.lastPostData, isNull);
-    });
+  const input = RoutineInput(
+    name: 'Trening',
+    rrule: 'FREQ=WEEKLY;BYDAY=MO,WE',
+    startTime: '18:00',
+    lastDay: '2026-12-31',
+    missed: RoutineMissed.lapses,
+    items: ['rozgrzewka', 'bieg'],
+  );
 
-    test('sends only the provided override fields as body', () async {
-      await repo.approveProposal(
-        'prop-1',
-        overrides: const RoutineProposalOverrides(
-          name: 'Evening meds',
-          startTime: '20:00',
-        ),
-      );
-      expect(client.lastPostPath, '/records/prop-1/approve-as-routine');
+  group('createRoutine', () {
+    test('posts the form and parses the routine', () async {
+      client.nextPostResult = ApiSuccess(body: _wrapData(_sampleRoutine()));
+
+      final routine = await repo.createRoutine(input);
+
+      expect(routine.id, 'rtn-1');
+      expect(client.lastPostPath, '/routines');
       expect(client.lastPostData, {
-        'name': 'Evening meds',
-        'start_time': '20:00',
+        'name': 'Trening',
+        'rrule': 'FREQ=WEEKLY;BYDAY=MO,WE',
+        'start_time': '18:00',
+        'last_day': '2026-12-31',
+        'missed': 'lapses',
+        'items': ['rozgrzewka', 'bieg'],
       });
     });
 
-    test('sends no body when overrides are empty', () async {
-      await repo.approveProposal(
-        'prop-1',
-        overrides: const RoutineProposalOverrides(),
+    test('shows the server message of a 409 name clash', () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 409,
+        message: 'Conflict',
+        body: jsonEncode({
+          'data': {'existing_routine_id': 'rtn-0'},
+          'error': {
+            'code': 'routine_name_exists',
+            'message': 'Rutyna o tej nazwie już istnieje',
+          },
+        }),
       );
-      expect(client.lastPostData, isNull);
+
+      expect(
+        () => repo.createRoutine(input),
+        throwsA(isA<RoutineConflictException>()
+            .having((e) => e is RoutineOverdueException, 'overdue', isFalse)
+            .having((e) => e.message, 'message',
+                'Rutyna o tej nazwie już istnieje')),
+      );
     });
 
-    test('sends explicit null start_time when clearing', () async {
-      await repo.approveProposal(
-        'prop-1',
-        overrides: const RoutineProposalOverrides(clearStartTime: true),
+    test('shows the server message of a 422', () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 422,
+        message: 'Unprocessable Entity',
+        body: jsonEncode({
+          'error': {'code': 'invalid_rrule', 'message': 'Zły harmonogram'},
+        }),
       );
-      expect(client.lastPostData, {'start_time': null});
+
+      expect(
+        () => repo.createRoutine(input),
+        throwsA(isA<RoutinesGeneralException>()
+            .having((e) => e.message, 'message', 'Zły harmonogram')),
+      );
     });
   });
 
-  group('rejectProposal', () {
-    test('calls correct endpoint', () async {
-      await repo.rejectProposal('prop-1');
-      expect(client.lastPostPath, '/records/prop-1/reject');
+  group('editRoutine', () {
+    test('posts the form with starts_on', () async {
+      client.nextPostResult =
+          ApiSuccess(body: _wrapData(_sampleRoutine(id: 'rtn-2')));
+
+      final routine =
+          await repo.editRoutine('rtn-1', input, startsOn: '2026-10-28');
+
+      expect(routine.id, 'rtn-2');
+      expect(client.lastPostPath, '/routines/rtn-1/edit');
+      expect(client.lastPostData?['starts_on'], '2026-10-28');
+      expect(client.lastPostData?['name'], 'Trening');
+    });
+
+    test('a 409 overdue_occurrence carries the owed day', () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 409,
+        message: 'Conflict',
+        body: jsonEncode({
+          'data': {'routine_id': 'rtn-0', 'scheduled_for': '2026-10-10'},
+          'error': {
+            'code': 'overdue_occurrence',
+            'message': 'Najpierw odhacz albo pomiń zaległe wystąpienie',
+          },
+        }),
+      );
+
+      expect(
+        () => repo.editRoutine('rtn-1', input, startsOn: '2026-10-28'),
+        throwsA(isA<RoutineOverdueException>()
+            .having((e) => e.routineId, 'routineId', 'rtn-0')
+            .having((e) => e.scheduledFor, 'scheduledFor', '2026-10-10')),
+      );
+    });
+  });
+
+  group('endRoutine', () {
+    test('posts the last day', () async {
+      await repo.endRoutine('rtn-1', '2026-10-26');
+
+      expect(client.lastPostPath, '/routines/rtn-1/end');
+      expect(client.lastPostData, {'last_day': '2026-10-26'});
+    });
+  });
+
+  group('resolveOccurrence', () {
+    test('posts the day and status', () async {
+      await repo.resolveOccurrence(
+          'rtn-1', '2026-10-10', OccurrenceStatus.skipped);
+
+      expect(client.lastPostPath, '/routines/rtn-1/resolve');
+      expect(client.lastPostData,
+          {'scheduled_for': '2026-10-10', 'status': 'skipped'});
     });
   });
 
