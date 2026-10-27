@@ -101,6 +101,42 @@ void main() {
       expect(routine.startTime, isNull);
     });
 
+    test('fromMap reads the version and end fields', () {
+      final routine = Routine.fromMap({
+        ...sampleMap,
+        'missed': 'waits',
+        'active_since': '2026-10-27',
+        'last_day': '2026-12-31',
+        'ended': true,
+        'previous_routine_id': 'rt-0',
+        'next_routine_id': 'rt-2',
+      });
+
+      expect(routine.missed, RoutineMissed.waits);
+      expect(routine.activeSince, '2026-10-27');
+      expect(routine.lastDay, '2026-12-31');
+      expect(routine.ended, isTrue);
+      expect(routine.previousRoutineId, 'rt-0');
+      expect(routine.nextRoutineId, 'rt-2');
+
+      final roundTripped = Routine.fromMap(routine.toMap());
+      expect(roundTripped.missed, RoutineMissed.waits);
+      expect(roundTripped.lastDay, '2026-12-31');
+      expect(roundTripped.ended, isTrue);
+      expect(roundTripped.nextRoutineId, 'rt-2');
+    });
+
+    test('version and end fields default when absent', () {
+      final routine = Routine.fromMap(sampleMap);
+
+      expect(routine.missed, RoutineMissed.lapses);
+      expect(routine.activeSince, isNull);
+      expect(routine.lastDay, isNull);
+      expect(routine.ended, isFalse);
+      expect(routine.previousRoutineId, isNull);
+      expect(routine.nextRoutineId, isNull);
+    });
+
     test('toMap produces valid JSON', () {
       final routine = Routine.fromMap(sampleMap);
       final json = jsonEncode(routine.toMap());
@@ -158,50 +194,6 @@ void main() {
 
       expect(roundTripped.conversationId, 'conv-1');
       expect(roundTripped.status, OccurrenceStatus.inProgress);
-    });
-  });
-
-  group('RoutineProposal', () {
-    final sampleMap = {
-      'id': 'prop-1',
-      'topic_ref': 'topic:fitness',
-      'name': 'Evening walk',
-      'cadence': 'daily',
-      'start_time': '18:00',
-      'items': [
-        {'text': 'Walk 30 min', 'sort_order': 0},
-      ],
-      'confidence': 0.85,
-      'conversation_id': 'conv-1',
-      'created_at': '2026-04-18T00:00:00.000Z',
-    };
-
-    test('fromMap creates correct instance', () {
-      final proposal = RoutineProposal.fromMap(sampleMap);
-
-      expect(proposal.id, 'prop-1');
-      expect(proposal.topicRef, 'topic:fitness');
-      expect(proposal.name, 'Evening walk');
-      expect(proposal.items, hasLength(1));
-      expect(proposal.items[0].text, 'Walk 30 min');
-      expect(proposal.confidence, 0.85);
-    });
-
-    test('round-trip preserves all fields', () {
-      final proposal = RoutineProposal.fromMap(sampleMap);
-      final roundTripped = RoutineProposal.fromMap(proposal.toMap());
-
-      expect(roundTripped.id, proposal.id);
-      expect(roundTripped.name, proposal.name);
-      expect(roundTripped.items.length, proposal.items.length);
-    });
-
-    test('topicRef is nullable', () {
-      final map = Map<String, dynamic>.from(sampleMap);
-      map['topic_ref'] = null;
-
-      final proposal = RoutineProposal.fromMap(map);
-      expect(proposal.topicRef, isNull);
     });
   });
 }

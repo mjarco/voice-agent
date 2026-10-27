@@ -355,6 +355,29 @@ void main() {
       expect(result, isA<ApiPermanentFailure>());
     });
 
+    test('ApiPermanentFailure keeps the error body', () async {
+      final body = {
+        'data': {'routine_id': 'r1', 'scheduled_for': '2026-10-01'},
+        'error': {'code': 'overdue_occurrence', 'message': 'owed'},
+      };
+      _MockAdapter.shouldThrow = DioException(
+        requestOptions: RequestOptions(path: '/routines/r1/edit'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/routines/r1/edit'),
+          statusCode: 409,
+          data: body,
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      final result = await configuredClient.postJson('/routines/r1/edit');
+
+      expect(result, isA<ApiPermanentFailure>());
+      final failure = result as ApiPermanentFailure;
+      expect(failure.statusCode, 409);
+      expect(jsonDecode(failure.body!), body);
+    });
+
     test('delete sends DELETE', () async {
       _MockAdapter.nextStatusCode = 200;
 

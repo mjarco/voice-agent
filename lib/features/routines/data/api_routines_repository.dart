@@ -31,9 +31,44 @@ class ApiRoutinesRepository implements RoutinesRepository {
   }
 
   @override
-  Future<List<RoutineProposal>> fetchProposals() async {
-    final result = await _apiClient.get('/routine-proposals');
-    return _parseList(result, RoutineProposal.fromMap);
+  Future<Routine> createRoutine(RoutineInput input) async {
+    final result = await _apiClient.postJson('/routines', data: input.toMap());
+    return _parseSingle(result, Routine.fromMap);
+  }
+
+  @override
+  Future<Routine> editRoutine(
+    String id,
+    RoutineInput input, {
+    required String startsOn,
+  }) async {
+    final result = await _apiClient.postJson(
+      '/routines/$id/edit',
+      data: {...input.toMap(), 'starts_on': startsOn},
+    );
+    return _parseSingle(result, Routine.fromMap);
+  }
+
+  @override
+  Future<void> endRoutine(String id, String lastDay) async {
+    final result = await _apiClient.postJson(
+      '/routines/$id/end',
+      data: {'last_day': lastDay},
+    );
+    _throwOnFailure(result);
+  }
+
+  @override
+  Future<void> resolveOccurrence(
+    String routineId,
+    String scheduledFor,
+    OccurrenceStatus status,
+  ) async {
+    final result = await _apiClient.postJson(
+      '/routines/$routineId/resolve',
+      data: {'scheduled_for': scheduledFor, 'status': status.toJson()},
+    );
+    _throwOnFailure(result);
   }
 
   @override
@@ -64,24 +99,6 @@ class ApiRoutinesRepository implements RoutinesRepository {
       '/routines/$routineId/occurrences/$occurrenceId',
       data: {'status': status.toJson()},
     );
-    _throwOnFailure(result);
-  }
-
-  @override
-  Future<void> approveProposal(
-    String proposalId, {
-    RoutineProposalOverrides? overrides,
-  }) async {
-    final result = await _apiClient.postJson(
-      '/records/$proposalId/approve-as-routine',
-      data: (overrides == null || overrides.isEmpty) ? null : overrides.toMap(),
-    );
-    _throwOnFailure(result);
-  }
-
-  @override
-  Future<void> rejectProposal(String proposalId) async {
-    final result = await _apiClient.postJson('/records/$proposalId/reject');
     _throwOnFailure(result);
   }
 
@@ -118,27 +135,68 @@ class ApiRoutinesRepository implements RoutinesRepository {
         final data = json['data'] as Map<String, dynamic>?;
         if (data == null) throw RoutinesGeneralException('Missing data envelope');
         return fromMap(data);
-      case ApiPermanentFailure(message: final msg, statusCode: final code):
-        throw RoutinesGeneralException('Server error $code: $msg');
-      case ApiTransientFailure(reason: final reason):
-        throw RoutinesGeneralException(reason);
+      case ApiPermanentFailure():
+      case ApiTransientFailure():
       case ApiNotConfigured():
-        throw RoutinesGeneralException('API not configured');
+        throw _failure(result);
     }
   }
 
   void _throwOnFailure(ApiResult result) {
+    if (result is ApiSuccess) return;
+    throw _failure(result);
+  }
+
+  /// The exception for a failed write. The server's own message is shown
+  /// when its error envelope has one (it names what to fix); a
+  /// `409 overdue_occurrence` carries the owed day.
+  RoutinesException _failure(ApiResult result) {
     switch (result) {
-      case ApiSuccess():
-        return;
-      case ApiPermanentFailure(statusCode: 409):
-        throw RoutineConflictException('Operation conflict');
-      case ApiPermanentFailure(message: final msg, statusCode: final code):
-        throw RoutinesGeneralException('Server error $code: $msg');
+      case ApiPermanentFailure(statusCode: final code, body: final body):
+        final envelope = _errorEnvelope(body);
+        final serverMessage = envelope?.message;
+        if (code == 409) {
+          final data = envelope?.data;
+          if (envelope?.code == 'overdue_occurrence' &&
+              data?['routine_id'] is String &&
+              data?['scheduled_for'] is String) {
+            return RoutineOverdueException(
+              serverMessage ?? 'An overdue occurrence is still open',
+              routineId: data!['routine_id'] as String,
+              scheduledFor: data['scheduled_for'] as String,
+            );
+          }
+          return RoutineConflictException(
+              serverMessage ?? 'Operation conflict');
+        }
+        return RoutinesGeneralException(
+            serverMessage ?? 'Server error $code: ${result.message}');
       case ApiTransientFailure(reason: final reason):
-        throw RoutinesGeneralException(reason);
+        return RoutinesGeneralException(reason);
       case ApiNotConfigured():
-        throw RoutinesGeneralException('API not configured');
+        return RoutinesGeneralException('API not configured');
+      case ApiSuccess():
+        return RoutinesGeneralException('Unexpected success');
+    }
+  }
+
+  static ({String? code, String? message, Map<String, dynamic>? data})?
+      _errorEnvelope(String? body) {
+    if (body == null || body.isEmpty) return null;
+    try {
+      final json = jsonDecode(body);
+      if (json is! Map<String, dynamic>) return null;
+      final error = json['error'];
+      final data = json['data'];
+      final code = error is Map ? error['code'] : null;
+      final message = error is Map ? error['message'] : null;
+      return (
+        code: code is String ? code : null,
+        message: message is String && message.isNotEmpty ? message : null,
+        data: data is Map<String, dynamic> ? data : null,
+      );
+    } on FormatException {
+      return null;
     }
   }
 }

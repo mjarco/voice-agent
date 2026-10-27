@@ -1,5 +1,9 @@
 import 'package:voice_agent/core/models/routine.dart';
 
+/// The tabs of the routines list (#365). Ended holds ended and archived
+/// routines; a draft is listed under Active.
+enum RoutinesTab { active, paused, ended }
+
 sealed class RoutinesState {
   const RoutinesState();
 }
@@ -13,9 +17,8 @@ class RoutinesLoading extends RoutinesState {
 }
 
 class RoutinesLoaded extends RoutinesState {
-  const RoutinesLoaded({required this.routines, required this.proposals});
+  const RoutinesLoaded({required this.routines});
   final List<Routine> routines;
-  final List<RoutineProposal> proposals;
 }
 
 class RoutinesError extends RoutinesState {

@@ -13,9 +13,17 @@ class ApiSuccess extends ApiResult {
 }
 
 class ApiPermanentFailure extends ApiResult {
-  const ApiPermanentFailure({required this.statusCode, required this.message});
+  const ApiPermanentFailure({
+    required this.statusCode,
+    required this.message,
+    this.body,
+  });
   final int statusCode;
   final String message;
+
+  /// The response body, when the server sent one: an error envelope may carry
+  /// a code and data the caller acts on (e.g. `409 overdue_occurrence`).
+  final String? body;
 }
 
 class ApiTransientFailure extends ApiResult {
@@ -166,13 +174,15 @@ class ApiClient {
                 : jsonEncode(responseData));
         return ApiSuccess(body: body);
       }
-      return classifyStatusCode(statusCode, response.statusMessage);
+      return classifyStatusCode(statusCode, response.statusMessage,
+          body: _bodyText(response.data));
     } on DioException catch (e) {
       return classifyDioException(e);
     }
   }
 
-  ApiResult classifyStatusCode(int statusCode, String? message) {
+  ApiResult classifyStatusCode(int statusCode, String? message,
+      {String? body}) {
     if (statusCode == 408 || statusCode == 429 || statusCode >= 500) {
       return ApiTransientFailure(
         reason: 'Server error: $statusCode ${message ?? ''}',
@@ -181,13 +191,15 @@ class ApiClient {
     return ApiPermanentFailure(
       statusCode: statusCode,
       message: message ?? 'Request failed',
+      body: body,
     );
   }
 
   ApiResult classifyDioException(DioException e) {
     final statusCode = e.response?.statusCode;
     if (statusCode != null) {
-      return classifyStatusCode(statusCode, e.response?.statusMessage);
+      return classifyStatusCode(statusCode, e.response?.statusMessage,
+          body: _bodyText(e.response?.data));
     }
 
     switch (e.type) {
@@ -202,5 +214,10 @@ class ApiClient {
       default:
         return ApiTransientFailure(reason: 'Network error: ${e.message}');
     }
+  }
+
+  static String? _bodyText(dynamic data) {
+    if (data == null) return null;
+    return data is String ? data : jsonEncode(data);
   }
 }
