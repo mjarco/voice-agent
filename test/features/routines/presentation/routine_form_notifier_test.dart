@@ -213,6 +213,22 @@ void main() {
     expect(notifier.state.saved?.id, 'rtn-2');
   });
 
+  test('no change and a stopped routine read as in the web UI (#369)',
+      () async {
+    final notifier = RoutineFormNotifier(repo, 'rtn-1');
+    await Future<void>.delayed(Duration.zero);
+    repo.saveAnswers
+      ..add(RoutineNoChangeException('routine: the edit changes nothing'))
+      ..add(RoutineNotActiveException('routine: only an active routine'));
+
+    await notifier.save(_input, startsOn: '2026-10-28');
+    expect(notifier.state.error,
+        'Nothing changed: the routine is already like this.');
+    await notifier.save(_input, startsOn: '2026-10-28');
+    expect(notifier.state.error,
+        'Only an active routine is edited: resume it first.');
+  });
+
   group('a stale edit', () {
     test('finds the newest version and stops saving', () async {
       repo.detailsById['rtn-1'] =

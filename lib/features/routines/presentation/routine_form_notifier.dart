@@ -109,6 +109,16 @@ class RoutineFormNotifier extends StateNotifier<RoutineFormState> {
           saving: false,
           error: () => _refusal(e, pending.startsOn),
           errorField: () => e.field);
+    } on RoutineNoChangeException {
+      if (!mounted) return;
+      state = state.copyWith(
+          saving: false,
+          error: () => 'Nothing changed: the routine is already like this.');
+    } on RoutineNotActiveException {
+      if (!mounted) return;
+      state = state.copyWith(
+          saving: false,
+          error: () => 'Only an active routine is edited: resume it first.');
     } on RoutinesException catch (e) {
       if (!mounted) return;
       state = state.copyWith(saving: false, error: () => e.message);

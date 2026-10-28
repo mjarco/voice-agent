@@ -409,6 +409,33 @@ void main() {
       );
     });
 
+    test('a 409 routine_not_active and a 422 no_change are typed (#369)',
+        () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 409,
+        message: 'Conflict',
+        body: jsonEncode({
+          'error': {'code': 'routine_not_active', 'message': 'resume it first'},
+        }),
+      );
+      await expectLater(
+        () => repo.editRoutine('rtn-1', input, startsOn: '2026-10-28'),
+        throwsA(isA<RoutineNotActiveException>()),
+      );
+
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 422,
+        message: 'Unprocessable Entity',
+        body: jsonEncode({
+          'error': {'code': 'no_change', 'message': 'nothing'},
+        }),
+      );
+      await expectLater(
+        () => repo.editRoutine('rtn-1', input, startsOn: '2026-10-28'),
+        throwsA(isA<RoutineNoChangeException>()),
+      );
+    });
+
     test('a 409 routine_already_edited is a stale edit', () async {
       client.nextPostResult = ApiPermanentFailure(
         statusCode: 409,

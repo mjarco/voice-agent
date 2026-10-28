@@ -185,8 +185,14 @@ class ApiRoutinesRepository implements RoutinesRepository {
               return RoutineAlreadyResolvedException(message);
             case 'routine_already_edited':
               return RoutineAlreadyEditedException(message);
+            case 'routine_not_active':
+              return RoutineNotActiveException(message);
           }
           return RoutineConflictException(message);
+        }
+        if (envelope?.code == 'no_change') {
+          return RoutineNoChangeException(
+              serverMessage ?? 'The edit changes nothing');
         }
         return RoutinesGeneralException(
             serverMessage ?? 'Server error $code: ${result.message}');

@@ -431,6 +431,26 @@ void main() {
       expect(repo.calls, ['detail rtn-1', 'detail rtn-1']);
     });
 
+    testWidgets('a paused or archived routine has no Edit (#369)',
+        (tester) async {
+      for (final status in [RoutineStatus.paused, RoutineStatus.archived]) {
+        final repo = _StubRepository(
+          routine: Routine(
+            id: 'rtn-1',
+            sourceRecordId: 'src-1',
+            name: 'Stopped',
+            rrule: 'FREQ=DAILY',
+            status: status,
+            createdAt: DateTime(2026, 4, 1),
+            updatedAt: DateTime(2026, 4, 18),
+          ),
+        );
+        await _pumpScreen(tester, repository: repo);
+        expect(find.byKey(const Key('detail-edit-button')), findsNothing,
+            reason: '$status');
+      }
+    });
+
     testWidgets('a replaced version has no Edit and links the newer one',
         (tester) async {
       final repo = _StubRepository(

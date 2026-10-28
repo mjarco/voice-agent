@@ -47,6 +47,17 @@ class RoutineAlreadyEditedException extends RoutineConflictException {
   RoutineAlreadyEditedException(super.message);
 }
 
+/// `409 routine_not_active`: only an active routine is edited (#369,
+/// ADR-API-099 of personal-agent).
+class RoutineNotActiveException extends RoutineConflictException {
+  RoutineNotActiveException(super.message);
+}
+
+/// `422 no_change`: the edit equals the current version (#369).
+class RoutineNoChangeException extends RoutinesGeneralException {
+  RoutineNoChangeException(super.message);
+}
+
 /// The field of the routine form a server refusal is about (#367).
 enum RoutineFormField { name, days, interval, monthday, startsOn, lastDay }
 
