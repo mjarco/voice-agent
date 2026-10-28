@@ -26,9 +26,49 @@ class RoutineOverdueException extends RoutineConflictException {
     super.message, {
     required this.routineId,
     required this.scheduledFor,
+    this.openDays,
   });
   final String routineId;
   final String scheduledFor;
+
+  /// How many days are still owed up to yesterday, [scheduledFor] the
+  /// earliest (ADR-API-096 of personal-agent); null from an older server.
+  final int? openDays;
+}
+
+/// `409 already_resolved`: the occurrence was resolved elsewhere meanwhile.
+class RoutineAlreadyResolvedException extends RoutineConflictException {
+  RoutineAlreadyResolvedException(super.message);
+}
+
+/// `409 routine_already_edited`: another edit replaced this version, so the
+/// one to edit is its newer version (#367).
+class RoutineAlreadyEditedException extends RoutineConflictException {
+  RoutineAlreadyEditedException(super.message);
+}
+
+/// The field of the routine form a server refusal is about (#367).
+enum RoutineFormField { name, days, interval, monthday, startsOn, lastDay }
+
+/// A refusal of the routine form that names its field: `422
+/// invalid_last_day`, `422 invalid_starts_on`, `409 routine_name_exists`.
+class RoutineFieldException extends RoutinesException {
+  RoutineFieldException(
+    this.message, {
+    required this.field,
+    this.firstDay,
+    this.firstDayKnown = false,
+  });
+  @override
+  final String message;
+  final RoutineFormField field;
+
+  /// `invalid_last_day`'s first day of the schedule from the start, without
+  /// the last day; [firstDayKnown] is false when the server sent no
+  /// `first_day` at all (an older server), true with a null [firstDay] when
+  /// the schedule has no day.
+  final String? firstDay;
+  final bool firstDayKnown;
 }
 
 /// What the routine form sends to create or edit a routine.

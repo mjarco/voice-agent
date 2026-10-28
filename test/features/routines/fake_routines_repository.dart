@@ -39,6 +39,9 @@ Routine sampleRoutine({
 class FakeRoutinesRepository implements RoutinesRepository {
   final Map<RoutineStatus, List<Routine>> byStatus = {};
   Routine? detail;
+
+  /// Details by id, ahead of [detail].
+  final Map<String, Routine> detailsById = {};
   List<RoutineOccurrence> occurrences = [];
   Exception? fetchError;
   Exception? actionError;
@@ -69,7 +72,7 @@ class FakeRoutinesRepository implements RoutinesRepository {
     calls.add('detail $id');
     if (detailGate != null) await detailGate!.future;
     if (fetchError != null) throw fetchError!;
-    return detail ?? sampleRoutine(id: id);
+    return detailsById[id] ?? detail ?? sampleRoutine(id: id);
   }
 
   @override

@@ -149,25 +149,44 @@ class ApiRoutinesRepository implements RoutinesRepository {
 
   /// The exception for a failed write. The server's own message is shown
   /// when its error envelope has one (it names what to fix); a
-  /// `409 overdue_occurrence` carries the owed day.
+  /// `409 overdue_occurrence` carries the owed day, and a refusal of a form
+  /// field names that field (#367).
   RoutinesException _failure(ApiResult result) {
     switch (result) {
       case ApiPermanentFailure(statusCode: final code, body: final body):
         final envelope = _errorEnvelope(body);
         final serverMessage = envelope?.message;
+        final field = _fieldOf(envelope?.code);
+        if (field != null) {
+          final data = envelope?.data;
+          final first = data?['first_day'];
+          return RoutineFieldException(
+            serverMessage ?? 'Server error $code: ${result.message}',
+            field: field,
+            firstDay: first is String ? first : null,
+            firstDayKnown: data != null && data.containsKey('first_day'),
+          );
+        }
         if (code == 409) {
           final data = envelope?.data;
-          if (envelope?.code == 'overdue_occurrence' &&
-              data?['routine_id'] is String &&
-              data?['scheduled_for'] is String) {
-            return RoutineOverdueException(
-              serverMessage ?? 'An overdue occurrence is still open',
-              routineId: data!['routine_id'] as String,
-              scheduledFor: data['scheduled_for'] as String,
-            );
+          final message = serverMessage ?? 'Operation conflict';
+          switch (envelope?.code) {
+            case 'overdue_occurrence'
+                when data?['routine_id'] is String &&
+                    data?['scheduled_for'] is String:
+              final open = data!['open_days'];
+              return RoutineOverdueException(
+                serverMessage ?? 'An overdue occurrence is still open',
+                routineId: data['routine_id'] as String,
+                scheduledFor: data['scheduled_for'] as String,
+                openDays: open is int ? open : null,
+              );
+            case 'already_resolved':
+              return RoutineAlreadyResolvedException(message);
+            case 'routine_already_edited':
+              return RoutineAlreadyEditedException(message);
           }
-          return RoutineConflictException(
-              serverMessage ?? 'Operation conflict');
+          return RoutineConflictException(message);
         }
         return RoutinesGeneralException(
             serverMessage ?? 'Server error $code: ${result.message}');
@@ -179,6 +198,13 @@ class ApiRoutinesRepository implements RoutinesRepository {
         return RoutinesGeneralException('Unexpected success');
     }
   }
+
+  static RoutineFormField? _fieldOf(String? code) => switch (code) {
+        'invalid_last_day' => RoutineFormField.lastDay,
+        'invalid_starts_on' => RoutineFormField.startsOn,
+        'routine_name_exists' => RoutineFormField.name,
+        _ => null,
+      };
 
   static ({String? code, String? message, Map<String, dynamic>? data})?
       _errorEnvelope(String? body) {
