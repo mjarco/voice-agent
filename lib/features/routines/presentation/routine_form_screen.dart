@@ -232,16 +232,18 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
   Future<void> _askOverdue(String day, int? openDays) async {
     final notifier =
         ref.read(routineFormNotifierProvider(widget.editId).notifier);
+    // open_days (ADR-API-096): resolving the earliest day brings up the
+    // next.
+    final open = openDays != null && openDays > 1
+        ? '$openDays days are still open, the earliest $day.'
+        : 'The occurrence of $day is still open.';
     final status = await showDialog<OccurrenceStatus>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('An occurrence is still open'),
-        // open_days (ADR-API-096): resolving the earliest day brings up the
-        // next.
         content: Text(
-          '${openDays != null && openDays > 1 ? '$openDays days are still open, the earliest $day.' : 'The occurrence of $day is still open.'} '
-          'Tick it off or skip it, and the edit is saved again.',
+          '$open Tick it off or skip it, and the edit is saved again.',
           key: const Key('routine-form-overdue-text'),
         ),
         actions: [

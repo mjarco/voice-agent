@@ -244,7 +244,8 @@ void main() {
 
       expect(notifier.state.stale, isTrue);
       expect(notifier.state.newer, isNull);
-      expect(notifier.state.error, 'This routine was changed meanwhile.');
+      expect(notifier.state.error,
+          'This routine was changed meanwhile. Go back and edit its newer version.');
     });
   });
 

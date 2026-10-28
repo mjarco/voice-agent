@@ -144,11 +144,17 @@ class RoutineFormNotifier extends StateNotifier<RoutineFormState> {
         newer = await _repository.fetchRoutineDetail(newer.nextRoutineId!);
       }
       if (!mounted) return;
-      if (newer.id != _editId) state = state.copyWith(newer: newer);
+      if (newer.id != _editId) {
+        state = state.copyWith(newer: newer);
+      } else {
+        state = state.copyWith(
+            error: () => '$changed Go back and edit its newer version.');
+      }
     } on RoutinesException catch (e) {
       if (!mounted) return;
       state = state.copyWith(
-          error: () => '$changed Failed to load its newer version: $e');
+          error: () => '$changed Go back and edit its newer version '
+              '(it did not load: $e).');
     }
   }
 }
