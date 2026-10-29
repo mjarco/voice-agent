@@ -33,7 +33,8 @@ final routineDetailNotifierProvider = StateNotifierProvider.autoDispose
 final routineFormNotifierProvider = StateNotifierProvider.autoDispose
     .family<RoutineFormNotifier, RoutineFormState, String?>((ref, editId) {
   final repository = ref.watch(routinesRepositoryProvider);
-  return RoutineFormNotifier(repository, editId);
+  return RoutineFormNotifier(repository, editId,
+      clock: ref.watch(routinesClockProvider));
 });
 
 /// The device's clock; the form and End after… count today from it, the way

@@ -36,9 +36,10 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
   bool _missedTouched = false;
   String? _validation;
 
-  /// Set when the last day is what keeps the form from saving: the field is
-  /// marked until it changes.
-  bool _lastDayInvalid = false;
+  /// The field the form's own check is about; a server refusal names its
+  /// field in the state (#367). Marked until the field changes or the next
+  /// Save.
+  RoutineFormField? _invalid;
 
   bool get _isEdit => widget.editId != null;
 
@@ -116,6 +117,9 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
   void _setKind(RoutineScheduleKind? kind) {
     setState(() {
       _kind = kind;
+      _touched(RoutineFormField.days);
+      _touched(RoutineFormField.interval);
+      _touched(RoutineFormField.monthday);
       // A monthly routine waits, any other lapses (ADR-CORE-092), until the
       // owner chooses.
       if (!_missedTouched && kind != null) {
@@ -126,11 +130,30 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
     });
   }
 
+  /// [field] changed: its mark goes.
+  void _touched(RoutineFormField field) {
+    if (_invalid == field) _invalid = null;
+    final notifier =
+        ref.read(routineFormNotifierProvider(widget.editId).notifier);
+    if (ref.read(routineFormNotifierProvider(widget.editId)).errorField ==
+        field) {
+      notifier.clearErrorField();
+    }
+  }
+
+  /// A failed check of the form: [field] is marked, [message] shown.
+  (RoutineInput?, String?) _refuse(RoutineFormField field, String message) {
+    _invalid = field;
+    return (null, message);
+  }
+
   /// The form as a [RoutineInput], or a message naming what to fix.
   (RoutineInput?, String?) _input() {
-    _lastDayInvalid = false;
+    _invalid = null;
     final name = _name.text.trim();
-    if (name.isEmpty) return (null, 'Give the routine a name.');
+    if (name.isEmpty) {
+      return _refuse(RoutineFormField.name, 'Give the routine a name.');
+    }
     final kind = _kind;
     if (kind == null) return (null, 'Choose a schedule.');
     final days = routineWeekdays.where(_days.contains).toList();
@@ -139,35 +162,47 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
       case RoutineScheduleKind.daily:
         schedule = const RoutineSchedule.daily();
       case RoutineScheduleKind.weekdays:
-        if (days.isEmpty) return (null, 'Choose at least one day of the week.');
+        if (days.isEmpty) {
+          return _refuse(
+              RoutineFormField.days, 'Choose at least one day of the week.');
+        }
         schedule = RoutineSchedule.weekdays(days);
       case RoutineScheduleKind.weeks:
-        if (days.isEmpty) return (null, 'Choose at least one day of the week.');
+        if (days.isEmpty) {
+          return _refuse(
+              RoutineFormField.days, 'Choose at least one day of the week.');
+        }
         final n = int.tryParse(_interval.text.trim());
         if (n == null || n < 2) {
-          return (null, 'Every N weeks needs N of 2 or more.');
+          return _refuse(RoutineFormField.interval,
+              'Every N weeks needs N of 2 or more.');
         }
         schedule = RoutineSchedule.weeks(days, n);
       case RoutineScheduleKind.monthly:
         final d = int.tryParse(_monthday.text.trim());
         if (d == null || d < 1 || d > 31) {
-          return (null, 'Choose a day of the month from 1 to 31.');
+          return _refuse(RoutineFormField.monthday,
+              'Choose a day of the month from 1 to 31.');
         }
         schedule = RoutineSchedule.monthly(d);
+    }
+    // The picker starts at today, but a form left open overnight keeps
+    // yesterday's day.
+    if (_isEdit && _startsOn.isBefore(_today)) {
+      return _refuse(RoutineFormField.startsOn,
+          'Changes can start today at the earliest.');
     }
     final from = _isEdit ? _startsOn : _today;
     final last = _lastDay;
     if (last != null && last.isBefore(from)) {
-      _lastDayInvalid = true;
-      return (null, 'The last day cannot be before the start day.');
+      return _refuse(RoutineFormField.lastDay,
+          'The last day cannot be before the start day.');
     }
     if (last != null && !schedule.occursBetween(from, last)) {
-      _lastDayInvalid = true;
-      return (
-        null,
-        'No day of this schedule falls between ${formatRoutineDay(from)} '
-            'and the last day. Move the last day or clear it.'
-      );
+      return _refuse(
+          RoutineFormField.lastDay,
+          'No day of this schedule falls between ${formatRoutineDay(from)} '
+          'and the last day. Move the last day or clear it.');
     }
     return (
       RoutineInput(
@@ -194,17 +229,21 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
         .save(input, startsOn: _isEdit ? formatRoutineDay(_startsOn) : null);
   }
 
-  Future<void> _askOverdue(String day) async {
+  Future<void> _askOverdue(String day, int? openDays) async {
     final notifier =
         ref.read(routineFormNotifierProvider(widget.editId).notifier);
+    // open_days (ADR-API-096): resolving the earliest day brings up the
+    // next.
+    final open = openDays != null && openDays > 1
+        ? '$openDays days are still open, the earliest $day.'
+        : 'The occurrence of $day is still open.';
     final status = await showDialog<OccurrenceStatus>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('An occurrence is still open'),
         content: Text(
-          'This routine still owes $day. Tick it off or skip it, '
-          'and the edit is saved again.',
+          '$open Tick it off or skip it, and the edit is saved again.',
           key: const Key('routine-form-overdue-text'),
         ),
         actions: [
@@ -241,7 +280,12 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
       firstDate: _today,
       lastDate: _today.add(const Duration(days: 3650)),
     );
-    if (picked != null) setState(() => _startsOn = picked);
+    if (picked != null) {
+      setState(() {
+        _startsOn = picked;
+        _touched(RoutineFormField.startsOn);
+      });
+    }
   }
 
   Future<void> _pickLastDay() async {
@@ -257,7 +301,7 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
     if (picked != null) {
       setState(() {
         _lastDay = picked;
-        _lastDayInvalid = false;
+        _touched(RoutineFormField.lastDay);
       });
     }
   }
@@ -278,16 +322,24 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
     ref.listen<RoutineFormState>(provider, (prev, next) {
       if (next.saved != null && prev?.saved == null) {
         context.pop(next.saved);
+      } else if (next.newer != null && prev?.newer == null) {
+        // A stale edit: the newer version opens in place of this one.
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'This routine was changed meanwhile: this is its newer version.')));
+        context.pop(next.newer);
       } else if (next.overdueDay != null &&
           next.overdueDay != prev?.overdueDay) {
-        _askOverdue(next.overdueDay!);
+        _askOverdue(next.overdueDay!, next.overdueOpenDays);
       }
     });
 
     if (!_filled && state.routine != null) _fill(state.routine!);
 
     final error = _validation ?? state.error;
-    final canSave = _filled && !state.saving && !state.loading;
+    final canSave =
+        _filled && !state.saving && !state.loading && !state.stale;
+    final marked = _invalid ?? state.errorField;
 
     return Scaffold(
       appBar: AppBar(
@@ -330,6 +382,7 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                     label: 'Changes from',
                     value: formatRoutineDay(_startsOn),
                     onTap: _pickStartsOn,
+                    invalid: marked == RoutineFormField.startsOn,
                   ),
                   const Text(
                     'The current version ends the day before; '
@@ -342,13 +395,16 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                   key: const Key('routine-form-name'),
                   controller: _name,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
+                  onChanged: (_) =>
+                      setState(() => _touched(RoutineFormField.name)),
+                  decoration: InputDecoration(
                     labelText: 'Name',
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    error: _mark(marked == RoutineFormField.name),
                   ),
                 ),
                 const SizedBox(height: 16),
-                ..._buildSchedule(),
+                ..._buildSchedule(marked),
                 const SizedBox(height: 8),
                 _DateTile(
                   tileKey: const Key('routine-form-time'),
@@ -369,9 +425,9 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                       ? null
                       : () => setState(() {
                             _lastDay = null;
-                            _lastDayInvalid = false;
+                            _touched(RoutineFormField.lastDay);
                           }),
-                  invalid: _lastDayInvalid,
+                  invalid: marked == RoutineFormField.lastDay,
                 ),
                 const SizedBox(height: 8),
                 Text('When nobody ticks it off on its day',
@@ -419,7 +475,12 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
     );
   }
 
-  List<Widget> _buildSchedule() {
+  /// The error look of a text field, without a second copy of the message:
+  /// the message is shown above the form.
+  static Widget? _mark(bool invalid) =>
+      invalid ? const SizedBox.shrink() : null;
+
+  List<Widget> _buildSchedule(RoutineFormField? marked) {
     return [
       if (_unknownRRule != null && _kind == null) ...[
         Text(
@@ -458,9 +519,12 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
           controller: _interval,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
+          onChanged: (_) =>
+              setState(() => _touched(RoutineFormField.interval)),
+          decoration: InputDecoration(
             labelText: 'Every how many weeks',
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
+            error: _mark(marked == RoutineFormField.interval),
           ),
         ),
       ],
@@ -474,9 +538,15 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
               .map((d) => FilterChip(
                     key: Key('routine-form-day-$d'),
                     label: Text(routineWeekdayNames[d]!),
+                    labelStyle: marked == RoutineFormField.days
+                        ? TextStyle(
+                            color: Theme.of(context).colorScheme.error)
+                        : null,
                     selected: _days.contains(d),
-                    onSelected: (on) => setState(
-                        () => on ? _days.add(d) : _days.remove(d)),
+                    onSelected: (on) => setState(() {
+                      on ? _days.add(d) : _days.remove(d);
+                      _touched(RoutineFormField.days);
+                    }),
                   ))
               .toList(),
         ),
@@ -488,9 +558,12 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
           controller: _monthday,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
+          onChanged: (_) =>
+              setState(() => _touched(RoutineFormField.monthday)),
+          decoration: InputDecoration(
             labelText: 'Day of the month (1–31)',
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
+            error: _mark(marked == RoutineFormField.monthday),
           ),
         ),
       ],

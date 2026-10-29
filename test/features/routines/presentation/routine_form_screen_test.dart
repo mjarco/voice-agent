@@ -172,6 +172,53 @@ void main() {
       expect(find.text('Trening'), findsOneWidget);
       expect(find.text('New routine'), findsOneWidget);
     });
+
+    testWidgets('a name taken marks Name until it changes', (tester) async {
+      repo.saveAnswers.add(RoutineFieldException(
+          'Rutyna „Trening" już istnieje',
+          field: RoutineFormField.name));
+      await _pumpForm(tester, repo);
+
+      bool nameMarked() => tester
+          .widget<TextField>(find.byKey(const Key('routine-form-name')))
+          .decoration!
+          .error != null;
+
+      await tester.enterText(
+          find.byKey(const Key('routine-form-name')), 'Trening');
+      expect(nameMarked(), isFalse);
+      await _save(tester);
+
+      expect(find.text('Rutyna „Trening" już istnieje'), findsOneWidget);
+      expect(nameMarked(), isTrue);
+
+      await tester.enterText(
+          find.byKey(const Key('routine-form-name')), 'Trening 2');
+      await tester.pump();
+      expect(nameMarked(), isFalse);
+    });
+
+    testWidgets('a check of the form marks its field', (tester) async {
+      await _pumpForm(tester, repo);
+
+      await tester.enterText(
+          find.byKey(const Key('routine-form-name')), 'Czynsz');
+      await _chooseKind(tester, 'Day of the month');
+      await tester.enterText(
+          find.byKey(const Key('routine-form-monthday')), '40');
+      await _save(tester);
+
+      expect(find.text('Choose a day of the month from 1 to 31.'),
+          findsOneWidget);
+      expect(
+          tester
+              .widget<TextField>(
+                  find.byKey(const Key('routine-form-monthday')))
+              .decoration!
+              .error,
+          isNotNull);
+      expect(repo.calls, isEmpty);
+    });
   });
 
   group('edit', () {
@@ -311,6 +358,64 @@ void main() {
         'edit rtn-1',
       ]);
       expect(find.text('popped rtn-2'), findsOneWidget);
+    });
+
+    testWidgets('several owed days say how many and the earliest',
+        (tester) async {
+      repo.detail = sampleRoutine(id: 'rtn-1', name: 'Czynsz');
+      repo.saveAnswers.add(RoutineOverdueException('owed',
+          routineId: 'rtn-1', scheduledFor: '2026-09-10', openDays: 2));
+      await _pumpForm(tester, repo, editId: 'rtn-1');
+
+      await _save(tester);
+
+      expect(
+          find.text('2 days are still open, the earliest 2026-09-10. '
+              'Tick it off or skip it, and the edit is saved again.'),
+          findsOneWidget);
+    });
+
+    testWidgets('a stale edit opens the newer version', (tester) async {
+      repo.detailsById['rtn-1'] =
+          sampleRoutine(id: 'rtn-1', name: 'Trening', nextRoutineId: 'rtn-5');
+      repo.detailsById['rtn-5'] = sampleRoutine(id: 'rtn-5', name: 'Trening');
+      repo.saveAnswers.add(RoutineAlreadyEditedException(
+          'routine: already replaced by a newer version'));
+      await _pumpForm(tester, repo, editId: 'rtn-1');
+
+      await _save(tester);
+
+      expect(find.text('popped rtn-5'), findsOneWidget);
+      expect(
+          find.text(
+              'This routine was changed meanwhile: this is its newer version.'),
+          findsOneWidget);
+      expect(find.textContaining('already replaced'), findsNothing);
+    });
+
+    testWidgets('a start day refused by the server is marked',
+        (tester) async {
+      repo.detail = sampleRoutine(id: 'rtn-1', name: 'Leki');
+      repo.saveAnswers.add(RoutineFieldException(
+          'starts_on must not be before 2026-10-28',
+          field: RoutineFormField.startsOn));
+      await _pumpForm(tester, repo, editId: 'rtn-1');
+
+      await _save(tester);
+
+      expect(find.text('starts_on must not be before 2026-10-28'),
+          findsOneWidget);
+      final errorColor = Theme.of(tester.element(find.text('Changes from')))
+          .colorScheme
+          .error;
+      expect(
+          tester
+              .widget<Text>(find.descendant(
+                  of: find.byKey(const Key('routine-form-starts-on')),
+                  matching: find.text('Changes from')))
+              .style
+              ?.color,
+          errorColor);
     });
 
     testWidgets('cancelling the owed day keeps the form', (tester) async {

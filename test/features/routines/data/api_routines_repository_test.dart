@@ -256,10 +256,61 @@ void main() {
 
       expect(
         () => repo.createRoutine(input),
-        throwsA(isA<RoutineConflictException>()
-            .having((e) => e is RoutineOverdueException, 'overdue', isFalse)
+        throwsA(isA<RoutineFieldException>()
+            .having((e) => e.field, 'field', RoutineFormField.name)
             .having((e) => e.message, 'message',
                 'Rutyna o tej nazwie już istnieje')),
+      );
+    });
+
+    test('a 422 invalid_last_day names the last day and its first day',
+        () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 422,
+        message: 'Unprocessable Entity',
+        body: jsonEncode({
+          'data': {'first_day': '2026-11-02'},
+          'error': {'code': 'invalid_last_day', 'message': 'no day'},
+        }),
+      );
+
+      expect(
+        () => repo.createRoutine(input),
+        throwsA(isA<RoutineFieldException>()
+            .having((e) => e.field, 'field', RoutineFormField.lastDay)
+            .having((e) => e.firstDay, 'firstDay', '2026-11-02')
+            .having((e) => e.firstDayKnown, 'firstDayKnown', isTrue)),
+      );
+    });
+
+    test('a null first_day is known, a missing one is not', () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 422,
+        message: 'Unprocessable Entity',
+        body: jsonEncode({
+          'data': {'first_day': null},
+          'error': {'code': 'invalid_last_day', 'message': 'no day'},
+        }),
+      );
+      await expectLater(
+        () => repo.createRoutine(input),
+        throwsA(isA<RoutineFieldException>()
+            .having((e) => e.firstDay, 'firstDay', isNull)
+            .having((e) => e.firstDayKnown, 'firstDayKnown', isTrue)),
+      );
+
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 422,
+        message: 'Unprocessable Entity',
+        body: jsonEncode({
+          'error': {'code': 'invalid_last_day', 'message': 'no day'},
+        }),
+      );
+      await expectLater(
+        () => repo.createRoutine(input),
+        throwsA(isA<RoutineFieldException>()
+            .having((e) => e.firstDayKnown, 'firstDayKnown', isFalse)
+            .having((e) => e.message, 'message', 'no day')),
       );
     });
 
@@ -311,7 +362,68 @@ void main() {
         () => repo.editRoutine('rtn-1', input, startsOn: '2026-10-28'),
         throwsA(isA<RoutineOverdueException>()
             .having((e) => e.routineId, 'routineId', 'rtn-0')
-            .having((e) => e.scheduledFor, 'scheduledFor', '2026-10-10')),
+            .having((e) => e.scheduledFor, 'scheduledFor', '2026-10-10')
+            .having((e) => e.openDays, 'openDays', isNull)),
+      );
+    });
+
+    test('a 409 overdue_occurrence carries open_days', () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 409,
+        message: 'Conflict',
+        body: jsonEncode({
+          'data': {
+            'routine_id': 'rtn-0',
+            'scheduled_for': '2026-09-10',
+            'open_days': 2,
+          },
+          'error': {'code': 'overdue_occurrence', 'message': 'owed'},
+        }),
+      );
+
+      expect(
+        () => repo.editRoutine('rtn-1', input, startsOn: '2026-10-28'),
+        throwsA(isA<RoutineOverdueException>()
+            .having((e) => e.openDays, 'openDays', 2)),
+      );
+    });
+
+    test('a 422 invalid_starts_on names the start day', () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 422,
+        message: 'Unprocessable Entity',
+        body: jsonEncode({
+          'error': {
+            'code': 'invalid_starts_on',
+            'message': 'starts_on must not be before 2026-10-28',
+          },
+        }),
+      );
+
+      expect(
+        () => repo.editRoutine('rtn-1', input, startsOn: '2026-10-27'),
+        throwsA(isA<RoutineFieldException>()
+            .having((e) => e.field, 'field', RoutineFormField.startsOn)
+            .having((e) => e.message, 'message',
+                'starts_on must not be before 2026-10-28')),
+      );
+    });
+
+    test('a 409 routine_already_edited is a stale edit', () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 409,
+        message: 'Conflict',
+        body: jsonEncode({
+          'error': {
+            'code': 'routine_already_edited',
+            'message': 'routine: already replaced by a newer version',
+          },
+        }),
+      );
+
+      expect(
+        () => repo.editRoutine('rtn-1', input, startsOn: '2026-10-28'),
+        throwsA(isA<RoutineAlreadyEditedException>()),
       );
     });
   });
@@ -333,6 +445,22 @@ void main() {
       expect(client.lastPostPath, '/routines/rtn-1/resolve');
       expect(client.lastPostData,
           {'scheduled_for': '2026-10-10', 'status': 'skipped'});
+    });
+
+    test('a 409 already_resolved says the day is resolved', () async {
+      client.nextPostResult = ApiPermanentFailure(
+        statusCode: 409,
+        message: 'Conflict',
+        body: jsonEncode({
+          'error': {'code': 'already_resolved', 'message': 'resolved'},
+        }),
+      );
+
+      expect(
+        () => repo.resolveOccurrence(
+            'rtn-1', '2026-10-10', OccurrenceStatus.done),
+        throwsA(isA<RoutineAlreadyResolvedException>()),
+      );
     });
   });
 
