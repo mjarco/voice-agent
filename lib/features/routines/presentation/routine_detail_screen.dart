@@ -441,8 +441,11 @@ class _ActionsSection extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: [
-          // An edit replaces the newest version only.
-          if (routine.nextRoutineId == null)
+          // An edit replaces the newest version of an active routine only
+          // (#369, ADR-API-099 of personal-agent): a paused or archived one is
+          // resumed first.
+          if (routine.nextRoutineId == null &&
+              routine.status == RoutineStatus.active)
             _ActionButton(
               widgetKey: const Key('detail-edit-button'),
               label: 'Edit',

@@ -395,6 +395,8 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                   key: const Key('routine-form-name'),
                   controller: _name,
                   textCapitalization: TextCapitalization.sentences,
+                  // The server caps a name at 120 characters (#369).
+                  inputFormatters: [LengthLimitingTextInputFormatter(120)],
                   onChanged: (_) =>
                       setState(() => _touched(RoutineFormField.name)),
                   decoration: InputDecoration(
