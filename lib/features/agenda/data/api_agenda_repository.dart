@@ -98,6 +98,12 @@ class ApiAgendaRepository implements AgendaRepository {
     _throwOnFailure(result);
   }
 
+  @override
+  Future<void> refreshCalendars() async {
+    final result = await _apiClient.postJson('/calendar/refresh');
+    _throwOnFailure(result);
+  }
+
   void _throwOnFailure(ApiResult result) {
     switch (result) {
       case ApiSuccess():

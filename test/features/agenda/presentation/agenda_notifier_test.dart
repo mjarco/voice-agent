@@ -24,6 +24,8 @@ class _MockRepository implements AgendaRepository {
   Exception? actionError;
 
   int fetchCount = 0;
+  Exception? calendarRefreshError;
+  final calls = <String>[];
   String? lastMarkDoneId;
   String? lastUpdateRoutineId;
   String? lastUpdateScheduledFor;
@@ -41,8 +43,15 @@ class _MockRepository implements AgendaRepository {
   @override
   Future<AgendaResponse> fetchAgenda(String date) async {
     fetchCount++;
+    calls.add('fetch');
     if (fetchError != null) throw fetchError!;
     return nextFetchResult ?? _defaultResponse(date);
+  }
+
+  @override
+  Future<void> refreshCalendars() async {
+    calls.add('refreshCalendars');
+    if (calendarRefreshError != null) throw calendarRefreshError!;
   }
 
   @override
@@ -341,6 +350,41 @@ void main() {
       await notifier.refresh();
 
       expect(repo.fetchCount, 1);
+      expect(notifier.state, isA<AgendaLoaded>());
+    });
+
+    test('refresh leaves the calendars alone', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      repo.calls.clear();
+      await notifier.refresh();
+
+      expect(repo.calls, ['fetch']);
+    });
+
+    test('refreshWithCalendars refreshes the calendars, then the agenda',
+        () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      repo.calls.clear();
+      await notifier.refreshWithCalendars();
+
+      expect(repo.calls, ['refreshCalendars', 'fetch']);
+      expect(notifier.state, isA<AgendaLoaded>());
+    });
+
+    test('a failed calendar refresh still loads the agenda', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      repo.calls.clear();
+      repo.calendarRefreshError =
+          AgendaException('Server error 404: not found');
+      await notifier.refreshWithCalendars();
+
+      expect(repo.calls, ['refreshCalendars', 'fetch']);
       expect(notifier.state, isA<AgendaLoaded>());
     });
   });

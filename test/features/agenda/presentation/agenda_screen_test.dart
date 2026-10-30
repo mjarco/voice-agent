@@ -56,6 +56,11 @@ class _StubRepository implements AgendaRepository {
         routineItems: [],
       );
 
+  int calendarRefreshes = 0;
+
+  @override
+  Future<void> refreshCalendars() async => calendarRefreshes++;
+
   @override
   Future<CachedAgenda?> getCachedAgenda(String date) async => null;
 
@@ -132,6 +137,23 @@ void main() {
   });
 
   group('AgendaScreen', () {
+    testWidgets('pull-to-refresh refreshes the calendars (#375)', (
+      tester,
+    ) async {
+      final repo = _StubRepository();
+      await _pumpScreen(tester, repository: repo);
+      expect(repo.calendarRefreshes, 0);
+
+      await tester.fling(
+        find.byType(ListView).first,
+        const Offset(0, 400),
+        1000,
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.calendarRefreshes, 1);
+    });
+
     testWidgets('renders AppBar with title', (tester) async {
       await _pumpScreen(tester);
 

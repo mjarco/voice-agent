@@ -23,6 +23,11 @@ abstract class AgendaRepository {
   Future<CachedAgenda?> getCachedAgenda(String date);
   Future<void> cacheAgenda(String date, AgendaResponse response);
   Future<void> markActionItemDone(String recordId);
+
+  /// Asks personal-agent to read the calendars now, whatever their poll
+  /// schedule: `POST /calendar/refresh` (ADR-API-102, #375).
+  Future<void> refreshCalendars();
+
   /// Ticks off (done or skipped) the routine's occurrence of [scheduledFor],
   /// with or without a stored row: `POST /routines/{id}/resolve` (#363).
   Future<void> resolveOccurrence(

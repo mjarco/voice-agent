@@ -76,6 +76,8 @@ class _StubAgendaRepository implements AgendaRepository {
     String scheduledFor,
     OccurrenceStatus status,
   ) async {}
+  @override
+  Future<void> refreshCalendars() async {}
 }
 
 void main() {

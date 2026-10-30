@@ -218,6 +218,29 @@ void main() {
     });
   });
 
+  group('refreshCalendars', () {
+    test('sends POST /calendar/refresh without a body (#375)', () async {
+      apiClient.nextPostResult = const ApiSuccess();
+
+      await repo.refreshCalendars();
+
+      expect(apiClient.lastPostPath, '/calendar/refresh');
+      expect(apiClient.lastPostData, isNull);
+    });
+
+    test('an older personal-agent without the route throws', () async {
+      apiClient.nextPostResult = const ApiPermanentFailure(
+        statusCode: 404,
+        message: 'Not found',
+      );
+
+      expect(
+        () => repo.refreshCalendars(),
+        throwsA(isA<AgendaException>()),
+      );
+    });
+  });
+
   group('resolveOccurrence', () {
     test('sends POST resolve with the day and status (#363)', () async {
       await repo.resolveOccurrence(

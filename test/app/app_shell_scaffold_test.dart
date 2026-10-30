@@ -108,6 +108,7 @@ class _StubAgendaRepository implements AgendaRepository {
   @override Future<void> markActionItemDone(String recordId) async {}
   @override Future<void> resolveOccurrence(
     String routineId, String scheduledFor, OccurrenceStatus status) async {}
+  @override Future<void> refreshCalendars() async {}
 }
 
 /// Minimal in-memory NotificationService for widget tests.

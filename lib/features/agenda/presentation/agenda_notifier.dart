@@ -107,6 +107,21 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
 
   Future<void> refresh() => loadAgenda();
 
+  /// Pull-to-refresh: personal-agent reads the calendars first, then the
+  /// agenda reloads (#375). A failed calendar refresh (offline, an older
+  /// personal-agent without the route) still reloads the agenda: a calendar
+  /// behind shows its stale note from `calendar_sources`.
+  Future<void> refreshWithCalendars() async {
+    try {
+      await _repository.refreshCalendars();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[AgendaNotifier] calendar refresh failed: $e');
+      }
+    }
+    await loadAgenda();
+  }
+
   void selectDate(DateTime date) {
     _selectedDate = DateTime(date.year, date.month, date.day);
     loadAgenda();
