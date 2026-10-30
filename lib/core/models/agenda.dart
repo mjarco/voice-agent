@@ -39,11 +39,11 @@ class AgendaResponse {
               ?.map((e) => AgendaRoutineItem.fromMap(e as Map<String, dynamic>))
               .toList() ??
           [],
+      // A malformed meeting is dropped rather than losing the agenda with it.
       calendarItems:
           (map['calendar_items'] as List<dynamic>?)
-              ?.map(
-                (e) => AgendaCalendarItem.fromMap(e as Map<String, dynamic>),
-              )
+              ?.map(AgendaCalendarItem.tryFromMap)
+              .whereType<AgendaCalendarItem>()
               .toList() ??
           [],
     );
@@ -198,10 +198,36 @@ class AgendaCalendarItem {
     }
     final from = start.substring(11, 16);
     final to = end.substring(11, 16);
-    if (firstDay == day && (lastDay == day || to == '00:00')) {
+    final ends = DateTime.parse(lastDay);
+    final endsNextMidnight =
+        to == '00:00' && ends.difference(DateTime.parse(firstDay)).inDays == 1;
+    if (firstDay == day && (lastDay == day || endsNextMidnight)) {
       return '$from–$to';
     }
     return '$firstDay $from – $lastDay $to';
+  }
+
+  static final _date = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+  static final _instant = RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}');
+
+  /// [fromMap] for an item of the response, or null when it lacks a field
+  /// [when] reads or its times do not have the contract's shape.
+  static AgendaCalendarItem? tryFromMap(dynamic e) {
+    if (e is! Map<String, dynamic>) return null;
+    final allDay = e['all_day'] ?? false;
+    final shape = allDay == true ? _date : _instant;
+    final start = e['start'], end = e['end'];
+    if (e['calendar'] is! String ||
+        e['uid'] is! String ||
+        e['title'] is! String ||
+        allDay is! bool ||
+        start is! String ||
+        end is! String ||
+        !shape.hasMatch(start) ||
+        !shape.hasMatch(end)) {
+      return null;
+    }
+    return AgendaCalendarItem.fromMap(e);
   }
 
   factory AgendaCalendarItem.fromMap(Map<String, dynamic> map) {

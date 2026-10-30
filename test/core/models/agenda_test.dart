@@ -230,6 +230,38 @@ void main() {
         m('2026-04-17', '2026-04-19', allDay: true).when(day),
         '2026-04-17 – 2026-04-19',
       );
+      expect(
+        m('2026-04-18T10:00:00+02:00', '2026-04-20T00:00:00+02:00').when(day),
+        '2026-04-18 10:00 – 2026-04-20 00:00',
+      );
+    });
+
+    test('drops a malformed meeting and keeps the rest of the agenda', () {
+      const good = {
+        'calendar': 'CORP',
+        'uid': 'u',
+        'title': 't',
+        'start': '2026-04-18T09:00:00+02:00',
+        'end': '2026-04-18T09:30:00+02:00',
+        'all_day': false,
+      };
+      final r = AgendaResponse.fromMap({
+        'date': '2026-04-18',
+        'granularity': 'day',
+        'from': '2026-04-18',
+        'to': '2026-04-18',
+        'items': <dynamic>[],
+        'routine_items': <dynamic>[],
+        'calendar_items': [
+          null,
+          {...good, 'title': null},
+          {...good, 'start': '09:00'},
+          {...good, 'all_day': true},
+          good,
+        ],
+      });
+      expect(r.calendarItems, hasLength(1));
+      expect(r.calendarItems.single.title, 't');
     });
   });
 }
