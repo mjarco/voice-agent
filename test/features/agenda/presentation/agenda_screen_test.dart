@@ -90,14 +90,10 @@ Future<void> _pumpScreen(
   final router = GoRouter(
     initialLocation: '/',
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const AgendaScreen(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const AgendaScreen()),
       GoRoute(
         path: '/settings',
-        builder: (context, state) =>
-            const Scaffold(body: Text('Settings')),
+        builder: (context, state) => const Scaffold(body: Text('Settings')),
       ),
     ],
   );
@@ -140,16 +136,12 @@ void main() {
       await _pumpScreen(tester);
 
       expect(
-        find.descendant(
-          of: find.byType(AppBar),
-          matching: find.text('Agenda'),
-        ),
+        find.descendant(of: find.byType(AppBar), matching: find.text('Agenda')),
         findsOneWidget,
       );
     });
 
-    testWidgets('renders gear icon that navigates to settings',
-        (tester) async {
+    testWidgets('renders gear icon that navigates to settings', (tester) async {
       await _pumpScreen(tester);
 
       expect(find.byKey(const Key('agenda-settings-icon')), findsOneWidget);
@@ -201,6 +193,47 @@ void main() {
       expect(find.text('Action Items'), findsOneWidget);
       expect(find.text('Buy groceries'), findsOneWidget);
       expect(find.byKey(const Key('action-item-rec-1')), findsOneWidget);
+    });
+
+    testWidgets('renders meetings first, without a checkbox', (tester) async {
+      final repo = _StubRepository(
+        response: const AgendaResponse(
+          date: '2026-04-19',
+          granularity: 'day',
+          from: '2026-04-19',
+          to: '2026-04-19',
+          items: [],
+          routineItems: [],
+          calendarItems: [
+            AgendaCalendarItem(
+              calendar: 'CORP',
+              uid: 'su',
+              title: 'Stand-up',
+              start: '2026-04-19T09:00:00+02:00',
+              end: '2026-04-19T09:30:00+02:00',
+              allDay: false,
+            ),
+            AgendaCalendarItem(
+              calendar: 'FAMI',
+              uid: 'trip',
+              title: 'Trip',
+              start: '2026-04-18',
+              end: '2026-04-20',
+              allDay: true,
+            ),
+          ],
+        ),
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.text('Meetings'), findsOneWidget);
+      expect(find.text('Stand-up'), findsOneWidget);
+      expect(find.text('09:00–09:30'), findsOneWidget);
+      expect(find.text('2026-04-18 – 2026-04-20'), findsOneWidget);
+      expect(find.text('CORP'), findsOneWidget);
+      expect(find.text('No items for this date'), findsNothing);
+      expect(find.byType(Checkbox), findsNothing);
     });
 
     testWidgets('renders routine items with templates', (tester) async {
@@ -264,10 +297,7 @@ void main() {
       await _pumpScreen(tester, repository: repo);
 
       final textWidget = tester.widget<Text>(find.text('Done task'));
-      expect(
-        textWidget.style?.decoration,
-        TextDecoration.lineThrough,
-      );
+      expect(textWidget.style?.decoration, TextDecoration.lineThrough);
     });
 
     testWidgets('tapping previous day changes date', (tester) async {
@@ -293,8 +323,9 @@ void main() {
       expect(find.byKey(const Key('agenda-today-btn')), findsNothing);
     });
 
-    testWidgets('Today button appears after navigating to another day',
-        (tester) async {
+    testWidgets('Today button appears after navigating to another day', (
+      tester,
+    ) async {
       await _pumpScreen(tester);
 
       await tester.tap(find.byKey(const Key('agenda-prev-day')));
@@ -303,7 +334,8 @@ void main() {
       expect(find.byKey(const Key('agenda-today-btn')), findsOneWidget);
     });
 
-    AgendaResponse routineAgenda(List<AgendaRoutineItem> items) => AgendaResponse(
+    AgendaResponse routineAgenda(List<AgendaRoutineItem> items) =>
+        AgendaResponse(
           date: '2026-10-26',
           granularity: 'day',
           from: '2026-10-26',
@@ -322,21 +354,22 @@ void main() {
     );
 
     testWidgets(
-        'a routine row without a stored occurrence is ticked off through resolve (#363)',
-        (tester) async {
-      final repo = _StubRepository(response: routineAgenda([waiting]));
-      await _pumpScreen(tester, repository: repo);
+      'a routine row without a stored occurrence is ticked off through resolve (#363)',
+      (tester) async {
+        final repo = _StubRepository(response: routineAgenda([waiting]));
+        await _pumpScreen(tester, repository: repo);
 
-      expect(find.byKey(const Key('routine-since-rtn-inv')), findsOneWidget);
-      expect(find.text('since 2026-09-10'), findsOneWidget);
+        expect(find.byKey(const Key('routine-since-rtn-inv')), findsOneWidget);
+        expect(find.text('since 2026-09-10'), findsOneWidget);
 
-      await tester.tap(find.text('Invoice'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('routine-complete-rtn-inv')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Invoice'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('routine-complete-rtn-inv')));
+        await tester.pumpAndSettle();
 
-      expect(repo.resolved, ['rtn-inv 2026-09-10 done']);
-    });
+        expect(repo.resolved, ['rtn-inv 2026-09-10 done']);
+      },
+    );
 
     testWidgets('a refused tick-off shows its reason', (tester) async {
       final repo = _StubRepository(response: routineAgenda([waiting]))
