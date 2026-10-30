@@ -9,6 +9,7 @@ class AgendaResponse {
     required this.to,
     required this.items,
     required this.routineItems,
+    this.calendarItems = const [],
   });
 
   final String date;
@@ -18,19 +19,31 @@ class AgendaResponse {
   final List<AgendaItem> items;
   final List<AgendaRoutineItem> routineItems;
 
+  /// Meetings from personal-agent's calendar mirror (ADR-API-101 there);
+  /// empty from a personal-agent that does not send them.
+  final List<AgendaCalendarItem> calendarItems;
+
   factory AgendaResponse.fromMap(Map<String, dynamic> map) {
     return AgendaResponse(
       date: map['date'] as String,
       granularity: map['granularity'] as String,
       from: map['from'] as String,
       to: map['to'] as String,
-      items: (map['items'] as List<dynamic>?)
+      items:
+          (map['items'] as List<dynamic>?)
               ?.map((e) => AgendaItem.fromMap(e as Map<String, dynamic>))
               .toList() ??
           [],
-      routineItems: (map['routine_items'] as List<dynamic>?)
+      routineItems:
+          (map['routine_items'] as List<dynamic>?)
+              ?.map((e) => AgendaRoutineItem.fromMap(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      calendarItems:
+          (map['calendar_items'] as List<dynamic>?)
               ?.map(
-                  (e) => AgendaRoutineItem.fromMap(e as Map<String, dynamic>))
+                (e) => AgendaCalendarItem.fromMap(e as Map<String, dynamic>),
+              )
               .toList() ??
           [],
     );
@@ -44,6 +57,7 @@ class AgendaResponse {
       'to': to,
       'items': items.map((i) => i.toMap()).toList(),
       'routine_items': routineItems.map((i) => i.toMap()).toList(),
+      'calendar_items': calendarItems.map((i) => i.toMap()).toList(),
     };
   }
 }
@@ -149,6 +163,66 @@ class AgendaRoutineItem {
       'occurrence_id': occurrenceId,
       'templates': templates.map((t) => t.toMap()).toList(),
       if (peerId != null) 'peer_id': peerId,
+    };
+  }
+}
+
+/// A meeting of the agenda: shown, never ticked off. A timed one has RFC 3339
+/// [start]/[end] in the owner's zone; an all-day one has dates, [end] being
+/// its last day.
+class AgendaCalendarItem {
+  const AgendaCalendarItem({
+    required this.calendar,
+    required this.uid,
+    required this.title,
+    required this.start,
+    required this.end,
+    required this.allDay,
+  });
+
+  /// The calendar's label: PRIV, CORP, FAMI.
+  final String calendar;
+  final String uid;
+  final String title;
+  final String start;
+  final String end;
+  final bool allDay;
+
+  /// The line under the title on day [day] (YYYY-MM-DD): the hours, "all day",
+  /// or the days a meeting spans when it does not start and end on [day].
+  String when(String day) {
+    final firstDay = start.substring(0, 10);
+    final lastDay = end.substring(0, 10);
+    if (allDay) {
+      return firstDay == lastDay ? 'all day' : '$firstDay – $lastDay';
+    }
+    final from = start.substring(11, 16);
+    final to = end.substring(11, 16);
+    if (firstDay == day && (lastDay == day || to == '00:00')) {
+      return '$from–$to';
+    }
+    return '$firstDay $from – $lastDay $to';
+  }
+
+  factory AgendaCalendarItem.fromMap(Map<String, dynamic> map) {
+    return AgendaCalendarItem(
+      calendar: map['calendar'] as String,
+      uid: map['uid'] as String,
+      title: map['title'] as String,
+      start: map['start'] as String,
+      end: map['end'] as String,
+      allDay: map['all_day'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'calendar': calendar,
+      'uid': uid,
+      'title': title,
+      'start': start,
+      'end': end,
+      'all_day': allDay,
     };
   }
 }

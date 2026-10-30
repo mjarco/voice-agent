@@ -163,4 +163,73 @@ void main() {
       expect(AgendaRoutineItem.fromMap(item.toMap()).peerId, 'upstream');
     });
   });
+
+  group('AgendaCalendarItem', () {
+    test('reads calendar_items and round-trips them', () {
+      final map = {
+        'date': '2026-04-18',
+        'granularity': 'day',
+        'from': '2026-04-18',
+        'to': '2026-04-18',
+        'items': [],
+        'routine_items': [],
+        'calendar_items': [
+          {
+            'calendar': 'CORP',
+            'uid': 'su',
+            'title': 'Stand-up',
+            'start': '2026-04-18T09:00:00+02:00',
+            'end': '2026-04-18T09:30:00+02:00',
+            'all_day': false,
+          },
+        ],
+      };
+      final r = AgendaResponse.fromMap(map);
+      expect(r.calendarItems.single.title, 'Stand-up');
+      expect(
+        AgendaResponse.fromMap(r.toMap()).calendarItems.single.calendar,
+        'CORP',
+      );
+    });
+
+    test('an agenda without calendar_items has no meetings', () {
+      final r = AgendaResponse.fromMap({
+        'date': '2026-04-18',
+        'granularity': 'day',
+        'from': '2026-04-18',
+        'to': '2026-04-18',
+      });
+      expect(r.calendarItems, isEmpty);
+    });
+
+    test('says when a meeting is on a given day', () {
+      AgendaCalendarItem m(String start, String end, {bool allDay = false}) =>
+          AgendaCalendarItem(
+            calendar: 'C',
+            uid: 'u',
+            title: 't',
+            start: start,
+            end: end,
+            allDay: allDay,
+          );
+      const day = '2026-04-18';
+      expect(
+        m('2026-04-18T09:00:00+02:00', '2026-04-18T09:30:00+02:00').when(day),
+        '09:00–09:30',
+      );
+      expect(
+        m('2026-04-18T22:00:00+02:00', '2026-04-19T00:00:00+02:00').when(day),
+        '22:00–00:00',
+      );
+      expect(
+        m('2026-04-17T22:00:00+02:00', '2026-04-18T06:00:00+02:00').when(day),
+        '2026-04-17 22:00 – 2026-04-18 06:00',
+      );
+      expect(m('2026-04-18', '2026-04-18', allDay: true).when(day), 'all day');
+      expect(
+        m('2026-04-17', '2026-04-19', allDay: true).when(day),
+        '2026-04-17 – 2026-04-19',
+      );
+    });
+  });
 }

@@ -41,9 +41,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             onNext: notifier.nextDay,
             onToday: notifier.goToToday,
           ),
-          Expanded(
-            child: _buildBody(state, notifier),
-          ),
+          Expanded(child: _buildBody(state, notifier)),
         ],
       ),
     );
@@ -54,15 +52,23 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       AgendaInitial() => const Center(child: CircularProgressIndicator()),
       AgendaLoading(cached: final cached) =>
         cached != null
-            ? _buildContent(cached.response, notifier,
-                staleAt: cached.fetchedAt, isRefreshing: true)
+            ? _buildContent(
+                cached.response,
+                notifier,
+                staleAt: cached.fetchedAt,
+                isRefreshing: true,
+              )
             : const Center(child: CircularProgressIndicator()),
       AgendaLoaded(response: final response, fetchedAt: final fetchedAt) =>
         _buildContent(response, notifier, staleAt: fetchedAt),
       AgendaError(message: final message, cached: final cached) =>
         cached != null
-            ? _buildContent(cached.response, notifier,
-                staleAt: cached.fetchedAt, errorMessage: message)
+            ? _buildContent(
+                cached.response,
+                notifier,
+                staleAt: cached.fetchedAt,
+                errorMessage: message,
+              )
             : _buildError(message, notifier),
     };
   }
@@ -76,7 +82,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   }) {
     final actionItems = response.items;
     final routineItems = response.routineItems;
-    final isEmpty = actionItems.isEmpty && routineItems.isEmpty;
+    final meetings = response.calendarItems;
+    final isEmpty =
+        actionItems.isEmpty && routineItems.isEmpty && meetings.isEmpty;
 
     return Column(
       children: [
@@ -101,12 +109,19 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                       Center(
                         child: Column(
                           children: [
-                            Icon(Icons.check_circle_outline,
-                                size: 64, color: Colors.grey),
+                            Icon(
+                              Icons.check_circle_outline,
+                              size: 64,
+                              color: Colors.grey,
+                            ),
                             SizedBox(height: 16),
-                            Text('No items for this date',
-                                style: TextStyle(
-                                    fontSize: 16, color: Colors.grey)),
+                            Text(
+                              'No items for this date',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -114,6 +129,15 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                   )
                 : ListView(
                     children: [
+                      if (meetings.isNotEmpty) ...[
+                        _SectionHeader(
+                          title: 'Meetings',
+                          count: meetings.length,
+                        ),
+                        ...meetings.map(
+                          (m) => _MeetingTile(meeting: m, day: response.date),
+                        ),
+                      ],
                       if (actionItems.isNotEmpty) ...[
                         _SectionHeader(
                           title: 'Action Items',
@@ -136,11 +160,15 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                             item: item,
                             onSkip: _tickable(item)
                                 ? () => _handleResolve(
-                                    item, OccurrenceStatus.skipped)
+                                    item,
+                                    OccurrenceStatus.skipped,
+                                  )
                                 : null,
                             onComplete: _tickable(item)
                                 ? () => _handleResolve(
-                                    item, OccurrenceStatus.done)
+                                    item,
+                                    OccurrenceStatus.done,
+                                  )
                                 : null,
                           ),
                         ),
@@ -208,14 +236,19 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       item.status != OccurrenceStatus.skipped;
 
   Future<void> _handleResolve(
-      AgendaRoutineItem item, OccurrenceStatus status) async {
+    AgendaRoutineItem item,
+    OccurrenceStatus status,
+  ) async {
     final notifier = ref.read(agendaNotifierProvider.notifier);
     final refusal = await notifier.resolveOccurrence(
-        item.routineId, item.scheduledFor, status);
+      item.routineId,
+      item.scheduledFor,
+      status,
+    );
     if (refusal != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(refusal)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(refusal)));
     }
   }
 }
@@ -236,12 +269,27 @@ class _DateNavigationBar extends StatelessWidget {
   final VoidCallback onToday;
 
   static const _weekdays = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-    'Friday', 'Saturday', 'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
   ];
   static const _months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   String _formatDate(DateTime d) =>
@@ -298,16 +346,31 @@ class _SectionHeader extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(width: 8),
-          Text(
-            '($count)',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          Text('($count)', style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
+    );
+  }
+}
+
+/// A meeting is shown, never ticked off: no checkbox, no actions.
+class _MeetingTile extends StatelessWidget {
+  const _MeetingTile({required this.meeting, required this.day});
+  final AgendaCalendarItem meeting;
+  final String day;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      key: Key('meeting-${meeting.calendar}-${meeting.uid}-${meeting.start}'),
+      leading: const Icon(Icons.event),
+      title: Text(meeting.title),
+      subtitle: Text(meeting.when(day)),
+      trailing: _StatusBadge(label: meeting.calendar),
     );
   }
 }
@@ -339,11 +402,7 @@ class _ActionItemTile extends StatelessWidget {
 }
 
 class _RoutineItemTile extends StatelessWidget {
-  const _RoutineItemTile({
-    required this.item,
-    this.onSkip,
-    this.onComplete,
-  });
+  const _RoutineItemTile({required this.item, this.onSkip, this.onComplete});
   final AgendaRoutineItem item;
   final VoidCallback? onSkip;
   final VoidCallback? onComplete;
@@ -414,14 +473,22 @@ class _RoutineItemTile extends StatelessWidget {
 
   Widget _occurrenceStatusIcon(OccurrenceStatus status) {
     return switch (status) {
-      OccurrenceStatus.done =>
-        const Icon(Icons.check_circle, color: Colors.green),
-      OccurrenceStatus.skipped =>
-        const Icon(Icons.skip_next, color: Colors.orange),
-      OccurrenceStatus.inProgress =>
-        const Icon(Icons.play_circle, color: Colors.blue),
-      OccurrenceStatus.pending =>
-        const Icon(Icons.schedule, color: Colors.grey),
+      OccurrenceStatus.done => const Icon(
+        Icons.check_circle,
+        color: Colors.green,
+      ),
+      OccurrenceStatus.skipped => const Icon(
+        Icons.skip_next,
+        color: Colors.orange,
+      ),
+      OccurrenceStatus.inProgress => const Icon(
+        Icons.play_circle,
+        color: Colors.blue,
+      ),
+      OccurrenceStatus.pending => const Icon(
+        Icons.schedule,
+        color: Colors.grey,
+      ),
     };
   }
 }
@@ -438,10 +505,7 @@ class _StatusBadge extends StatelessWidget {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall,
-      ),
+      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
     );
   }
 }
