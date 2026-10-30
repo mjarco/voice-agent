@@ -20,24 +20,24 @@ class _StubApiClient extends ApiClient {
   Map<String, dynamic>? lastPatchData;
 
   @override
-  Future<ApiResult> get(
-    String path, {
-    Map<String, dynamic>? queryParameters,
-  }) async {
+  Future<ApiResult> get(String path,
+      {Map<String, dynamic>? queryParameters}) async {
     lastGetPath = path;
     lastGetParams = queryParameters;
     return nextGetResult;
   }
 
   @override
-  Future<ApiResult> postJson(String path, {Map<String, dynamic>? data}) async {
+  Future<ApiResult> postJson(String path,
+      {Map<String, dynamic>? data}) async {
     lastPostPath = path;
     lastPostData = data;
     return nextPostResult;
   }
 
   @override
-  Future<ApiResult> patch(String path, {Map<String, dynamic>? data}) async {
+  Future<ApiResult> patch(String path,
+      {Map<String, dynamic>? data}) async {
     lastPatchPath = path;
     lastPatchData = data;
     return nextPatchResult;
@@ -61,28 +61,28 @@ Map<String, dynamic> _buildAgendaJson({
 }
 
 Map<String, dynamic> _sampleActionItem() => {
-  'record_id': 'rec-1',
-  'text': 'Buy groceries',
-  'topic_ref': null,
-  'scheduled_for': '2026-04-19',
-  'time_window': 'day',
-  'origin_role': 'agent',
-  'status': 'active',
-  'linked_conversation_count': 1,
-};
+      'record_id': 'rec-1',
+      'text': 'Buy groceries',
+      'topic_ref': null,
+      'scheduled_for': '2026-04-19',
+      'time_window': 'day',
+      'origin_role': 'agent',
+      'status': 'active',
+      'linked_conversation_count': 1,
+    };
 
 Map<String, dynamic> _sampleRoutineItem() => {
-  'routine_id': 'rtn-1',
-  'routine_name': 'Morning routine',
-  'scheduled_for': '2026-04-19',
-  'start_time': '08:00',
-  'overdue': false,
-  'status': 'pending',
-  'occurrence_id': 'occ-1',
-  'templates': [
-    {'text': 'Meditate', 'sort_order': 0},
-  ],
-};
+      'routine_id': 'rtn-1',
+      'routine_name': 'Morning routine',
+      'scheduled_for': '2026-04-19',
+      'start_time': '08:00',
+      'overdue': false,
+      'status': 'pending',
+      'occurrence_id': 'occ-1',
+      'templates': [
+        {'text': 'Meditate', 'sort_order': 0},
+      ],
+    };
 
 void main() {
   late _StubApiClient apiClient;
@@ -96,12 +96,10 @@ void main() {
   group('fetchAgenda', () {
     test('parses successful response with data envelope', () async {
       apiClient.nextGetResult = ApiSuccess(
-        body: jsonEncode(
-          _buildAgendaJson(
-            items: [_sampleActionItem()],
-            routineItems: [_sampleRoutineItem()],
-          ),
-        ),
+        body: jsonEncode(_buildAgendaJson(
+          items: [_sampleActionItem()],
+          routineItems: [_sampleRoutineItem()],
+        )),
       );
 
       final response = await repo.fetchAgenda('2026-04-19');
@@ -137,7 +135,9 @@ void main() {
     });
 
     test('throws on missing data envelope', () async {
-      apiClient.nextGetResult = const ApiSuccess(body: '{"other": "value"}');
+      apiClient.nextGetResult = const ApiSuccess(
+        body: '{"other": "value"}',
+      );
 
       expect(
         () => repo.fetchAgenda('2026-04-19'),
@@ -234,7 +234,10 @@ void main() {
         message: 'Not found',
       );
 
-      expect(() => repo.refreshCalendars(), throwsA(isA<AgendaException>()));
+      expect(
+        () => repo.refreshCalendars(),
+        throwsA(isA<AgendaException>()),
+      );
     });
   });
 
@@ -247,24 +250,16 @@ void main() {
       );
 
       expect(apiClient.lastPostPath, '/routines/rtn-1/resolve');
-      expect(apiClient.lastPostData, {
-        'scheduled_for': '2026-09-10',
-        'status': 'skipped',
-      });
+      expect(apiClient.lastPostData,
+          {'scheduled_for': '2026-09-10', 'status': 'skipped'});
       expect(apiClient.lastPatchPath, isNull);
     });
 
     test('sends done status', () async {
-      await repo.resolveOccurrence(
-        'rtn-1',
-        '2026-10-26',
-        OccurrenceStatus.done,
-      );
+      await repo.resolveOccurrence('rtn-1', '2026-10-26', OccurrenceStatus.done);
 
-      expect(apiClient.lastPostData, {
-        'scheduled_for': '2026-10-26',
-        'status': 'done',
-      });
+      expect(apiClient.lastPostData,
+          {'scheduled_for': '2026-10-26', 'status': 'done'});
     });
 
     test('a refusal carries the server status', () async {
@@ -275,13 +270,9 @@ void main() {
 
       expect(
         () => repo.resolveOccurrence(
-          'rtn-1',
-          '2026-10-26',
-          OccurrenceStatus.done,
-        ),
-        throwsA(
-          isA<AgendaException>().having((e) => e.statusCode, 'statusCode', 409),
-        ),
+            'rtn-1', '2026-10-26', OccurrenceStatus.done),
+        throwsA(isA<AgendaException>()
+            .having((e) => e.statusCode, 'statusCode', 409)),
       );
     });
 
@@ -292,17 +283,9 @@ void main() {
 
       expect(
         () => repo.resolveOccurrence(
-          'rtn-1',
-          '2026-10-26',
-          OccurrenceStatus.skipped,
-        ),
-        throwsA(
-          isA<AgendaException>().having(
-            (e) => e.statusCode,
-            'statusCode',
-            isNull,
-          ),
-        ),
+            'rtn-1', '2026-10-26', OccurrenceStatus.skipped),
+        throwsA(isA<AgendaException>()
+            .having((e) => e.statusCode, 'statusCode', isNull)),
       );
     });
   });

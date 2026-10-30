@@ -16,10 +16,10 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
     required AgendaNotificationScheduler scheduler,
     required AppConfigService configService,
     required Ref ref,
-  }) : _scheduler = scheduler,
-       _configService = configService,
-       _ref = ref,
-       super(const AgendaInitial()) {
+  })  : _scheduler = scheduler,
+        _configService = configService,
+        _ref = ref,
+        super(const AgendaInitial()) {
     _selectedDate = DateTime.now();
     _setupSessionListener();
     loadAgenda();
@@ -68,7 +68,10 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
 
     try {
       final response = await _repository.fetchAgenda(_dateString);
-      state = AgendaLoaded(response: response, fetchedAt: DateTime.now());
+      state = AgendaLoaded(
+        response: response,
+        fetchedAt: DateTime.now(),
+      );
       await _repository.cacheAgenda(_dateString, response);
       // Persist last-fetch-at for the foreground staleness trigger
       // (app-resume check) and the bg isolate's 50-min skip guard.
@@ -76,12 +79,10 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
       // Fire-and-forget reconcile, only for today (non-today views are for
       // browsing — they must not drive OS notification scheduling).
       if (isToday) {
-        unawaited(
-          _safeReconcile(
-            response,
-            sessionActive: _ref.read(sessionActiveProvider),
-          ),
-        );
+        unawaited(_safeReconcile(
+          response,
+          sessionActive: _ref.read(sessionActiveProvider),
+        ));
       }
     } catch (e) {
       state = AgendaError(message: e.toString(), cached: cached);
@@ -170,9 +171,8 @@ String refusalMessage(Object error, OccurrenceStatus status) {
     409 => 'Already done',
     422 => 'Nothing due that day',
     404 => 'Routine not found',
-    _ =>
-      status == OccurrenceStatus.skipped
-          ? 'Failed to skip occurrence'
-          : 'Failed to complete occurrence',
+    _ => status == OccurrenceStatus.skipped
+        ? 'Failed to skip occurrence'
+        : 'Failed to complete occurrence',
   };
 }

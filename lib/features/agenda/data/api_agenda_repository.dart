@@ -27,9 +27,8 @@ class ApiAgendaRepository implements AgendaRepository {
       ApiSuccess(body: final body) => _parseResponse(body),
       ApiPermanentFailure(message: final msg, statusCode: final code) =>
         throw AgendaException('Server error $code: $msg'),
-      ApiTransientFailure(reason: final reason) => throw AgendaException(
-        reason,
-      ),
+      ApiTransientFailure(reason: final reason) =>
+        throw AgendaException(reason),
       ApiNotConfigured() => throw AgendaException('API not configured'),
     };
 
@@ -57,9 +56,8 @@ class ApiAgendaRepository implements AgendaRepository {
       final content = await file.readAsString();
       final json = jsonDecode(content) as Map<String, dynamic>;
       return CachedAgenda(
-        response: AgendaResponse.fromMap(
-          json['response'] as Map<String, dynamic>,
-        ),
+        response:
+            AgendaResponse.fromMap(json['response'] as Map<String, dynamic>),
         fetchedAt: DateTime.parse(json['fetched_at'] as String),
       );
     } catch (_) {
@@ -129,8 +127,8 @@ class ApiAgendaRepository implements AgendaRepository {
       final dir = await getApplicationDocumentsDirectory();
       final cutoff = DateTime.now().subtract(const Duration(days: 7));
       final files = dir.listSync().whereType<File>().where(
-        (f) => f.path.contains('agenda_cache_') && f.path.endsWith('.json'),
-      );
+            (f) => f.path.contains('agenda_cache_') && f.path.endsWith('.json'),
+          );
       for (final file in files) {
         final dateStr = file.path
             .split('agenda_cache_')
