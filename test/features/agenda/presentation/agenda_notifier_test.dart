@@ -24,25 +24,34 @@ class _MockRepository implements AgendaRepository {
   Exception? actionError;
 
   int fetchCount = 0;
+  Exception? calendarRefreshError;
+  final calls = <String>[];
   String? lastMarkDoneId;
   String? lastUpdateRoutineId;
   String? lastUpdateScheduledFor;
   OccurrenceStatus? lastUpdateStatus;
 
   AgendaResponse _defaultResponse(String date) => AgendaResponse(
-        date: date,
-        granularity: 'day',
-        from: date,
-        to: date,
-        items: [],
-        routineItems: [],
-      );
+    date: date,
+    granularity: 'day',
+    from: date,
+    to: date,
+    items: [],
+    routineItems: [],
+  );
 
   @override
   Future<AgendaResponse> fetchAgenda(String date) async {
     fetchCount++;
+    calls.add('fetch');
     if (fetchError != null) throw fetchError!;
     return nextFetchResult ?? _defaultResponse(date);
+  }
+
+  @override
+  Future<void> refreshCalendars() async {
+    calls.add('refreshCalendars');
+    if (calendarRefreshError != null) throw calendarRefreshError!;
   }
 
   @override
@@ -71,34 +80,34 @@ class _MockRepository implements AgendaRepository {
 }
 
 AgendaResponse _responseWithItems() => AgendaResponse(
-      date: '2026-04-19',
-      granularity: 'day',
-      from: '2026-04-19',
-      to: '2026-04-19',
-      items: [
-        const AgendaItem(
-          recordId: 'rec-1',
-          text: 'Buy groceries',
-          scheduledFor: '2026-04-19',
-          timeWindow: TimeWindow.day,
-          originRole: OriginRole.agent,
-          status: RecordStatus.active,
-          linkedConversationCount: 0,
-        ),
-      ],
-      routineItems: [
-        const AgendaRoutineItem(
-          routineId: 'rtn-1',
-          routineName: 'Morning routine',
-          scheduledFor: '2026-04-19',
-          startTime: '08:00',
-          overdue: false,
-          status: OccurrenceStatus.pending,
-          occurrenceId: 'occ-1',
-          templates: [RoutineTemplate(text: 'Meditate', sortOrder: 0)],
-        ),
-      ],
-    );
+  date: '2026-04-19',
+  granularity: 'day',
+  from: '2026-04-19',
+  to: '2026-04-19',
+  items: [
+    const AgendaItem(
+      recordId: 'rec-1',
+      text: 'Buy groceries',
+      scheduledFor: '2026-04-19',
+      timeWindow: TimeWindow.day,
+      originRole: OriginRole.agent,
+      status: RecordStatus.active,
+      linkedConversationCount: 0,
+    ),
+  ],
+  routineItems: [
+    const AgendaRoutineItem(
+      routineId: 'rtn-1',
+      routineName: 'Morning routine',
+      scheduledFor: '2026-04-19',
+      startTime: '08:00',
+      overdue: false,
+      status: OccurrenceStatus.pending,
+      occurrenceId: 'occ-1',
+      templates: [RoutineTemplate(text: 'Meditate', sortOrder: 0)],
+    ),
+  ],
+);
 
 /// Minimal in-memory NotificationService for tests (mirrors the production
 /// snapshot semantics so the scheduler diff behaves realistically).
@@ -167,8 +176,7 @@ void main() {
       container.read(agendaNotifierProvider.notifier);
 
   group('AgendaNotifier', () {
-    test('constructor triggers loadAgenda and transitions to loaded',
-        () async {
+    test('constructor triggers loadAgenda and transitions to loaded', () async {
       repo.nextFetchResult = _responseWithItems();
       final notifier = buildNotifier();
 
@@ -188,7 +196,10 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(notifier.state, isA<AgendaError>());
-      expect((notifier.state as AgendaError).message, contains('Network error'));
+      expect(
+        (notifier.state as AgendaError).message,
+        contains('Network error'),
+      );
     });
 
     test('error state carries cached data', () async {
@@ -281,26 +292,34 @@ void main() {
       expect(result, isFalse);
     });
 
-    test('resolveOccurrence skips through resolve with the row day (#363)',
-        () async {
-      final notifier = buildNotifier();
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'resolveOccurrence skips through resolve with the row day (#363)',
+      () async {
+        final notifier = buildNotifier();
+        await Future<void>.delayed(Duration.zero);
 
-      final refusal = await notifier.resolveOccurrence(
-          'rtn-1', '2026-09-10', OccurrenceStatus.skipped);
+        final refusal = await notifier.resolveOccurrence(
+          'rtn-1',
+          '2026-09-10',
+          OccurrenceStatus.skipped,
+        );
 
-      expect(refusal, isNull);
-      expect(repo.lastUpdateRoutineId, 'rtn-1');
-      expect(repo.lastUpdateScheduledFor, '2026-09-10');
-      expect(repo.lastUpdateStatus, OccurrenceStatus.skipped);
-    });
+        expect(refusal, isNull);
+        expect(repo.lastUpdateRoutineId, 'rtn-1');
+        expect(repo.lastUpdateScheduledFor, '2026-09-10');
+        expect(repo.lastUpdateStatus, OccurrenceStatus.skipped);
+      },
+    );
 
     test('resolveOccurrence marks done', () async {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       final refusal = await notifier.resolveOccurrence(
-          'rtn-1', '2026-10-26', OccurrenceStatus.done);
+        'rtn-1',
+        '2026-10-26',
+        OccurrenceStatus.done,
+      );
 
       expect(refusal, isNull);
       expect(repo.lastUpdateStatus, OccurrenceStatus.done);
@@ -317,10 +336,16 @@ void main() {
         400: 'Failed to complete occurrence',
       };
       for (final MapEntry(key: code, value: text) in cases.entries) {
-        repo.actionError = AgendaException('Server error $code', statusCode: code);
+        repo.actionError = AgendaException(
+          'Server error $code',
+          statusCode: code,
+        );
         expect(
           await notifier.resolveOccurrence(
-              'rtn-1', '2026-10-26', OccurrenceStatus.done),
+            'rtn-1',
+            '2026-10-26',
+            OccurrenceStatus.done,
+          ),
           text,
           reason: 'status $code',
         );
@@ -328,7 +353,10 @@ void main() {
       repo.actionError = Exception('Offline');
       expect(
         await notifier.resolveOccurrence(
-            'rtn-1', '2026-10-26', OccurrenceStatus.skipped),
+          'rtn-1',
+          '2026-10-26',
+          OccurrenceStatus.skipped,
+        ),
         'Failed to skip occurrence',
       );
     });
@@ -341,6 +369,44 @@ void main() {
       await notifier.refresh();
 
       expect(repo.fetchCount, 1);
+      expect(notifier.state, isA<AgendaLoaded>());
+    });
+
+    test('refresh leaves the calendars alone', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      repo.calls.clear();
+      await notifier.refresh();
+
+      expect(repo.calls, ['fetch']);
+    });
+
+    test(
+      'refreshWithCalendars refreshes the calendars, then the agenda',
+      () async {
+        final notifier = buildNotifier();
+        await Future<void>.delayed(Duration.zero);
+
+        repo.calls.clear();
+        await notifier.refreshWithCalendars();
+
+        expect(repo.calls, ['refreshCalendars', 'fetch']);
+        expect(notifier.state, isA<AgendaLoaded>());
+      },
+    );
+
+    test('a failed calendar refresh still loads the agenda', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      repo.calls.clear();
+      repo.calendarRefreshError = AgendaException(
+        'Server error 404: not found',
+      );
+      await notifier.refreshWithCalendars();
+
+      expect(repo.calls, ['refreshCalendars', 'fetch']);
       expect(notifier.state, isA<AgendaLoaded>());
     });
   });
@@ -361,8 +427,11 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       // The pure scheduler always writes the 4 summary IDs at minimum.
-      expect(notifications.snapshot.keys, containsAll([1000, 1001, 1002, 1003]),
-          reason: 'reconciler should have scheduled the 4 daily summaries');
+      expect(
+        notifications.snapshot.keys,
+        containsAll([1000, 1001, 1002, 1003]),
+        reason: 'reconciler should have scheduled the 4 daily summaries',
+      );
     });
 
     test('reconcile does NOT fire on error(cached)', () async {
@@ -376,8 +445,11 @@ void main() {
       buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      expect(notifications.snapshot, isEmpty,
-          reason: 'stale cache must not drive OS notification scheduling');
+      expect(
+        notifications.snapshot,
+        isEmpty,
+        reason: 'stale cache must not drive OS notification scheduling',
+      );
     });
 
     test('reconcile does NOT fire on loaded(non-today)', () async {
@@ -392,8 +464,11 @@ void main() {
       notifier.selectDate(DateTime(2030, 1, 1));
       await Future<void>.delayed(Duration.zero);
 
-      expect(notifications.snapshot, isEmpty,
-          reason: 'non-today responses are for browsing, not scheduling');
+      expect(
+        notifications.snapshot,
+        isEmpty,
+        reason: 'non-today responses are for browsing, not scheduling',
+      );
     });
 
     test('lastAgendaFetchAt is persisted after loaded', () async {
@@ -403,47 +478,63 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
       final saved = await configService.getLastAgendaFetchAt();
-      expect(saved, isNotNull,
-          reason: 'P040 §Reconciler Triggers #2 + bg 50-min skip guard '
-              'both depend on this timestamp');
-      expect(saved!.isAfter(before.subtract(const Duration(seconds: 1))),
-          isTrue);
+      expect(
+        saved,
+        isNotNull,
+        reason:
+            'P040 §Reconciler Triggers #2 + bg 50-min skip guard '
+            'both depend on this timestamp',
+      );
+      expect(
+        saved!.isAfter(before.subtract(const Duration(seconds: 1))),
+        isTrue,
+      );
     });
   });
 
   group('P040 session-edge wiring', () {
-    test('session edge true→false triggers refresh (fetch + reconcile)',
-        () async {
-      buildNotifier();
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'session edge true→false triggers refresh (fetch + reconcile)',
+      () async {
+        buildNotifier();
+        await Future<void>.delayed(Duration.zero);
 
-      // Force the listener to observe a transition. ref.listen ignores the
-      // initial value but fires on subsequent changes.
-      container.read(sessionActiveProvider.notifier).state = true;
-      await Future<void>.delayed(Duration.zero);
-      repo.fetchCount = 0;
+        // Force the listener to observe a transition. ref.listen ignores the
+        // initial value but fires on subsequent changes.
+        container.read(sessionActiveProvider.notifier).state = true;
+        await Future<void>.delayed(Duration.zero);
+        repo.fetchCount = 0;
 
-      // The edge of interest:
-      container.read(sessionActiveProvider.notifier).state = false;
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        // The edge of interest:
+        container.read(sessionActiveProvider.notifier).state = false;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(repo.fetchCount, greaterThan(0),
-          reason: 'true→false edge must call refresh() which re-fetches');
-    });
+        expect(
+          repo.fetchCount,
+          greaterThan(0),
+          reason: 'true→false edge must call refresh() which re-fetches',
+        );
+      },
+    );
 
-    test('session edge false→true triggers reconcile-only (no fetch)',
-        () async {
-      repo.nextFetchResult = _responseWithItems();
-      buildNotifier();
-      await Future<void>.delayed(Duration.zero);
-      // Snapshot is now populated with summaries (and a routine reminder).
-      repo.fetchCount = 0;
+    test(
+      'session edge false→true triggers reconcile-only (no fetch)',
+      () async {
+        repo.nextFetchResult = _responseWithItems();
+        buildNotifier();
+        await Future<void>.delayed(Duration.zero);
+        // Snapshot is now populated with summaries (and a routine reminder).
+        repo.fetchCount = 0;
 
-      container.read(sessionActiveProvider.notifier).state = true;
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+        container.read(sessionActiveProvider.notifier).state = true;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      expect(repo.fetchCount, 0,
-          reason: 'false→true edge must NOT re-fetch; it reconciles cached');
-    });
+        expect(
+          repo.fetchCount,
+          0,
+          reason: 'false→true edge must NOT re-fetch; it reconciles cached',
+        );
+      },
+    );
   });
 }

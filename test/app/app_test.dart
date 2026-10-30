@@ -33,7 +33,10 @@ class _StubStorageService with TelemetryStorageNoop implements StorageService {
   @override
   Future<Transcript?> getTranscript(String id) async => null;
   @override
-  Future<List<Transcript>> getTranscripts({int limit = 50, int offset = 0}) async => [];
+  Future<List<Transcript>> getTranscripts({
+    int limit = 50,
+    int offset = 0,
+  }) async => [];
   @override
   Future<void> deleteTranscript(String id) async {}
   @override
@@ -45,7 +48,11 @@ class _StubStorageService with TelemetryStorageNoop implements StorageService {
   @override
   Future<void> markSent(String id) async {}
   @override
-  Future<void> markFailed(String id, String error, {int? overrideAttempts}) async {}
+  Future<void> markFailed(
+    String id,
+    String error, {
+    int? overrideAttempts,
+  }) async {}
   @override
   Future<void> markPendingForRetry(String id) async {}
   @override
@@ -64,13 +71,13 @@ class _NoOpConnectivity extends ConnectivityService {
 class _StubAgendaRepository implements AgendaRepository {
   @override
   Future<AgendaResponse> fetchAgenda(String date) async => AgendaResponse(
-        date: date,
-        granularity: 'day',
-        from: date,
-        to: date,
-        items: [],
-        routineItems: [],
-      );
+    date: date,
+    granularity: 'day',
+    from: date,
+    to: date,
+    items: [],
+    routineItems: [],
+  );
   @override
   Future<CachedAgenda?> getCachedAgenda(String date) async => null;
   @override
@@ -83,16 +90,18 @@ class _StubAgendaRepository implements AgendaRepository {
     String scheduledFor,
     OccurrenceStatus status,
   ) async {}
+  @override
+  Future<void> refreshCalendars() async {}
 }
 
 List<Override> get _testOverrides => [
-      storageServiceProvider.overrideWithValue(_StubStorageService()),
-      connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
-      backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
-      agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
-      ...notificationStubOverrides(),
-      ...sessionControlTestOverrides,
-    ];
+  storageServiceProvider.overrideWithValue(_StubStorageService()),
+  connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
+  backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+  agendaRepositoryProvider.overrideWithValue(_StubAgendaRepository()),
+  ...notificationStubOverrides(),
+  ...sessionControlTestOverrides,
+];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -118,9 +127,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final navBar = tester.widget<NavigationBar>(
-      find.byType(NavigationBar),
-    );
+    final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navBar.selectedIndex, 2);
   });
 
@@ -133,9 +140,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle();
 
-    final navBar = tester.widget<NavigationBar>(
-      find.byType(NavigationBar),
-    );
+    final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navBar.selectedIndex, 0);
   });
 
@@ -148,9 +153,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.chat_bubble_outline));
     await tester.pumpAndSettle();
 
-    final navBar = tester.widget<NavigationBar>(
-      find.byType(NavigationBar),
-    );
+    final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navBar.selectedIndex, 4);
   });
 
@@ -159,9 +162,7 @@ void main() {
       ProviderScope(overrides: _testOverrides, child: const App()),
     );
 
-    final materialApp = tester.widget<MaterialApp>(
-      find.byType(MaterialApp),
-    );
+    final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(materialApp.theme?.useMaterial3, isTrue);
   });
 }

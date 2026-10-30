@@ -101,7 +101,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         if (isRefreshing) const LinearProgressIndicator(),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: notifier.refresh,
+            onRefresh: notifier.refreshWithCalendars,
             child: isEmpty
                 ? ListView(
                     children: const [

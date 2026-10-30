@@ -43,21 +43,46 @@ import '../helpers/stub_session_control.dart';
 // ── Stub dependencies ─────────────────────────────────────────────────────────
 
 class _StubStorage with TelemetryStorageNoop implements StorageService {
-  @override Future<String> getDeviceId() async => 'test';
-  @override Future<List<TranscriptWithStatus>> getTranscriptsWithStatus({int limit = 20, int offset = 0}) async => [];
-  @override Future<void> saveTranscript(Transcript t) async {}
-  @override Future<Transcript?> getTranscript(String id) async => null;
-  @override Future<List<Transcript>> getTranscripts({int limit = 50, int offset = 0}) async => [];
-  @override Future<void> deleteTranscript(String id) async {}
-  @override Future<void> enqueue(String transcriptId) async {}
-  @override Future<List<SyncQueueItem>> getPendingItems() async => [];
-  @override Future<void> markSending(String id) async {}
-  @override Future<void> markSent(String id) async {}
-  @override Future<void> markFailed(String id, String error, {int? overrideAttempts}) async {}
-  @override Future<void> markPendingForRetry(String id) async {}
-  @override Future<void> reactivateForResend(String transcriptId) async {}
-  @override Future<int> recoverStaleSending() async => 0;
-  @override Future<List<SyncQueueItem>> getFailedItems({int? maxAttempts}) async => [];
+  @override
+  Future<String> getDeviceId() async => 'test';
+  @override
+  Future<List<TranscriptWithStatus>> getTranscriptsWithStatus({
+    int limit = 20,
+    int offset = 0,
+  }) async => [];
+  @override
+  Future<void> saveTranscript(Transcript t) async {}
+  @override
+  Future<Transcript?> getTranscript(String id) async => null;
+  @override
+  Future<List<Transcript>> getTranscripts({
+    int limit = 50,
+    int offset = 0,
+  }) async => [];
+  @override
+  Future<void> deleteTranscript(String id) async {}
+  @override
+  Future<void> enqueue(String transcriptId) async {}
+  @override
+  Future<List<SyncQueueItem>> getPendingItems() async => [];
+  @override
+  Future<void> markSending(String id) async {}
+  @override
+  Future<void> markSent(String id) async {}
+  @override
+  Future<void> markFailed(
+    String id,
+    String error, {
+    int? overrideAttempts,
+  }) async {}
+  @override
+  Future<void> markPendingForRetry(String id) async {}
+  @override
+  Future<void> reactivateForResend(String transcriptId) async {}
+  @override
+  Future<int> recoverStaleSending() async => 0;
+  @override
+  Future<List<SyncQueueItem>> getFailedItems({int? maxAttempts}) async => [];
 }
 
 class _NoOpConnectivity extends ConnectivityService {
@@ -70,11 +95,17 @@ class _IdleHfEngine implements HandsFreeEngine {
   Future<void> setCaptureGate({required bool open}) async {}
 
   final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
-  @override Future<bool> hasPermission() async => true;
-  @override Stream<HandsFreeEngineEvent> start({required VadConfig config}) => _ctrl.stream;
-  @override Future<void> stop() async {}
-  @override Future<void> interruptCapture() async {}
-  @override void dispose() => _ctrl.close();
+  @override
+  Future<bool> hasPermission() async => true;
+  @override
+  Stream<HandsFreeEngineEvent> start({required VadConfig config}) =>
+      _ctrl.stream;
+  @override
+  Future<void> stop() async {}
+  @override
+  Future<void> interruptCapture() async {}
+  @override
+  void dispose() => _ctrl.close();
 }
 
 class _FixedConfigService extends AppConfigService {
@@ -85,29 +116,53 @@ class _FixedConfigService extends AppConfigService {
 }
 
 class _StubTtsService implements TtsService {
-  @override ValueListenable<bool> get isSpeaking => ValueNotifier(false);
-  @override Future<void> speak(String text, {String? languageCode}) async {}
-  @override Future<void> stop() async {}
-  @override void dispose() {}
+  @override
+  ValueListenable<bool> get isSpeaking => ValueNotifier(false);
+  @override
+  Future<void> speak(String text, {String? languageCode}) async {}
+  @override
+  Future<void> stop() async {}
+  @override
+  void dispose() {}
 }
 
 class _StubAudioFeedback implements AudioFeedbackService {
-  @override Future<void> startProcessingFeedback() async {}
-  @override Future<void> stopLoop() async {}
-  @override Future<void> playSuccess() async {}
-  @override Future<void> playError() async {}
-  @override void dispose() {}
+  @override
+  Future<void> startProcessingFeedback() async {}
+  @override
+  Future<void> stopLoop() async {}
+  @override
+  Future<void> playSuccess() async {}
+  @override
+  Future<void> playError() async {}
+  @override
+  void dispose() {}
 }
 
 class _StubAgendaRepository implements AgendaRepository {
   @override
   Future<AgendaResponse> fetchAgenda(String date) async => AgendaResponse(
-        date: date, granularity: 'day', from: date, to: date, items: [], routineItems: []);
-  @override Future<CachedAgenda?> getCachedAgenda(String date) async => null;
-  @override Future<void> cacheAgenda(String date, AgendaResponse response) async {}
-  @override Future<void> markActionItemDone(String recordId) async {}
-  @override Future<void> resolveOccurrence(
-    String routineId, String scheduledFor, OccurrenceStatus status) async {}
+    date: date,
+    granularity: 'day',
+    from: date,
+    to: date,
+    items: [],
+    routineItems: [],
+  );
+  @override
+  Future<CachedAgenda?> getCachedAgenda(String date) async => null;
+  @override
+  Future<void> cacheAgenda(String date, AgendaResponse response) async {}
+  @override
+  Future<void> markActionItemDone(String recordId) async {}
+  @override
+  Future<void> resolveOccurrence(
+    String routineId,
+    String scheduledFor,
+    OccurrenceStatus status,
+  ) async {}
+  @override
+  Future<void> refreshCalendars() async {}
 }
 
 /// Minimal in-memory NotificationService for widget tests.
@@ -137,8 +192,12 @@ List<Override> get _baseOverrides {
     connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
     handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
     appConfigServiceProvider.overrideWithValue(
-      _FixedConfigService(const AppConfig(
-          groqApiKey: 'test-key', apiUrl: 'https://test.example.com/api')),
+      _FixedConfigService(
+        const AppConfig(
+          groqApiKey: 'test-key',
+          apiUrl: 'https://test.example.com/api',
+        ),
+      ),
     ),
     ttsServiceProvider.overrideWithValue(_StubTtsService()),
     audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedback()),
@@ -210,19 +269,23 @@ void main() {
     matching: find.byIcon(Icons.mic),
   );
 
-  testWidgets('switching away from Record tab calls stopSession', (tester) async {
+  testWidgets('switching away from Record tab calls stopSession', (
+    tester,
+  ) async {
     late _TrackingHfController controller;
 
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ..._baseOverrides,
-        handsFreeControllerProvider.overrideWith((ref) {
-          controller = _TrackingHfController(ref);
-          return controller;
-        }),
-      ],
-      child: const App(),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          handsFreeControllerProvider.overrideWith((ref) {
+            controller = _TrackingHfController(ref);
+            return controller;
+          }),
+        ],
+        child: const App(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // P037 v2: app opens in Idle. Engage explicitly to mirror the
@@ -238,19 +301,23 @@ void main() {
     expect(controller.stopCalls, 1);
   });
 
-  testWidgets('switching back to Record tab calls startSession', (tester) async {
+  testWidgets('switching back to Record tab calls startSession', (
+    tester,
+  ) async {
     late _TrackingHfController controller;
 
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ..._baseOverrides,
-        handsFreeControllerProvider.overrideWith((ref) {
-          controller = _TrackingHfController(ref);
-          return controller;
-        }),
-      ],
-      child: const App(),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          handsFreeControllerProvider.overrideWith((ref) {
+            controller = _TrackingHfController(ref);
+            return controller;
+          }),
+        ],
+        child: const App(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // v2: explicit engage first (replaces auto-start in initState).
@@ -266,45 +333,50 @@ void main() {
     expect(controller.startCalls, 2); // 1 manual engage + 1 from tab return
   });
 
-  testWidgets('session recovers when user returns to Record during stopSession drain',
-      (tester) async {
-    final drainCompleter = Completer<void>();
-    late _SlowStopHfController controller;
+  testWidgets(
+    'session recovers when user returns to Record during stopSession drain',
+    (tester) async {
+      final drainCompleter = Completer<void>();
+      late _SlowStopHfController controller;
 
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ..._baseOverrides,
-        handsFreeControllerProvider.overrideWith((ref) {
-          controller = _SlowStopHfController(ref, drainCompleter);
-          return controller;
-        }),
-      ],
-      child: const App(),
-    ));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides,
+            handsFreeControllerProvider.overrideWith((ref) {
+              controller = _SlowStopHfController(ref, drainCompleter);
+              return controller;
+            }),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    // v2: explicit engage first (replaces auto-start in initState).
-    await controller.startSession();
-    await tester.pumpAndSettle();
-    expect(controller.startCalls, 1);
+      // v2: explicit engage first (replaces auto-start in initState).
+      await controller.startSession();
+      await tester.pumpAndSettle();
+      expect(controller.startCalls, 1);
 
-    // Navigate away — stopSession starts but won't finish until drainCompleter fires.
-    await tester.tap(find.byIcon(Icons.calendar_today));
-    await tester.pumpAndSettle();
+      // Navigate away — stopSession starts but won't finish until drainCompleter fires.
+      await tester.tap(find.byIcon(Icons.calendar_today));
+      await tester.pumpAndSettle();
 
-    expect(controller.stopCalls, 1);
-    expect(controller.startCalls, 1); // unchanged
+      expect(controller.stopCalls, 1);
+      expect(controller.startCalls, 1); // unchanged
 
-    // Navigate back — startSession is called but the guard blocks it (not idle yet).
-    await tester.tap(recordNavIcon);
-    await tester.pumpAndSettle();
+      // Navigate back — startSession is called but the guard blocks it (not idle yet).
+      await tester.tap(recordNavIcon);
+      await tester.pumpAndSettle();
 
-    expect(controller.startCalls, 1); // still blocked
+      expect(controller.startCalls, 1); // still blocked
 
-    // Complete the drain — the .then() callback registers addPostFrameCallback.
-    drainCompleter.complete();
-    await tester.pumpAndSettle(); // frame fires → currentIndex == 2 → startSession
+      // Complete the drain — the .then() callback registers addPostFrameCallback.
+      drainCompleter.complete();
+      await tester
+          .pumpAndSettle(); // frame fires → currentIndex == 2 → startSession
 
-    expect(controller.startCalls, 2); // recovery call
-  });
+      expect(controller.startCalls, 2); // recovery call
+    },
+  );
 }

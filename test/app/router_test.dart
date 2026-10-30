@@ -26,7 +26,10 @@ class _StubStorageService with TelemetryStorageNoop implements StorageService {
   @override
   Future<Transcript?> getTranscript(String id) async => null;
   @override
-  Future<List<Transcript>> getTranscripts({int limit = 50, int offset = 0}) async => [];
+  Future<List<Transcript>> getTranscripts({
+    int limit = 50,
+    int offset = 0,
+  }) async => [];
   @override
   Future<void> deleteTranscript(String id) async {}
   @override
@@ -38,7 +41,11 @@ class _StubStorageService with TelemetryStorageNoop implements StorageService {
   @override
   Future<void> markSent(String id) async {}
   @override
-  Future<void> markFailed(String id, String error, {int? overrideAttempts}) async {}
+  Future<void> markFailed(
+    String id,
+    String error, {
+    int? overrideAttempts,
+  }) async {}
   @override
   Future<void> markPendingForRetry(String id) async {}
   @override
@@ -57,13 +64,13 @@ class _StubStorageService with TelemetryStorageNoop implements StorageService {
 class _StubAgendaRepository implements AgendaRepository {
   @override
   Future<AgendaResponse> fetchAgenda(String date) async => AgendaResponse(
-        date: date,
-        granularity: 'day',
-        from: date,
-        to: date,
-        items: [],
-        routineItems: [],
-      );
+    date: date,
+    granularity: 'day',
+    from: date,
+    to: date,
+    items: [],
+    routineItems: [],
+  );
   @override
   Future<CachedAgenda?> getCachedAgenda(String date) async => null;
   @override
@@ -76,6 +83,8 @@ class _StubAgendaRepository implements AgendaRepository {
     String scheduledFor,
     OccurrenceStatus status,
   ) async {}
+  @override
+  Future<void> refreshCalendars() async {}
 }
 
 void main() {
@@ -99,9 +108,7 @@ void main() {
 
       expect(find.text('Record'), findsWidgets);
 
-      final navBar = tester.widget<NavigationBar>(
-        find.byType(NavigationBar),
-      );
+      final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
       expect(navBar.selectedIndex, 2);
     });
 
@@ -115,7 +122,9 @@ void main() {
       expect(navBar.destinations.length, 5);
     });
 
-    testWidgets('switching tabs preserves state (indexedStack)', (tester) async {
+    testWidgets('switching tabs preserves state (indexedStack)', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         ProviderScope(overrides: overrides, child: const App()),
       );
@@ -129,9 +138,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.mic));
       await tester.pumpAndSettle();
 
-      final navBar = tester.widget<NavigationBar>(
-        find.byType(NavigationBar),
-      );
+      final navBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
       expect(navBar.selectedIndex, 2);
     });
   });
