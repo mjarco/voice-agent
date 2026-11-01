@@ -1,6 +1,6 @@
 # Manual test: P042 — recover hands-free capture across audio route changes
 
-**Proposal:** [`docs/proposals/042-recover-hands-free-capture-across-route-changes.md`](../proposals/042-recover-hands-free-capture-across-route-changes.md)
+**Proposal:** P042 (tag `pre-base-cut`)
 **Overall status:** **passed** — T1/T2/T4 verified on device 2026-05-22 (Michal iPhone, iOS 26.4.2); T3 (wired headphone) outstanding, same route-change path; T5 opportunistic.
 **Why now:** P042 makes the hands-free pipeline re-acquire the microphone when the iOS audio route changes. Route changes, `AVAudioSession` behaviour and the `record` plugin's stream lifecycle are device-only — `flutter test` cannot exercise them.
 **Time budget:** ~15 min, iPhone only.

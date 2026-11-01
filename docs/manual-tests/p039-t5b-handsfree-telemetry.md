@@ -1,6 +1,6 @@
 # Manual test: P039 T5b — hands-free telemetry chain
 
-**Proposal:** [`docs/proposals/039-otel-dev-telemetry.md`](../proposals/039-otel-dev-telemetry.md) — T5b verification gate.
+**Proposal:** P039 (tag `pre-base-cut`) — T5b verification gate.
 **Overall status:** **passed** — all setup + 4 test cases executed green on iOS Simulator. T5b gate cleared; T2 / T4 / T5a / T6 / T7 / T8 unblocked (and most have since landed on main).
 **Why now:** This gate must clear before T2 / T4 / T5a / T6 / T7 / T8 proceed.
 **Time budget:** ~20 min.
