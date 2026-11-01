@@ -76,6 +76,10 @@ class LocationConfig(context: Context) {
         get() = if (prefs.contains("last_location_on")) prefs.getBoolean("last_location_on", true) else null
         set(value) = prefs.edit().putBoolean("last_location_on", value ?: true).apply()
 
+    var lastBootCount: Int
+        get() = prefs.getInt("last_boot_count", -2)
+        set(value) = prefs.edit().putInt("last_boot_count", value).apply()
+
     var lastExitSeenAtMs: Long
         get() = prefs.getLong("last_exit_seen_at", 0)
         set(value) = prefs.edit().putLong("last_exit_seen_at", value).apply()
