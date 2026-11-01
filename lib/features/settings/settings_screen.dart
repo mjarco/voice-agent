@@ -287,14 +287,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onTap: () => context.push('/settings/location'),
             ),
           ],
-          _buildSectionHeader('Usage'),
-          ListTile(
-            key: const Key('usage-costs-tile'),
-            title: const Text('Usage & Costs'),
-            subtitle: const Text('API cost dashboard'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/settings/usage'),
-          ),
           // P040 test-infra: debug entry for inspecting pending OS
           // notifications + firing one in 2 s. Debug-mode only — the
           // tile is invisible on release builds.

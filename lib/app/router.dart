@@ -16,7 +16,6 @@ import 'package:voice_agent/features/location_log/presentation/location_log_scre
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_screen.dart';
-import 'package:voice_agent/features/usage/presentation/usage_screen.dart';
 
 GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
   initialLocation: initialLocation,
@@ -154,10 +153,6 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
         GoRoute(
           path: 'location',
           builder: (context, state) => const LocationLogScreen(),
-        ),
-        GoRoute(
-          path: 'usage',
-          builder: (context, state) => const UsageScreen(),
         ),
         // P040 test-infra: debug screen for inspecting the in-memory
         // notification snapshot + firing a pending notification in 2 s.
