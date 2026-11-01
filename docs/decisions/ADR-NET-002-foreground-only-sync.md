@@ -3,6 +3,7 @@
 Status: Accepted
 Proposed in: P005
 Amended in: P027, P039 (dev-flavor telemetry flusher exception), P040 (workmanager for agenda notification reconciliation)
+See also: ADR-NET-005 (the location log's own background upload)
 
 ## Context
 
