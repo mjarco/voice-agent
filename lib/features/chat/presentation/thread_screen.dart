@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/pin.dart';
+import 'package:voice_agent/core/models/shopping_proposal.dart';
+import 'package:voice_agent/core/widgets/shopping_proposal_card.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
@@ -90,6 +92,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     final String title;
     final List<ConversationEvent> events;
     final List<ConversationRecord> records;
+    final List<ShoppingProposalRow> proposals;
     final List<ModelInfo> models;
     final List<BackendInfo> backends;
     final String? selectedModel;
@@ -135,6 +138,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         title = 'New Chat';
         events = const [];
         records = const [];
+        proposals = const [];
         models = m;
         backends = b;
         selectedModel = sm;
@@ -148,6 +152,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
           conversation: final conv,
           events: final e,
           records: final r,
+          proposals: final p,
           models: final m,
           backends: final b,
           selectedModel: final sm,
@@ -156,6 +161,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         title = conv.firstMessagePreview ?? 'New Chat';
         events = e;
         records = r;
+        proposals = p;
         models = m;
         backends = b;
         selectedModel = sm;
@@ -169,6 +175,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
           conversation: final conv,
           events: final e,
           records: final r,
+          proposals: final p,
           models: final m,
           backends: final b,
           selectedModel: final sm,
@@ -179,6 +186,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         title = conv?.firstMessagePreview ?? 'New Chat';
         events = e;
         records = r;
+        proposals = p;
         models = m;
         backends = b;
         selectedModel = sm;
@@ -225,9 +233,27 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
                   ),
                 ...(() {
                   final reversed = events.reversed.toList();
+                  final cards = _proposalsByAnchor(events, proposals);
                   final widgets = <Widget>[];
                   for (var i = 0; i < reversed.length; i++) {
                     final event = reversed[i];
+                    // The list is reversed: what goes first shows lowest, so a
+                    // card comes before its anchor and the newest card first.
+                    for (final row
+                        in (cards[event.eventId] ?? const []).reversed) {
+                      widgets.add(ShoppingProposalCard(
+                        key: Key('shopping-proposal-${row.proposal.id}'),
+                        row: row,
+                        onAccept: () => notifier.answerProposal(
+                          row.proposal.id,
+                          accept: true,
+                        ),
+                        onSkip: () => notifier.answerProposal(
+                          row.proposal.id,
+                          accept: false,
+                        ),
+                      ));
+                    }
                     final canPin = event.role == EventRole.agent &&
                         event.conversationId.isNotEmpty;
                     widgets.add(_MessageBubble(
@@ -285,6 +311,27 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
       ),
     );
   }
+}
+
+/// The event each card sits under: the reply to the message that proposed it,
+/// or the message itself when no reply followed. A proposal whose message is not
+/// in the thread is not shown.
+Map<String, List<ShoppingProposalRow>> _proposalsByAnchor(
+  List<ConversationEvent> events,
+  List<ShoppingProposalRow> rows,
+) {
+  final indexById = {
+    for (var i = 0; i < events.length; i++) events[i].eventId: i,
+  };
+  final anchors = <String, List<ShoppingProposalRow>>{};
+  for (final row in rows) {
+    final index = indexById[row.proposal.userEventId];
+    if (index == null) continue;
+    final next = index + 1 < events.length ? events[index + 1] : null;
+    final anchor = next?.role == EventRole.agent ? next! : events[index];
+    anchors.putIfAbsent(anchor.eventId, () => []).add(row);
+  }
+  return anchors;
 }
 
 final _ssmlLangStrip =

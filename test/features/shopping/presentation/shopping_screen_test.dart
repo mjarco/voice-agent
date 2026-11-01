@@ -1,21 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/providers/shopping_list_changes_provider.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_models.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_repository.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_notifier.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_providers.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_screen.dart';
 
+import '../../../core/network/fake_shopping_proposals.dart';
 import '../fake_shopping_repository.dart';
 
-Future<void> _pump(WidgetTester tester, FakeShoppingRepository repo) async {
+Future<void> _pump(
+  WidgetTester tester,
+  FakeShoppingRepository repo, {
+  FakeShoppingProposals? proposals,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         shoppingRepositoryProvider.overrideWithValue(repo),
         shoppingNotifierProvider.overrideWith(
-          (ref) => ShoppingNotifier(repo, rereadDelay: Duration.zero),
+          (ref) => ShoppingNotifier(
+            repo,
+            proposals ?? FakeShoppingProposals(),
+            rereadDelay: Duration.zero,
+          ),
         ),
       ],
       child: const MaterialApp(home: ShoppingScreen()),
@@ -233,5 +243,77 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('kabel HDMI'), findsOneWidget);
+  });
+
+  group('proposals', () {
+    double top(WidgetTester tester, String key) =>
+        tester.getTopLeft(find.byKey(Key(key))).dy;
+
+    testWidgets('the waiting ones stand above To buy', (tester) async {
+      final proposals = FakeShoppingProposals()..rows = [sampleProposal()];
+      await _pump(tester, FakeShoppingRepository(), proposals: proposals);
+
+      expect(
+        top(tester, 'shopping-proposal-p1'),
+        lessThan(top(tester, 'shopping-item-i1')),
+      );
+    });
+
+    testWidgets('they show on an empty list too', (tester) async {
+      final proposals = FakeShoppingProposals()..rows = [sampleProposal()];
+      await _pump(
+        tester,
+        FakeShoppingRepository()..toBuy = [],
+        proposals: proposals,
+      );
+
+      expect(find.byKey(const Key('shopping-proposal-p1')), findsOneWidget);
+      expect(find.text('Nothing to buy.'), findsOneWidget);
+    });
+
+    testWidgets('they do not show under Bought', (tester) async {
+      final proposals = FakeShoppingProposals()..rows = [sampleProposal()];
+      await _pump(tester, FakeShoppingRepository(), proposals: proposals);
+
+      await tester.tap(find.text('Bought'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('shopping-proposal-p1')), findsNothing);
+    });
+
+    testWidgets('a failed read leaves the list standing', (tester) async {
+      final proposals = FakeShoppingProposals()..failReads = true;
+      await _pump(tester, FakeShoppingRepository(), proposals: proposals);
+
+      expect(find.text('kabel HDMI'), findsOneWidget);
+    });
+
+    testWidgets('accepting on the card answers it', (tester) async {
+      final proposals = FakeShoppingProposals()..rows = [sampleProposal()];
+      proposals.onAnswer = () => proposals.rows = [];
+      await _pump(tester, FakeShoppingRepository(), proposals: proposals);
+
+      await tester.tap(find.byKey(const Key('shopping-proposal-accept-p1')));
+      await tester.pumpAndSettle();
+
+      expect(proposals.accepted, ['p1']);
+      expect(find.byKey(const Key('shopping-proposal-p1')), findsNothing);
+    });
+
+    testWidgets('a change made elsewhere reads the list again', (tester) async {
+      final repo = FakeShoppingRepository();
+      final proposals = FakeShoppingProposals();
+      await _pump(tester, repo, proposals: proposals);
+      expect(find.byKey(const Key('shopping-proposal-p1')), findsNothing);
+
+      proposals.rows = [sampleProposal()];
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ShoppingScreen)),
+      );
+      container.read(shoppingListChangesProvider.notifier).state++;
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('shopping-proposal-p1')), findsOneWidget);
+    });
   });
 }

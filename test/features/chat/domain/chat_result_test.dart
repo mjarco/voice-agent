@@ -23,6 +23,38 @@ void main() {
       expect(result.backend, 'groq');
     });
 
+    test('reads the proposals of the turn', () {
+      final result = ChatResult.fromMap({
+        'conversation_id': 'conv-1',
+        'user_event_id': 'evt-u-1',
+        'reply': 'Hello',
+        'shopping_proposals': [
+          {
+            'id': 'p1',
+            'kind': 'add',
+            'text': 'filtr do wody',
+            'state': 'waiting',
+            'conversation_id': 'conv-1',
+            'user_event_id': 'evt-u-1',
+            'created_at': '2026-11-01T12:00:00Z',
+          },
+        ],
+      });
+
+      expect(result.shoppingProposals.single.text, 'filtr do wody');
+      expect(result.shoppingProposals.single.userEventId, 'evt-u-1');
+    });
+
+    test('the proposals are empty when the frame has none', () {
+      final result = ChatResult.fromMap({
+        'conversation_id': 'conv-1',
+        'user_event_id': 'evt-u-1',
+        'reply': 'Hello',
+      });
+
+      expect(result.shoppingProposals, isEmpty);
+    });
+
     test('handles absent agentEventId', () {
       final map = {
         'conversation_id': 'conv-1',

@@ -4,12 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/pin.dart';
+import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
 import 'package:voice_agent/features/chat/presentation/thread_notifier.dart';
+
+import '../../../core/network/fake_shopping_proposals.dart';
 
 // ---------------------------------------------------------------------------
 // Stub helpers
@@ -129,6 +132,7 @@ class _FakePinWriter implements PinWriter {
 /// Shared no-op pin writer for the pre-existing tests that never pin. Pin flow
 /// tests build their own `_FakePinWriter` so they can inspect calls.
 final _pinWriter = _FakePinWriter();
+final _proposals = FakeShoppingProposals();
 
 Conversation _conv({
   String id = 'conv-1',
@@ -203,7 +207,7 @@ void main() {
     test('transitions to empty state with generated sessionId', () async {
       final repo = _StubRepository();
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -219,7 +223,7 @@ void main() {
           defaultBackend: 'b1',
         );
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -235,7 +239,7 @@ void main() {
         ..eventsResult = [_event()]
         ..recordsResult = [_record()];
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -249,7 +253,7 @@ void main() {
     test('emits error when getConversation returns null', () async {
       final repo = _StubRepository()..conversationResult = null;
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -261,7 +265,7 @@ void main() {
     test('emits error on load failure', () async {
       final repo = _StubRepository()..throwOnLoad = true;
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -276,7 +280,7 @@ void main() {
           defaultBackend: 'b2',
         );
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -289,7 +293,7 @@ void main() {
     test('is no-op when state is streaming', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -305,7 +309,7 @@ void main() {
         ..conversationResult =
             _conv(status: ConversationStatus.closed);
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -316,7 +320,7 @@ void main() {
     test('transitions loaded → streaming with pendingUserMessage', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -330,7 +334,7 @@ void main() {
     test('transitions empty → streaming for new conversation', () async {
       final repo = _StubRepository();
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -345,7 +349,7 @@ void main() {
     test('tool_use event updates toolProgress', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -363,7 +367,7 @@ void main() {
         ..conversationResult = _conv()
         ..eventsResult = [_event(), _event(id: 'evt-2')];
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -382,7 +386,7 @@ void main() {
     test('SSE error event emits error with preSendState', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -400,7 +404,7 @@ void main() {
     test('stream Dart error maps ApiNotConfigured', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -416,7 +420,7 @@ void main() {
     test('stream Dart error maps ApiPermanentFailure', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -433,7 +437,7 @@ void main() {
     test('stream Dart error maps ApiTransientFailure', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -450,7 +454,7 @@ void main() {
     test('post-result fetch failure emits error with streaming state', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -475,7 +479,7 @@ void main() {
     test('is no-op when not streaming', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -486,7 +490,7 @@ void main() {
     test('reverts to preSendState and calls cancelChat', () async {
       final repo = _StubRepository()..conversationResult = _conv(sessionId: 'sess-abc');
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -509,7 +513,7 @@ void main() {
         ..recordsResult = [_record(id: 'rec-1', endorsed: false)]
         ..toggleResult = true;
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -524,7 +528,7 @@ void main() {
         ..conversationResult = _conv()
         ..recordsResult = [_record(id: 'rec-42')];
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -538,7 +542,7 @@ void main() {
     test('selectModel updates loaded state', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -551,7 +555,7 @@ void main() {
     test('selectModel updates empty state', () async {
       final repo = _StubRepository();
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -564,7 +568,7 @@ void main() {
     test('selectModel during loading stores as pending', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       // Immediately after creation, state is ThreadLoading
       expect(notifier.state, isA<ThreadLoading>());
 
@@ -580,7 +584,7 @@ void main() {
     test('selectBackend updates loaded state', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -594,7 +598,7 @@ void main() {
         () async {
       final repo = _StubRepository();
       final notifier =
-          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'new', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       expect(notifier.state, isA<ThreadLoading>());
 
       notifier.selectBackend('backend-b');
@@ -609,7 +613,7 @@ void main() {
     test('selectModel updates streaming state', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -625,7 +629,7 @@ void main() {
     test('selectModel during error state is a no-op', () async {
       final repo = _StubRepository()..conversationResult = null;
       final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter);
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
       await Future.microtask(() {});
 
@@ -647,6 +651,7 @@ void main() {
         conversationId: 'conv-1',
         repository: repo,
         pinWriter: pin,
+        proposals: _proposals,
       );
       await Future.microtask(() {});
       await Future.microtask(() {});
@@ -765,6 +770,158 @@ void main() {
 
       expect(notifier.state, isA<ThreadStreaming>());
       expect(notifier.isPinned('evt-agent'), isTrue);
+    });
+  });
+
+  group('ThreadNotifier — shopping proposals', () {
+    late _StubRepository repo;
+    late FakeShoppingProposals proposals;
+    late int changes;
+
+    ThreadNotifier create({String id = 'conv-1'}) => ThreadNotifier(
+          conversationId: id,
+          repository: repo,
+          pinWriter: _pinWriter,
+          proposals: proposals,
+          onShoppingChanged: () => changes++,
+        );
+
+    List<ShoppingProposalRow> rows(ThreadNotifier notifier) =>
+        (notifier.state as ThreadLoaded).proposals;
+
+    setUp(() {
+      repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(id: 'ue-1')];
+      proposals = FakeShoppingProposals()..rows = [sampleProposal()];
+      changes = 0;
+    });
+
+    test('a thread reads its proposals by conversation', () async {
+      final notifier = create();
+      await pumpEventQueue();
+
+      expect(proposals.lastConversationId, 'conv-1');
+      expect(rows(notifier).single.proposal.id, 'p1');
+    });
+
+    test('a failed read leaves the thread without cards', () async {
+      proposals.failReads = true;
+      final notifier = create();
+      await pumpEventQueue();
+
+      expect(rows(notifier), isEmpty);
+    });
+
+    test('a reply reads the proposals again', () async {
+      final notifier = create();
+      await pumpEventQueue();
+      notifier.send('kup filtr');
+      proposals.rows = [
+        sampleProposal(),
+        sampleProposal(id: 'p2', text: 'mleko'),
+      ];
+
+      repo.streamController!.add(_resultEvent());
+      await pumpEventQueue();
+
+      expect(rows(notifier).map((r) => r.proposal.id), ['p1', 'p2']);
+      expect(changes, 0);
+    });
+
+    test('after a failed read the result frame still gives the cards',
+        () async {
+      final notifier = create();
+      await pumpEventQueue();
+      notifier.send('kup filtr');
+      proposals.failReads = true;
+
+      repo.streamController!.add(const SseEvent(
+        event: 'result',
+        data: '{"conversation_id":"conv-1","user_event_id":"ue-1","reply":"ok",'
+            '"shopping_proposals":[{"id":"p2","kind":"add","text":"mleko",'
+            '"state":"waiting","user_event_id":"ue-1"}]}',
+      ));
+      await pumpEventQueue();
+
+      expect(rows(notifier).map((r) => r.proposal.id), ['p1', 'p2']);
+      expect(changes, 1);
+    });
+
+    test('an accepted proposal shows its state and tells Shopping', () async {
+      final notifier = create();
+      await pumpEventQueue();
+
+      await notifier.answerProposal('p1', accept: true);
+
+      expect(proposals.accepted, ['p1']);
+      expect(rows(notifier).single.proposal.state, 'accepted');
+      expect(changes, 1);
+    });
+
+    test('a proposal answered elsewhere shows how', () async {
+      proposals.nextAnswer = const ProposalNotWaiting('skipped');
+      final notifier = create();
+      await pumpEventQueue();
+
+      await notifier.answerProposal('p1', accept: true);
+
+      expect(rows(notifier).single.proposal.state, 'skipped');
+      expect(changes, 1);
+    });
+
+    test('an item gone leaves only skip', () async {
+      proposals.nextAnswer = const ProposalItemRemoved();
+      final notifier = create();
+      await pumpEventQueue();
+
+      await notifier.answerProposal('p1', accept: true);
+
+      final row = rows(notifier).single;
+      expect(row.proposal.isWaiting, isTrue);
+      expect(row.canAccept, isFalse);
+      expect(row.note, isNotNull);
+      expect(changes, 0);
+    });
+
+    test('a failure says so and leaves the buttons', () async {
+      proposals.nextAnswer = const ProposalAnswerFailed('no route');
+      final notifier = create();
+      await pumpEventQueue();
+
+      await notifier.answerProposal('p1', accept: false);
+
+      final row = rows(notifier).single;
+      expect(row.note, 'Failed: no route');
+      expect(row.canAccept, isTrue);
+      expect(row.answering, isFalse);
+      expect(changes, 0);
+    });
+
+    test('a second tap while an answer is on its way does nothing', () async {
+      final gate = Completer<void>();
+      proposals.gate = gate;
+      final notifier = create();
+      await pumpEventQueue();
+
+      final first = notifier.answerProposal('p1', accept: true);
+      expect(rows(notifier).single.answering, isTrue);
+      await notifier.answerProposal('p1', accept: true);
+      gate.complete();
+      await first;
+
+      expect(proposals.accepted, ['p1']);
+    });
+
+    test('an answer survives a change of model', () async {
+      proposals.nextAnswer = const ProposalItemRemoved();
+      final notifier = create();
+      await pumpEventQueue();
+      await notifier.answerProposal('p1', accept: true);
+
+      notifier.selectModel('other');
+
+      expect(rows(notifier).single.canAccept, isFalse);
     });
   });
 }

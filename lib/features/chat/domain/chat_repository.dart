@@ -1,5 +1,6 @@
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
+import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 
 class ModelInfo {
@@ -56,6 +57,7 @@ class ChatResult {
     this.agentEventId,
     required this.reply,
     this.backend,
+    this.shoppingProposals = const [],
   });
 
   final String conversationId;
@@ -64,13 +66,20 @@ class ChatResult {
   final String reply;
   final String? backend;
 
+  /// What this turn proposed; absent from the frame when it proposed nothing.
+  final List<ShoppingProposal> shoppingProposals;
+
   factory ChatResult.fromMap(Map<String, dynamic> map) {
+    final proposals = map['shopping_proposals'] as List<dynamic>? ?? const [];
     return ChatResult(
       conversationId: map['conversation_id'] as String,
       userEventId: map['user_event_id'] as String,
       agentEventId: map['agent_event_id'] as String?,
       reply: map['reply'] as String,
       backend: map['backend'] as String?,
+      shoppingProposals: proposals
+          .map((e) => ShoppingProposal.fromMap(e as Map<String, dynamic>))
+          .toList(),
     );
     // knowledge_extraction and warnings intentionally ignored in V1
   }

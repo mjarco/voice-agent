@@ -1,3 +1,4 @@
+import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_models.dart';
 
 /// The two lists of the tab. Bought holds the last 7 days.
@@ -15,6 +16,7 @@ class ShoppingLoaded extends ShoppingState {
   const ShoppingLoaded({
     required this.catalogue,
     required this.items,
+    required this.proposals,
     required this.view,
     this.filter,
     this.reading = false,
@@ -23,6 +25,9 @@ class ShoppingLoaded extends ShoppingState {
 
   final ShoppingCatalogue catalogue;
   final List<ShoppingItem> items;
+
+  /// The waiting proposals, whichever view is shown; only To buy shows them.
+  final List<ShoppingProposalRow> proposals;
   final ShoppingView view;
 
   /// A store type id; null for all.

@@ -7,6 +7,7 @@ import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
+import 'package:voice_agent/core/providers/shopping_list_changes_provider.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
@@ -27,6 +28,9 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
     with WidgetsBindingObserver {
   // Matches Branch 2 in router.dart's StatefulShellRoute.
   static const _recordTabIndex = 2;
+  // Matches Branch 1. A proposal made by voice reaches the app in no other way
+  // than a read of this tab.
+  static const _shoppingTabIndex = 1;
 
   /// P040 §Reconciler Triggers #2: kick a refresh on app resume if the last
   /// successful agenda fetch was >1h ago. Compensates for iOS BGAppRefresh
@@ -146,6 +150,9 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
             unawaited(
               ref.read(handsFreeControllerProvider.notifier).startSession(),
             );
+          }
+          if (index == _shoppingTabIndex && index != currentIndex) {
+            ref.read(shoppingListChangesProvider.notifier).state++;
           }
           widget.navigationShell.goBranch(
             index,

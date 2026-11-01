@@ -6,8 +6,10 @@ import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/pin.dart';
+import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
+import 'package:voice_agent/core/network/shopping_proposals_port.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
@@ -17,9 +19,13 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     required String conversationId,
     required ChatRepository repository,
     required PinWriter pinWriter,
+    required ShoppingProposalsPort proposals,
+    void Function()? onShoppingChanged,
   })  : _conversationId = conversationId,
         _repository = repository,
         _pinWriter = pinWriter,
+        _proposals = proposals,
+        _onShoppingChanged = onShoppingChanged,
         super(const ThreadLoading()) {
     load();
   }
@@ -27,6 +33,11 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
   final String _conversationId;
   final ChatRepository _repository;
   final PinWriter _pinWriter;
+  final ShoppingProposalsPort _proposals;
+
+  /// The Shopping tab stays alive without polling, so it is told when a turn or
+  /// an answer here may have changed what it shows.
+  final void Function()? _onShoppingChanged;
 
   // Session-local pin view state (proposal 046). Held as notifier fields, not on
   // the immutable Thread* states, so they survive a streaming->loaded transition
@@ -82,6 +93,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
       _repository.getRecords(_conversationId),
       _repository.getModels(),
       _repository.getBackends(),
+      _readProposals(_conversationId),
     ]);
     final conversation = results[0] as Conversation?;
     if (conversation == null) {
@@ -92,10 +104,12 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     final records = results[2] as List<ConversationRecord>;
     final models = results[3] as List<ModelInfo>;
     final backendOptions = results[4] as BackendOptions;
+    final proposals = results[5] as List<ShoppingProposal>?;
     state = ThreadLoaded(
       conversation: conversation,
       events: events,
       records: records,
+      proposals: ShoppingProposalRow.fromRead(proposals ?? const [], const []),
       models: models,
       backends: backendOptions.backends,
       selectedModel: _pendingModel,
@@ -103,6 +117,16 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     );
     _pendingModel = null;
     _pendingBackend = null;
+  }
+
+  /// A thread stands without its cards, so a failed read does not fail it. Null
+  /// when the read failed.
+  Future<List<ShoppingProposal>?> _readProposals(String conversationId) async {
+    try {
+      return await _proposals.list(conversationId: conversationId);
+    } on ShoppingProposalsException {
+      return null;
+    }
   }
 
   Future<void> send(String content) async {
@@ -115,6 +139,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: final conv,
           events: final events,
           records: final records,
+          proposals: final proposals,
           models: final models,
           backends: final backends,
           selectedModel: final selectedModel,
@@ -129,6 +154,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: conv,
           events: events,
           records: records,
+          proposals: proposals,
           models: models,
           backends: backends,
           selectedModel: selectedModel,
@@ -158,6 +184,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: null,
           events: const [],
           records: const [],
+          proposals: const [],
           models: models,
           backends: backends,
           selectedModel: selectedModel,
@@ -211,6 +238,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: currentStreaming.conversation,
           events: currentStreaming.events,
           records: currentStreaming.records,
+          proposals: currentStreaming.proposals,
           models: currentStreaming.models,
           backends: currentStreaming.backends,
           selectedModel: currentStreaming.selectedModel,
@@ -223,7 +251,8 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
         final json = jsonDecode(event.data) as Map<String, dynamic>;
         final result = ChatResult.fromMap(json);
         _currentConversationId = result.conversationId;
-        _fetchAfterResult(currentStreaming);
+        if (result.shoppingProposals.isNotEmpty) _onShoppingChanged?.call();
+        _fetchAfterResult(currentStreaming, result.shoppingProposals);
 
       case 'error':
         final json = jsonDecode(event.data) as Map<String, dynamic>;
@@ -238,17 +267,24 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     _preSendState = null;
   }
 
-  Future<void> _fetchAfterResult(ThreadStreaming streamingState) async {
+  Future<void> _fetchAfterResult(
+    ThreadStreaming streamingState,
+    List<ShoppingProposal> proposedThisTurn,
+  ) async {
     final convId = _currentConversationId!;
     try {
       final results = await Future.wait([
         _repository.getEvents(convId),
         _repository.getRecords(convId),
         _repository.getConversation(convId),
+        _readProposals(convId),
       ]);
       final events = results[0] as List<ConversationEvent>;
       final records = results[1] as List<ConversationRecord>;
       final conversation = results[2] as Conversation?;
+      final proposals = results[3] as List<ShoppingProposal>?;
+      // An answer may have landed during the read, so the rows are taken now.
+      final rows = _proposalRows;
       state = ThreadLoaded(
         conversation: conversation ??
             streamingState.conversation ??
@@ -261,6 +297,10 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
             ),
         events: events,
         records: records,
+        proposals: ShoppingProposalRow.fromRead(
+          proposals ?? _knownProposals(rows, proposedThisTurn),
+          rows,
+        ),
         models: streamingState.models,
         backends: streamingState.backends,
         selectedModel: streamingState.selectedModel,
@@ -271,6 +311,17 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     } catch (e) {
       state = ThreadError('Failed to load messages', streamingState);
     }
+  }
+
+  /// What a failed read falls back on: the cards already shown and what the
+  /// `result` frame said this turn proposed.
+  List<ShoppingProposal> _knownProposals(
+    List<ShoppingProposalRow> rows,
+    List<ShoppingProposal> proposedThisTurn,
+  ) {
+    final known = rows.map((row) => row.proposal).toList();
+    final ids = known.map((proposal) => proposal.id).toSet();
+    return [...known, ...proposedThisTurn.where((p) => !ids.contains(p.id))];
   }
 
   String _streamErrorMessage(Object error) {
@@ -303,6 +354,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: current.conversation,
           events: current.events,
           records: current.records,
+          proposals: current.proposals,
           models: current.models,
           backends: current.backends,
           selectedModel: model,
@@ -321,6 +373,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: current.conversation,
           events: current.events,
           records: current.records,
+          proposals: current.proposals,
           models: current.models,
           backends: current.backends,
           selectedModel: model,
@@ -343,6 +396,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: current.conversation,
           events: current.events,
           records: current.records,
+          proposals: current.proposals,
           models: current.models,
           backends: current.backends,
           selectedModel: current.selectedModel,
@@ -361,6 +415,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: current.conversation,
           events: current.events,
           records: current.records,
+          proposals: current.proposals,
           models: current.models,
           backends: current.backends,
           selectedModel: current.selectedModel,
@@ -411,6 +466,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: refreshed.conversation,
           events: refreshed.events,
           records: updated,
+          proposals: refreshed.proposals,
           models: refreshed.models,
           backends: refreshed.backends,
           selectedModel: refreshed.selectedModel,
@@ -421,12 +477,71 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: refreshed.conversation,
           events: refreshed.events,
           records: updated,
+          proposals: refreshed.proposals,
           models: refreshed.models,
           backends: refreshed.backends,
           selectedModel: refreshed.selectedModel,
           selectedBackend: refreshed.selectedBackend,
           pendingUserMessage: refreshed.pendingUserMessage,
           toolProgress: refreshed.toolProgress,
+        );
+      default:
+        break;
+    }
+  }
+
+  /// Answers a proposal from its card. A second tap while one is on its way
+  /// does nothing.
+  Future<void> answerProposal(String id, {required bool accept}) async {
+    final row = _proposalRows.where((r) => r.proposal.id == id).firstOrNull;
+    if (row == null || row.answering) return;
+    _updateProposalRow(id, (r) => r.asAnswering());
+    final answer =
+        accept ? await _proposals.accept(id) : await _proposals.skip(id);
+    if (!mounted) return;
+    _updateProposalRow(id, (r) => r.after(answer));
+    if (answer.settled) _onShoppingChanged?.call();
+  }
+
+  List<ShoppingProposalRow> get _proposalRows => switch (state) {
+        ThreadLoaded(proposals: final rows) => rows,
+        ThreadStreaming(proposals: final rows) => rows,
+        _ => const [],
+      };
+
+  void _updateProposalRow(
+    String id,
+    ShoppingProposalRow Function(ShoppingProposalRow) update,
+  ) {
+    final rows = [
+      for (final row in _proposalRows)
+        row.proposal.id == id ? update(row) : row,
+    ];
+    final current = state;
+    switch (current) {
+      case ThreadLoaded():
+        state = ThreadLoaded(
+          conversation: current.conversation,
+          events: current.events,
+          records: current.records,
+          proposals: rows,
+          models: current.models,
+          backends: current.backends,
+          selectedModel: current.selectedModel,
+          selectedBackend: current.selectedBackend,
+        );
+      case ThreadStreaming():
+        state = ThreadStreaming(
+          conversation: current.conversation,
+          events: current.events,
+          records: current.records,
+          proposals: rows,
+          models: current.models,
+          backends: current.backends,
+          selectedModel: current.selectedModel,
+          selectedBackend: current.selectedBackend,
+          pendingUserMessage: current.pendingUserMessage,
+          toolProgress: current.toolProgress,
         );
       default:
         break;
@@ -501,6 +616,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: current.conversation,
           events: current.events,
           records: current.records,
+          proposals: current.proposals,
           models: current.models,
           backends: current.backends,
           selectedModel: current.selectedModel,
@@ -511,6 +627,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           conversation: current.conversation,
           events: current.events,
           records: current.records,
+          proposals: current.proposals,
           models: current.models,
           backends: current.backends,
           selectedModel: current.selectedModel,

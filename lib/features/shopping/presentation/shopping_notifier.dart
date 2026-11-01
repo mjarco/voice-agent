@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/models/shopping_proposal.dart';
+import 'package:voice_agent/core/network/shopping_proposals_port.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_models.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_repository.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_state.dart';
@@ -10,13 +12,15 @@ enum ShoppingAddOutcome { added, addedNotShown, alreadyOnList, failed }
 
 class ShoppingNotifier extends StateNotifier<ShoppingState> {
   ShoppingNotifier(
-    this._repository, {
+    this._repository,
+    this._proposals, {
     this.rereadDelay = const Duration(seconds: 4),
   }) : super(const ShoppingLoading()) {
     load();
   }
 
   final ShoppingRepository _repository;
+  final ShoppingProposalsPort _proposals;
 
   /// The server tags in the background, so the list is read once more after a
   /// save, to show the tags. There is no polling.
@@ -39,12 +43,17 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
       final results = await Future.wait([
         _repository.fetchCatalogue(),
         _repository.fetchItems(view, storeType: filter),
+        _readWaiting(),
       ]);
       // A newer read is on its way; this answer is stale.
       if (!mounted || generation != _generation) return;
+      final waiting = results[2] as List<ShoppingProposal>?;
       state = ShoppingLoaded(
         catalogue: results[0] as ShoppingCatalogue,
         items: results[1] as List<ShoppingItem>,
+        proposals: waiting == null
+            ? _proposalRows
+            : ShoppingProposalRow.fromRead(waiting, _proposalRows),
         view: view,
         filter: filter,
       );
@@ -57,6 +66,7 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
         state = ShoppingLoaded(
           catalogue: current.catalogue,
           items: current.items,
+          proposals: current.proposals,
           view: current.view,
           filter: current.filter,
           readError: e.toString(),
@@ -64,6 +74,21 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
       }
     }
   }
+
+  /// The list stands without the proposals, so a failed read does not fail it.
+  /// Null when the read failed, which leaves the cards already shown.
+  Future<List<ShoppingProposal>?> _readWaiting() async {
+    try {
+      return await _proposals.list();
+    } on ShoppingProposalsException {
+      return null;
+    }
+  }
+
+  List<ShoppingProposalRow> get _proposalRows => switch (state) {
+        ShoppingLoaded(proposals: final rows) => rows,
+        _ => const [],
+      };
 
   /// A load from an error, which shows the spinner again.
   Future<void> retry() {
@@ -94,6 +119,7 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
     state = ShoppingLoaded(
       catalogue: current.catalogue,
       items: current.items,
+      proposals: current.proposals,
       view: _view,
       filter: _filter,
       reading: true,
@@ -138,6 +164,42 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
         final item = await _repository.restore(id);
         if (item.isTagging) _scheduleReread();
       });
+
+  /// Answers a proposal from its card. A second tap while one is on its way
+  /// does nothing.
+  Future<void> answerProposal(String id, {required bool accept}) async {
+    final row = _proposalRows.where((r) => r.proposal.id == id).firstOrNull;
+    if (row == null || row.answering) return;
+    _updateProposalRow(id, (r) => r.asAnswering());
+    final answer =
+        accept ? await _proposals.accept(id) : await _proposals.skip(id);
+    if (!mounted) return;
+    _updateProposalRow(id, (r) => r.after(answer));
+    if (!answer.settled) return;
+    await load();
+    // An added item is tagged in the background.
+    if (accept && row.proposal.kind == 'add') _scheduleReread();
+  }
+
+  void _updateProposalRow(
+    String id,
+    ShoppingProposalRow Function(ShoppingProposalRow) update,
+  ) {
+    final current = state;
+    if (current is! ShoppingLoaded) return;
+    state = ShoppingLoaded(
+      catalogue: current.catalogue,
+      items: current.items,
+      proposals: [
+        for (final row in current.proposals)
+          row.proposal.id == id ? update(row) : row,
+      ],
+      view: current.view,
+      filter: current.filter,
+      reading: current.reading,
+      readError: current.readError,
+    );
+  }
 
   Future<bool> _act(Future<void> Function() action) async {
     lastActionError = null;
