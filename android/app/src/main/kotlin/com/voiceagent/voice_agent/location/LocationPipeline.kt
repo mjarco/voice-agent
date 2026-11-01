@@ -120,7 +120,8 @@ object LocationPipeline {
             .getHistoricalProcessExitReasons(context.packageName, 0, 8)
         val seen = config.lastExitSeenAtMs
         config.lastExitSeenAtMs = maxOf(seen, exits.maxOfOrNull { it.timestamp } ?: seen)
-        if (seen == 0L) return
+        // With the log off nothing is written, not even a status.
+        if (seen == 0L || !config.enabled) return
         for (exit in exits.filter { it.timestamp > seen }.sortedBy { it.timestamp }) {
             val reason = when (exit.reason) {
                 ApplicationExitInfo.REASON_USER_REQUESTED -> "user_requested"
