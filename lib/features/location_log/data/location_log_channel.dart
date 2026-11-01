@@ -6,7 +6,7 @@ import 'package:voice_agent/features/location_log/domain/location_log_state.dart
 /// [LocationLogPort] over `com.voiceagent/location_log` (ADR-PLATFORM-005).
 class LocationLogChannel implements LocationLogPort {
   LocationLogChannel({MethodChannel? channel})
-      : _channel = channel ?? const MethodChannel('com.voiceagent/location_log');
+    : _channel = channel ?? const MethodChannel('com.voiceagent/location_log');
 
   final MethodChannel _channel;
 
@@ -31,10 +31,6 @@ class LocationLogChannel implements LocationLogPort {
   @override
   Future<void> setForegroundInterval(int seconds) =>
       _channel.invokeMethod('setForegroundInterval', {'seconds': seconds});
-
-  @override
-  Future<void> setServerOverride(String? url) =>
-      _channel.invokeMethod('setServerOverride', {'url': url});
 
   @override
   Future<void> reconcile() => _channel.invokeMethod('reconcile');

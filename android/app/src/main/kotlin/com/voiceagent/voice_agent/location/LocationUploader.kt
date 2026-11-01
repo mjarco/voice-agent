@@ -30,7 +30,7 @@ class LocationUploader(private val context: Context) {
         val config = LocationConfig(context)
         val batch = store.oldest(BATCH_SIZE)
         if (batch.isEmpty()) return Outcome.DONE
-        val base = config.serverUrl
+        val base = config.apiUrl
         if (base.isNullOrBlank()) return failed(config, "no server URL")
 
         val result = try {

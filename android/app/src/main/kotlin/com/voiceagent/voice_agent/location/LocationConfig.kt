@@ -40,14 +40,6 @@ class LocationConfig(context: Context) {
         get() = prefs.getString("api_url", null)
         set(value) = prefs.edit().putString("api_url", value).apply()
 
-    /** A location-only URL for a device test against a dev personal-agent. */
-    var serverOverride: String?
-        get() = prefs.getString("server_override", null)
-        set(value) = prefs.edit().putString("server_override", value?.takeIf { it.isNotBlank() }).apply()
-
-    val serverUrl: String?
-        get() = serverOverride ?: apiUrl
-
     var token: String?
         get() = prefs.getString("token", null)?.let(::decrypt)
         set(value) = prefs.edit().putString("token", value?.takeIf { it.isNotEmpty() }?.let(::encrypt)).apply()

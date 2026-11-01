@@ -10,9 +10,12 @@ final locationLogPortProvider = Provider<LocationLogPort>((ref) {
 });
 
 /// The log exists on Android only; iOS is outside this stage.
-final locationLogAvailableProvider = Provider<bool>((ref) => Platform.isAndroid);
+final locationLogAvailableProvider = Provider<bool>(
+  (ref) => Platform.isAndroid,
+);
 
-final locationLogStateProvider =
-    FutureProvider.autoDispose<LocationLogState>((ref) {
+final locationLogStateProvider = FutureProvider.autoDispose<LocationLogState>((
+  ref,
+) {
   return ref.watch(locationLogPortProvider).getState();
 });

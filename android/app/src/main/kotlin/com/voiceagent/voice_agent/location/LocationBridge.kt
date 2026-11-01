@@ -37,7 +37,6 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 "lastSentAtMs" to config.lastSentAtMs,
                 "queueLength" to LocationStore.get(context).count(),
                 "lastError" to config.lastError,
-                "serverOverride" to config.serverOverride,
             )
             "setCredentials" -> {
                 config.apiUrl = call.argument<String>("apiUrl")
@@ -63,7 +62,6 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 config.foregroundIntervalSeconds = requireNotNull(call.argument<Int>("seconds"))
                 if (config.enabled) LocationPipeline.reconcile(context, "interval changed")
             }
-            "setServerOverride" -> config.serverOverride = call.argument<String>("url")
             "openAppSettings" -> context.startActivity(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),

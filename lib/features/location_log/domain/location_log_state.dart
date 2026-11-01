@@ -9,13 +9,11 @@ class LocationLogState {
     this.lastReadingAt,
     this.lastSentAt,
     this.lastError,
-    this.serverOverride,
   });
 
   factory LocationLogState.fromMap(Map<Object?, Object?> map) {
-    DateTime? time(Object? ms) => ms is int && ms > 0
-        ? DateTime.fromMillisecondsSinceEpoch(ms)
-        : null;
+    DateTime? time(Object? ms) =>
+        ms is int && ms > 0 ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
     return LocationLogState(
       enabled: map['enabled'] == true,
       mode: LocationLogMode.fromWire(map['mode'] as String?),
@@ -25,7 +23,6 @@ class LocationLogState {
       lastReadingAt: time(map['lastReadingAtMs']),
       lastSentAt: time(map['lastSentAtMs']),
       lastError: map['lastError'] as String?,
-      serverOverride: map['serverOverride'] as String?,
     );
   }
 
@@ -37,7 +34,6 @@ class LocationLogState {
   final DateTime? lastReadingAt;
   final DateTime? lastSentAt;
   final String? lastError;
-  final String? serverOverride;
 }
 
 enum LocationLogMode {
@@ -59,9 +55,9 @@ enum LocationLogPermission {
   always;
 
   static LocationLogPermission fromWire(String? wire) => switch (wire) {
-        'approximate' => approximate,
-        'while_in_use' => whileInUse,
-        'always' => always,
-        _ => none,
-      };
+    'approximate' => approximate,
+    'while_in_use' => whileInUse,
+    'always' => always,
+    _ => none,
+  };
 }

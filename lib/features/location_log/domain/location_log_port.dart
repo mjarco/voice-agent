@@ -8,7 +8,6 @@ abstract class LocationLogPort {
   Future<void> setEnabled(bool enabled);
   Future<void> setMode(LocationLogMode mode);
   Future<void> setForegroundInterval(int seconds);
-  Future<void> setServerOverride(String? url);
   Future<void> reconcile();
   Future<void> openAppSettings();
   Future<void> requestPermissions();

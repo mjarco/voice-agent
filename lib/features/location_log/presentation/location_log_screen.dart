@@ -22,8 +22,6 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
   static const _refreshEvery = Duration(seconds: 5);
 
   Timer? _refresh;
-  final _serverController = TextEditingController();
-  bool _serverLoaded = false;
   String? _error;
 
   LocationLogPort get _port => ref.read(locationLogPortProvider);
@@ -39,7 +37,6 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _refresh?.cancel();
-    _serverController.dispose();
     super.dispose();
   }
 
@@ -61,7 +58,8 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
     _reload();
   }
 
-  Future<void> _setEnabled(bool enabled, LocationLogState state) => _run(() async {
+  Future<void> _setEnabled(bool enabled, LocationLogState state) =>
+      _run(() async {
         if (enabled && state.permission == LocationLogPermission.none) {
           await _port.requestPermissions();
         }
@@ -83,10 +81,6 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
   }
 
   Widget _buildBody(LocationLogState state) {
-    if (!_serverLoaded) {
-      _serverLoaded = true;
-      _serverController.text = state.serverOverride ?? '';
-    }
     return ListView(
       children: [
         SwitchListTile(
@@ -112,7 +106,9 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
               RadioListTile<LocationLogMode>(
                 key: Key('location-log-mode-foreground'),
                 title: Text('Usługa pierwszoplanowa'),
-                subtitle: Text('Tak często, jak chcesz, ze stałym powiadomieniem'),
+                subtitle: Text(
+                  'Tak często, jak chcesz, ze stałym powiadomieniem',
+                ),
                 value: LocationLogMode.foreground,
               ),
             ],
@@ -163,25 +159,11 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
         if (_error != null)
           ListTile(
             key: const Key('location-log-error'),
-            title: Text(_error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ),
-        const Divider(),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: TextField(
-            key: const Key('location-log-server'),
-            controller: _serverController,
-            decoration: const InputDecoration(
-              labelText: 'Inny serwer dziennika (test)',
-              helperText: 'Puste: ten sam co w Ustawieniach',
-              hintText: 'http://laptop.lan:8898/api/v1',
+            title: Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            onSubmitted: (v) => _run(() => _port.setServerOverride(v.trim())),
           ),
-        ),
       ],
     );
   }

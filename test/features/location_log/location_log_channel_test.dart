@@ -24,7 +24,6 @@ void main() {
           'lastReadingAtMs': 1000,
           'lastSentAtMs': 0,
           'lastError': 'HTTP 500',
-          'serverOverride': null,
         };
       }
       return null;
@@ -51,7 +50,6 @@ void main() {
     await port.setEnabled(true);
     await port.setMode(LocationLogMode.background);
     await port.setForegroundInterval(60);
-    await port.setServerOverride('http://laptop.lan:8898/api/v1');
     await port.reconcile();
 
     expect(calls.map((c) => c.method), [
@@ -59,7 +57,6 @@ void main() {
       'setEnabled',
       'setMode',
       'setForegroundInterval',
-      'setServerOverride',
       'reconcile',
     ]);
     expect(calls[0].arguments, {'apiUrl': 'https://x/api/v1', 'token': 't'});

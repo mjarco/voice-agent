@@ -40,9 +40,13 @@ may end before a Flutter engine could start, and Kotlin cannot start a
 7. **Credentials.** The pipeline cannot read `flutter_secure_storage`, so Dart
    hands it the URL and token at each start and change, and the token is stored
    under an Android Keystore key (ADR-DATA-004).
-8. **Cleartext for the home host only.** `HttpURLConnection` obeys the network
-   security config, unlike Dart's stack. `laptop.lan` is allowed, so a device test
-   can reach a dev personal-agent, set by a location-only server field in Settings.
+8. **No cleartext.** `HttpURLConnection` obeys Android's default refusal of
+   cleartext, unlike Dart's stack, so the log needs an HTTPS server. It uses the
+   URL from Settings, like transcripts. The device test against a dev personal-agent
+   ran on a build with a test field and a cleartext rule for `laptop.lan`; both were
+   removed before shipping, on the owner's decision. A new run needs them
+   brought back on a local build, from the tag
+   `off-roadmap/2026-11-01-location-log/D8`.
 
 ## Consequences
 

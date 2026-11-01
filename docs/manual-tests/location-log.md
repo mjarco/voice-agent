@@ -41,9 +41,10 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 **Status:** passed (2026-11-01, Pixel, Android 17): 1.10.0+23, stable flavor, location "always"
 
 **Do:**
-1. `make install-android`.
-2. In Settings → Dziennik lokalizacji, set the server to `http://laptop.lan:8898/api/v1` and confirm with the keyboard.
-3. Grant location "all the time".
+1. The shipped build has no way to reach a dev personal-agent (ADR-PLATFORM-009 item 8). On a local build, bring back the cleartext rule and the server field, as tested in 1.10.0+23.
+2. `make install-android`.
+3. In Settings → Dziennik lokalizacji, set the server to `http://laptop.lan:8898/api/v1` and confirm with the keyboard.
+4. Grant location "all the time".
 
 ---
 

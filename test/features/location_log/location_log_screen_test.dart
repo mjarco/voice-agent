@@ -17,15 +17,14 @@ class _FakePort implements LocationLogPort {
   @override
   Future<void> setCredentials({String? apiUrl, String? token}) async {}
   @override
-  Future<void> setEnabled(bool enabled) async => calls.add('setEnabled:$enabled');
+  Future<void> setEnabled(bool enabled) async =>
+      calls.add('setEnabled:$enabled');
   @override
   Future<void> setMode(LocationLogMode mode) async =>
       calls.add('setMode:${mode.wire}');
   @override
   Future<void> setForegroundInterval(int seconds) async =>
       calls.add('interval:$seconds');
-  @override
-  Future<void> setServerOverride(String? url) async => calls.add('server:$url');
   @override
   Future<void> reconcile() async {}
   @override
@@ -40,35 +39,39 @@ LocationLogState _state({
   LocationLogPermission permission = LocationLogPermission.always,
   int queue = 0,
   String? lastError,
-}) =>
-    LocationLogState(
-      enabled: enabled,
-      mode: mode,
-      foregroundIntervalSeconds: 30,
-      permission: permission,
-      queueLength: queue,
-      lastError: lastError,
-    );
+}) => LocationLogState(
+  enabled: enabled,
+  mode: mode,
+  foregroundIntervalSeconds: 30,
+  permission: permission,
+  queueLength: queue,
+  lastError: lastError,
+);
 
 Future<void> _pump(WidgetTester tester, _FakePort port) async {
-  await tester.pumpWidget(ProviderScope(
-    overrides: [locationLogPortProvider.overrideWithValue(port)],
-    child: const MaterialApp(home: LocationLogScreen()),
-  ));
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [locationLogPortProvider.overrideWithValue(port)],
+      child: const MaterialApp(home: LocationLogScreen()),
+    ),
+  );
   await tester.pump();
   await tester.pump();
 }
 
 void main() {
-  testWidgets('shows the state: permission, queue and the last error',
-      (tester) async {
+  testWidgets('shows the state: permission, queue and the last error', (
+    tester,
+  ) async {
     await _pump(
       tester,
-      _FakePort(_state(
-        permission: LocationLogPermission.whileInUse,
-        queue: 7,
-        lastError: 'HTTP 503',
-      )),
+      _FakePort(
+        _state(
+          permission: LocationLogPermission.whileInUse,
+          queue: 7,
+          lastError: 'HTTP 503',
+        ),
+      ),
     );
     expect(find.text('Uprawnienie: tylko podczas używania'), findsOneWidget);
     expect(find.textContaining('W kolejce: 7'), findsOneWidget);
@@ -95,20 +98,22 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('the mode can be changed; the interval shows in foreground only',
-      (tester) async {
-    final port = _FakePort(_state());
-    await _pump(tester, port);
-    expect(find.byKey(const Key('location-log-interval')), findsNothing);
+  testWidgets(
+    'the mode can be changed; the interval shows in foreground only',
+    (tester) async {
+      final port = _FakePort(_state());
+      await _pump(tester, port);
+      expect(find.byKey(const Key('location-log-interval')), findsNothing);
 
-    // What the native side reports once the mode is set.
-    port.state = _state(mode: LocationLogMode.foreground);
-    await tester.tap(find.byKey(const Key('location-log-mode-foreground')));
-    await tester.pump();
-    await tester.pump();
-    await tester.pump();
-    expect(port.calls, ['setMode:foreground']);
-    expect(find.byKey(const Key('location-log-interval')), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
+      // What the native side reports once the mode is set.
+      port.state = _state(mode: LocationLogMode.foreground);
+      await tester.tap(find.byKey(const Key('location-log-mode-foreground')));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(port.calls, ['setMode:foreground']);
+      expect(find.byKey(const Key('location-log-interval')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }
