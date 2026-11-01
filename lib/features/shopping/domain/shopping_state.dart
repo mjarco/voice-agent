@@ -17,6 +17,8 @@ class ShoppingLoaded extends ShoppingState {
     required this.items,
     required this.view,
     this.filter,
+    this.reading = false,
+    this.readError,
   });
 
   final ShoppingCatalogue catalogue;
@@ -25,6 +27,14 @@ class ShoppingLoaded extends ShoppingState {
 
   /// A store type id; null for all.
   final String? filter;
+
+  /// [items] belong to the previous selection and its list is being read, so
+  /// they are not shown.
+  final bool reading;
+
+  /// The read of a new selection failed; [items] still belong to the previous
+  /// one and are not shown.
+  final String? readError;
 }
 
 class ShoppingError extends ShoppingState {

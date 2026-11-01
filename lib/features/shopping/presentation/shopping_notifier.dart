@@ -28,8 +28,9 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
   Timer? _reread;
   String? lastActionError;
 
-  /// Reads the catalogue and the list. Once a list is showing it stays until
-  /// the new one arrives, and a failed read leaves it in place.
+  /// Reads the catalogue and the list. A list of the current selection stays
+  /// until the new one arrives, and a failed read leaves it in place; a failed
+  /// read of a new selection says so.
   Future<void> load() async {
     final generation = ++_generation;
     final view = _view;
@@ -49,15 +50,28 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
       );
     } catch (e) {
       if (!mounted || generation != _generation) return;
-      if (state is! ShoppingLoaded) {
+      final current = state;
+      if (current is! ShoppingLoaded) {
         state = ShoppingError(message: e.toString());
+      } else if (current.reading) {
+        state = ShoppingLoaded(
+          catalogue: current.catalogue,
+          items: current.items,
+          view: current.view,
+          filter: current.filter,
+          readError: e.toString(),
+        );
       }
     }
   }
 
-  /// A load from the error screen, which shows the spinner again.
+  /// A load from an error, which shows the spinner again.
   Future<void> retry() {
-    state = const ShoppingLoading();
+    if (state is ShoppingLoaded) {
+      _showSelection();
+    } else {
+      state = const ShoppingLoading();
+    }
     return load();
   }
 
@@ -82,6 +96,7 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
       items: current.items,
       view: _view,
       filter: _filter,
+      reading: true,
     );
   }
 
@@ -132,6 +147,9 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
       return true;
     } on ShoppingException catch (e) {
       lastActionError = e.message;
+      // The list may be out of date, which is why the action failed. The
+      // screen says so without waiting for the read.
+      unawaited(load());
       return false;
     }
   }

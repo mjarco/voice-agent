@@ -63,6 +63,39 @@ void main() {
     expect(repository.lastStoreType, 'electrical');
   });
 
+  test('a new selection does not pass the old list off as its own', () async {
+    final notifier = await create();
+    addTearDown(notifier.dispose);
+
+    final read = notifier.selectView(ShoppingView.bought);
+    expect((notifier.state as ShoppingLoaded).reading, isTrue);
+    await read;
+
+    final state = notifier.state as ShoppingLoaded;
+    expect(state.reading, isFalse);
+    expect(state.items, isEmpty);
+  });
+
+  test('a failed read of a new selection says so, Retry reads it', () async {
+    final notifier = await create();
+    addTearDown(notifier.dispose);
+    repository.nextReadError = ShoppingGeneralException('no route');
+
+    await notifier.selectView(ShoppingView.bought);
+
+    var state = notifier.state as ShoppingLoaded;
+    expect(state.view, ShoppingView.bought);
+    expect(state.reading, isFalse);
+    expect(state.readError, contains('no route'));
+
+    repository.nextReadError = null;
+    await notifier.retry();
+
+    state = notifier.state as ShoppingLoaded;
+    expect(state.readError, isNull);
+    expect(repository.lastView, ShoppingView.bought);
+  });
+
   test('a stale answer does not overwrite a newer selection', () async {
     final notifier = await create();
     addTearDown(notifier.dispose);
@@ -170,6 +203,20 @@ void main() {
 
     expect(await notifier.markBought('i1'), isFalse);
 
+    expect(notifier.lastActionError, 'This item was removed');
+  });
+
+  test('a failed action reads the list again', () async {
+    final notifier = await create();
+    addTearDown(notifier.dispose);
+    repository
+      ..toBuy = []
+      ..nextWriteError = ShoppingConflictException();
+
+    expect(await notifier.markBought('i1'), isFalse);
+    await pumpEventQueue();
+
+    expect((notifier.state as ShoppingLoaded).items, isEmpty);
     expect(notifier.lastActionError, 'This item was removed');
   });
 

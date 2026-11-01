@@ -52,6 +52,26 @@ void main() {
     expect(find.text('tagging…'), findsOneWidget);
   });
 
+  testWidgets('an item bought untagged shows its date', (tester) async {
+    final repo = FakeShoppingRepository()
+      ..bought = [
+        sampleItem(
+          id: 'b1',
+          state: 'bought',
+          storeTypes: [],
+          typesSource: null,
+          boughtAt: DateTime(2026, 10, 31),
+        ),
+      ];
+    await _pump(tester, repo);
+
+    await tester.tap(find.text('Bought'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('tagging…'), findsNothing);
+    expect(find.text('Inne · bought 31.10'), findsOneWidget);
+  });
+
   testWidgets('a failed tag shows under other', (tester) async {
     final repo = FakeShoppingRepository()
       ..toBuy = [sampleItem(storeTypes: [], typesSource: 'failed')];
@@ -181,6 +201,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.lastRestoredId, 'b1');
+  });
+
+  testWidgets('a failed read of Bought hides the list, Retry reads it',
+      (tester) async {
+    final repo = FakeShoppingRepository();
+    await _pump(tester, repo);
+
+    repo.nextReadError = ShoppingGeneralException('no route');
+    await tester.tap(find.text('Bought'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('kabel HDMI'), findsNothing);
+    expect(find.text('no route'), findsOneWidget);
+
+    repo.nextReadError = null;
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nothing bought in the last 7 days.'), findsOneWidget);
   });
 
   testWidgets('the first read failing offers Retry', (tester) async {

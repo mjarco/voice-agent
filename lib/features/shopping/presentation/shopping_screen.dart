@@ -190,24 +190,28 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     final notifier = ref.read(shoppingNotifierProvider.notifier);
     return switch (state) {
       ShoppingLoading() => const Center(child: CircularProgressIndicator()),
-      ShoppingError(message: final message) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(message, textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: notifier.retry,
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
+      ShoppingError(message: final message) => _buildError(message, notifier),
       ShoppingLoaded() => _buildLoaded(state, notifier),
     };
+  }
+
+  Widget _buildError(String message, ShoppingNotifier notifier) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: notifier.retry,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildLoaded(ShoppingLoaded state, ShoppingNotifier notifier) {
@@ -249,36 +253,43 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
               ),
           ],
         ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: notifier.load,
-            child: state.items.isEmpty
-                ? ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Text(
-                          toBuy
-                              ? 'Nothing to buy.'
-                              : 'Nothing bought in the last 7 days.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ],
-                  )
-                : ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    itemCount: state.items.length,
-                    itemBuilder: (context, index) => _buildItem(
-                      state.items[index],
-                      state.catalogue,
-                      notifier,
-                    ),
-                  ),
-          ),
-        ),
+        Expanded(child: _buildList(state, notifier)),
       ],
+    );
+  }
+
+  Widget _buildList(ShoppingLoaded state, ShoppingNotifier notifier) {
+    final readError = state.readError;
+    if (readError != null) return _buildError(readError, notifier);
+    if (state.reading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return RefreshIndicator(
+      onRefresh: notifier.load,
+      child: state.items.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Text(
+                    state.view == ShoppingView.toBuy
+                        ? 'Nothing to buy.'
+                        : 'Nothing bought in the last 7 days.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            )
+          : ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: state.items.length,
+              itemBuilder: (context, index) => _buildItem(
+                state.items[index],
+                state.catalogue,
+                notifier,
+              ),
+            ),
     );
   }
 

@@ -67,7 +67,9 @@ class ShoppingItem {
   final String? typesSource;
   final DateTime? boughtAt;
 
-  bool get isTagging => typesSource == null && storeTypes.isEmpty;
+  /// The server tags items to buy only, so a bought item is never tagged.
+  bool get isTagging =>
+      state == 'to_buy' && typesSource == null && storeTypes.isEmpty;
 }
 
 /// The saved item, and whether the save created it: an active text returns the
