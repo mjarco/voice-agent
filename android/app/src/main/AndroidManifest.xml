@@ -13,6 +13,11 @@
          apps under Play's policy (P040 §Permission Flow). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- The location log (ADR-PLATFORM-009). -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
@@ -59,6 +64,24 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
                 <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+        <!-- The location log (ADR-PLATFORM-009): its own service, because the
+             hands-free one above stops with the session and, being microphone
+             typed, cannot start at boot. -->
+        <service
+            android:name=".location.LocationForegroundService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
+        <receiver
+            android:name=".location.LocationUpdateReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".location.LocationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
             </intent-filter>
         </receiver>
         <!-- Don't delete the meta-data below.

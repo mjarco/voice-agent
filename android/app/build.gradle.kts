@@ -56,6 +56,8 @@ android {
 
 dependencies {
     implementation("androidx.media:media:1.7.0")
+    implementation("androidx.work:work-runtime:2.11.2")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
