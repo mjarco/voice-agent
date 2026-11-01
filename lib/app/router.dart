@@ -15,7 +15,6 @@ import 'package:voice_agent/features/debug/notifications_debug_screen.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_screen.dart';
-import 'package:voice_agent/features/usage/presentation/usage_screen.dart';
 
 GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
   initialLocation: initialLocation,
@@ -149,10 +148,6 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
         GoRoute(
           path: 'advanced',
           builder: (context, state) => const AdvancedSettingsScreen(),
-        ),
-        GoRoute(
-          path: 'usage',
-          builder: (context, state) => const UsageScreen(),
         ),
         // P040 test-infra: debug screen for inspecting the in-memory
         // notification snapshot + firing a pending notification in 2 s.
