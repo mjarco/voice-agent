@@ -15,15 +15,15 @@ user's own API endpoint.
 ## Workflow
 
 The development workflow — GitHub-issue ledger, derived states, the three
-owner gates, branch/PR/merge rules, ADR rules, frozen proposals — is defined
+owner gates, branch/PR/merge rules, ADR rules — is defined
 once for all projects in the workspace root CLAUDE.md (one directory up).
 This file covers only what is specific to this project.
 
 ### Docs Map
 
-- `docs/proposals/` — a **frozen, read-only design-history library**. Consult
-  it for context (`trove search` works); never add or edit files there. Citing
-  proposal numbers (`Pnnn`, `0nn`) in code comments, PRs, and docs is fine.
+- Design history (`Pnnn`, `0nn`) was deleted; read it from the tag:
+  `git grep <term> pre-base-cut -- docs/proposals`. Citing the numbers in code
+  comments, PRs, and docs is fine.
 - `docs/decisions/` — ADRs (see Architecture Decision Records below).
 - `docs/manual-tests/` — device verification runbooks (see Manual Test Plans).
 - `docs/spikes/` — exploratory notes.
@@ -339,7 +339,7 @@ device builds share a version, only the version is tagged.
 
 ### Versions vs. design docs
 
-Design-doc numbers (`Pnnn`, `0nn`, from the frozen `docs/proposals/` library)
+Design-doc numbers (`Pnnn`, `0nn`, from the deleted proposal library)
 track *design*; the version tracks the *shipped app*. They are not 1:1 — a
 single release may land several design slices, and one design may ship across
 several releases. Reference the design doc or issue in the commit/PR;
@@ -379,7 +379,7 @@ with the current Android CLI; Gradle downloads missing platforms itself.
 ### Feature Implementation Order
 
 Before changing an area, read the existing code (and any related design docs
-in the frozen `docs/proposals/` library). Understand patterns before changing
+at the tag `pre-base-cut`). Understand patterns before changing
 them. Then build in this order:
 
 1. Start with domain types/interfaces if they don't exist yet.
@@ -511,7 +511,7 @@ gh pr create --body "Summary of changes"
 ## Cross-Feature Contracts
 
 These are the key integration points between features. The numbers cite the
-frozen design-history library in `docs/proposals/`. When modifying code near
+design history at the tag `pre-base-cut`. When modifying code near
 these boundaries, verify both sides match.
 
 ### Audio Format Contract (001 → 002)
