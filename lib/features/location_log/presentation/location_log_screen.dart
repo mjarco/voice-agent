@@ -46,7 +46,9 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
     if (state == AppLifecycleState.resumed) _reload();
   }
 
-  void _reload() => ref.invalidate(locationLogStateProvider);
+  void _reload() {
+    if (mounted) ref.invalidate(locationLogStateProvider);
+  }
 
   Future<void> _run(Future<void> Function() action) async {
     try {

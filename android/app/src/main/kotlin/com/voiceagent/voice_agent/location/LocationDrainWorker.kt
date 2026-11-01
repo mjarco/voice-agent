@@ -15,7 +15,8 @@ class LocationDrainWorker(context: Context, params: WorkerParameters) : Worker(c
             when (uploader.sendBatch()) {
                 LocationUploader.Outcome.DONE -> return Result.success()
                 LocationUploader.Outcome.MORE -> Unit
-                LocationUploader.Outcome.FAILED -> return Result.retry()
+                // A live send holds the queue; come back after the backoff.
+                LocationUploader.Outcome.BUSY, LocationUploader.Outcome.FAILED -> return Result.retry()
             }
         }
         return Result.retry()

@@ -29,11 +29,14 @@ class LocationForegroundService : Service() {
         override fun onLocationResult(result: LocationResult) {
             val appContext = applicationContext
             val locations = result.locations
-            LocationPipeline.executor.execute {
+            LocationPipeline.write(appContext) {
                 val config = LocationConfig(appContext)
-                LocationPipeline.recordChanges(appContext, config)
-                LocationPipeline.recordReadings(appContext, locations, config)
-                LocationPipeline.sendNow(appContext)
+                // A last reading can arrive after the switch went off.
+                if (config.enabled) {
+                    LocationPipeline.recordChanges(appContext, config)
+                    LocationPipeline.recordReadings(appContext, locations, config)
+                    LocationPipeline.sendNow(appContext)
+                }
             }
         }
     }
@@ -51,7 +54,7 @@ class LocationForegroundService : Service() {
             subscribe()
         } catch (failure: RuntimeException) {
             val appContext = applicationContext
-            LocationPipeline.executor.execute {
+            LocationPipeline.write(appContext) {
                 LocationPipeline.recordStatus(appContext, "subscribe_failed", failure.toString())
             }
             stopSelf()
@@ -68,7 +71,13 @@ class LocationForegroundService : Service() {
             Priority.PRIORITY_HIGH_ACCURACY,
             config.foregroundIntervalSeconds * 1000L,
         ).build()
+        val appContext = applicationContext
         fused.requestLocationUpdates(request, callback, Looper.getMainLooper())
+            .addOnFailureListener { failure ->
+                LocationPipeline.write(appContext) {
+                    LocationPipeline.recordStatus(appContext, "subscribe_failed", failure.toString())
+                }
+            }
     }
 
     override fun onDestroy() {

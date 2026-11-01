@@ -15,13 +15,9 @@ class LocationBootReceiver : BroadcastReceiver() {
             else -> return
         }
         val pending = goAsync()
-        LocationPipeline.executor.execute {
-            try {
-                if (LocationConfig(appContext).enabled) LocationPipeline.recordStatus(appContext, reason)
-                LocationPipeline.reconcile(appContext, reason)
-            } finally {
-                pending.finish()
-            }
+        LocationPipeline.write(appContext, done = { pending.finish() }) {
+            if (LocationConfig(appContext).enabled) LocationPipeline.recordStatus(appContext, reason)
+            LocationPipeline.reconcile(appContext, reason)
         }
     }
 

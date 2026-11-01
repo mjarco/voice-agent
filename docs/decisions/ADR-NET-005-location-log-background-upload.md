@@ -22,6 +22,10 @@ Location rows, and nothing else, may be sent while the app is in the background:
    directly, in Kotlin, not the `workmanager` plugin.
 3. A send is repeatable: every row has a client-made id, and the server keeps the
    first. Rows refused for good leave the queue, with a status row saying so.
+4. Rows leave the queue only on a reply that accounts for all of them, and
+   redirects are not followed, so a 200 from something else empties nothing.
+5. Writes and sends run on separate threads, so a hung server never holds a
+   reading in memory unwritten.
 
 `SyncWorker`, the transcript queue and the transcript contract are not affected:
 this path posts one route, from its own store. The restructuring ADR-NET-002 asks

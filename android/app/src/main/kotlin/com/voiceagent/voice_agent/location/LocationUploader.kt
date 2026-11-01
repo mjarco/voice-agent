@@ -14,10 +14,10 @@ import org.json.JSONObject
  * own id. Never touches the transcript sync queue.
  */
 class LocationUploader(private val context: Context) {
-    enum class Outcome { DONE, MORE, FAILED }
+    enum class Outcome { DONE, MORE, BUSY, FAILED }
 
     fun sendBatch(): Outcome {
-        if (!lock.tryLock()) return Outcome.MORE
+        if (!lock.tryLock()) return Outcome.BUSY
         try {
             return send()
         } finally {
@@ -40,19 +40,29 @@ class LocationUploader(private val context: Context) {
         }
         if (result.first !in 200..299) return failed(config, "HTTP ${result.first}")
 
+        val rejected = answered(result.second, batch.size)
+            ?: return failed(config, "a reply that does not account for the batch")
+
         store.delete(batch.map { it.id })
         config.lastSentAtMs = System.currentTimeMillis()
         config.lastError = null
-        val rejected = try {
-            JSONObject(result.second).optJSONObject("data")?.optJSONArray("rejected")?.length() ?: 0
-        } catch (_: Exception) {
-            0
-        }
         if (rejected > 0) {
             // Refused for good: kept out of the queue, and the log says so.
             LocationPipeline.recordStatus(context, "rejected", "$rejected rows refused by the server")
         }
         return if (store.count() > 0) Outcome.MORE else Outcome.DONE
+    }
+
+    /**
+     * The rows refused, or null unless the reply accounts for every row sent.
+     * A 200 from something other than personal-agent must not empty the queue.
+     */
+    private fun answered(body: String, sent: Int): Int? = try {
+        val data = JSONObject(body).getJSONObject("data")
+        val rejected = data.getJSONArray("rejected").length()
+        if (data.getInt("accepted") + data.getInt("duplicates") + rejected == sent) rejected else null
+    } catch (_: Exception) {
+        null
     }
 
     private fun failed(config: LocationConfig, reason: String): Outcome {
@@ -65,6 +75,8 @@ class LocationUploader(private val context: Context) {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
+            // A redirect would turn this POST into a GET, and its 200 into a false yes.
+            connection.instanceFollowRedirects = false
             connection.connectTimeout = TIMEOUT_MS
             connection.readTimeout = TIMEOUT_MS
             connection.doOutput = true

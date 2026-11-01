@@ -24,6 +24,7 @@ import com.google.android.gms.location.Priority
 import java.time.Instant
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
 /**
@@ -32,12 +33,17 @@ import org.json.JSONObject
  * background wake-up may end before an engine could start.
  */
 object LocationPipeline {
-    /** One thread, so a write and a send never race for the same rows. */
+    /** One thread for writes and Settings, so a slow server never delays a reading. */
     val executor = Executors.newSingleThreadExecutor()
+
+    /** One thread for live sends. A send only reads the rows it posts, then deletes them. */
+    private val sender = Executors.newSingleThreadExecutor()
+    private val sending = AtomicBoolean(false)
 
     private const val DRAIN_WORK = "location-log-drain"
     private const val UPDATES_REQUEST_CODE = 4101
     private const val FASTEST_BACKGROUND_INTERVAL_MS = 60_000L
+    private const val MAX_DETAIL_LENGTH = 500
 
     fun updatesIntent(context: Context, flags: Int): PendingIntent? {
         val intent = Intent(context, LocationUpdateReceiver::class.java).setAction(LocationUpdateReceiver.ACTION)
@@ -61,7 +67,8 @@ object LocationPipeline {
             .put("kind", "status")
             .put("recorded_at", Instant.now().toString())
             .put("status", status)
-        detail?.let { payload.put("detail", it) }
+        // The server refuses a longer one, and a refused row is gone.
+        detail?.let { payload.put("detail", it.take(MAX_DETAIL_LENGTH)) }
         LocationStore.get(context).enqueue(payload)
     }
 
@@ -210,9 +217,49 @@ object LocationPipeline {
         if (LocationStore.get(context).count() > 0) scheduleDrain(context)
     }
 
-    /** One live attempt; whatever it leaves goes to the worker, which waits for a network. */
-    fun sendNow(context: Context) {
-        val outcome = LocationUploader(context).sendBatch()
-        if (outcome != LocationUploader.Outcome.DONE) scheduleDrain(context)
+    /**
+     * Writes on the pipeline's thread. An exception must not reach the thread's
+     * top, or it would end the whole process, a hands-free session with it.
+     */
+    fun write(context: Context, done: () -> Unit = {}, block: () -> Unit) {
+        executor.execute {
+            try {
+                block()
+            } catch (failure: Exception) {
+                note(context, failure)
+            } finally {
+                done()
+            }
+        }
+    }
+
+    /**
+     * One live attempt off the write thread; whatever it leaves goes to the
+     * worker, which waits for a network. While a send runs, a second is not
+     * queued behind it: the worker takes what the first leaves.
+     */
+    fun sendNow(context: Context, done: () -> Unit = {}) {
+        if (!sending.compareAndSet(false, true)) {
+            done()
+            return
+        }
+        sender.execute {
+            try {
+                if (LocationUploader(context).sendBatch() != LocationUploader.Outcome.DONE) scheduleDrain(context)
+            } catch (failure: Exception) {
+                note(context, failure)
+            } finally {
+                sending.set(false)
+                done()
+            }
+        }
+    }
+
+    private fun note(context: Context, failure: Exception) {
+        try {
+            LocationConfig(context).lastError = "${Instant.now()}: $failure"
+        } catch (_: Exception) {
+            // Nothing is left to tell it to; the process must still live.
+        }
     }
 }

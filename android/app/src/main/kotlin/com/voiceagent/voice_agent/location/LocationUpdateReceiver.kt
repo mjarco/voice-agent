@@ -11,16 +11,15 @@ class LocationUpdateReceiver : BroadcastReceiver() {
         val result = LocationResult.extractResult(intent) ?: return
         val appContext = context.applicationContext
         val pending = goAsync()
-        LocationPipeline.executor.execute {
-            try {
-                val config = LocationConfig(appContext)
-                if (config.enabled) {
-                    LocationPipeline.recordChanges(appContext, config)
-                    LocationPipeline.recordReadings(appContext, result.locations, config)
-                    LocationPipeline.sendNow(appContext)
-                }
-            } finally {
-                pending.finish()
+        var sending = false
+        LocationPipeline.write(appContext, done = { if (!sending) pending.finish() }) {
+            val config = LocationConfig(appContext)
+            if (config.enabled) {
+                LocationPipeline.recordChanges(appContext, config)
+                LocationPipeline.recordReadings(appContext, result.locations, config)
+                // The wake-up must outlive the send, or the process may go first.
+                sending = true
+                LocationPipeline.sendNow(appContext) { pending.finish() }
             }
         }
     }

@@ -48,6 +48,9 @@ may end before a Flutter engine could start, and Kotlin cannot start a
    brought back on a local build, from the tag
    `off-roadmap/2026-11-01-location-log/D8`.
 
+9. **Off the phone's backup.** The queue and the pipeline's settings are excluded
+   from Auto Backup and device transfer; the rest of the app keeps its default.
+
 ## Consequences
 
 - Android only. `play-services-location` enters the dependency tree, and iOS would
