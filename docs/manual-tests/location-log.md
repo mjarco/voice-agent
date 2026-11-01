@@ -1,7 +1,7 @@
 # Manual test: the location log
 
 **Design:** [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); personal-agent ADR-API-107.
-**Overall status:** **passed** (2026-11-01, Pixel, Android 17, 1.10.0+23)
+**Overall status:** **passed** (2026-11-01, Pixel, Android 17, 1.10.0+23 on dev personal-agent; 1.10.0+24 on production, T10)
 **Why now:** subscriptions, permissions, wake-ups, reboots and network loss exist only on a device.
 **Time budget:** ~30 min, Pixel, stable flavor, against a dev personal-agent.
 **What we are testing:** that readings reach personal-agent, that a lost network loses nothing and duplicates nothing, and that collection survives a reboot.
@@ -25,6 +25,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T7 | Delete-all | passed (2026-11-01, Pixel, Android 17) |
 | T8 | Hands-free session ending leaves foreground mode running | passed (2026-11-01, Pixel, Android 17) |
 | T9 | Task Manager Stop is recorded on the next start | passed (2026-11-01, Pixel, Android 17), by `am force-stop` |
+| T10 | The shipped build against production | passed (2026-11-01, Pixel, Android 17), 1.10.0+24 |
 
 ---
 
@@ -151,6 +152,26 @@ Row counts: `curl -s localhost:8898/api/v1/location/entries?limit=1`, field `tot
 **Why:** ADR-PLATFORM-009 item 5.
 
 **Expected:** a `process_exit` row with `user_requested`, then `subscribed` with `app_start`.
+
+---
+
+### T10 — The shipped build against production (~10 min)
+
+**Status:** passed (2026-11-01, Pixel, Android 17): 1.10.0+24 over HTTPS to `agent.jarco.casa`. Foreground every 10 s: readings arrived about every 10 s with `start` and `subscribed` rows. A 120 s network cut with its restore: 12 late rows kept their own time, the longest delay 121 s, 23 rows and 23 distinct ids. A switch to background mode stopped the service and its notification and wrote a `subscribed` row. The Location view on production showed the day and 27 rows with no script error. Not rerun on this build: T4 to T9; their code changed only through the review fixes, and the failure paths of those fixes (a redirect, a hung server) were not provoked.
+
+**Do:**
+1. `make install-android`; check that Settings holds the production URL.
+2. In Settings → Dziennik lokalizacji, choose the foreground service, every 10 s, and turn the switch on.
+3. Cut the network with its restore: `adb shell "nohup sh -c 'cmd connectivity airplane-mode enable; sleep 120; cmd connectivity airplane-mode disable' >/dev/null 2>&1 &"`.
+4. Two minutes after the restore, count the rows in the production database, read-only: `sqlite3 -readonly ~/personal-agent/data/personal-agent.db "SELECT COUNT(*), COUNT(DISTINCT id) FROM location_log"`.
+5. Switch to background mode and wait for a reading.
+6. Open the Location view on production.
+
+**Why:** ADR-PLATFORM-009 item 8: this build reaches only the production URL, so the cases above cannot run on it against a dev personal-agent.
+
+**Expected:** the counts match; rows from the gap keep their own `recorded_at`; the notification goes with the switch to background mode.
+
+**On failure:** `lastError` in Settings. Hold the app's merge; delete-all removes the rows of the run.
 
 ---
 
