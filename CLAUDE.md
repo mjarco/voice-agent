@@ -97,6 +97,7 @@ lib/
     storage/                # StorageService interface + SQLite implementation
     network/                # ApiClient, ConnectivityService
     providers/              # Shared providers (apiUrlConfiguredProvider, etc.)
+    widgets/                # Widgets two features show (ShoppingProposalCard)
   main.dart                 # Entry point
 ```
 

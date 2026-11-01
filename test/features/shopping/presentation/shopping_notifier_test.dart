@@ -1,20 +1,26 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_models.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_repository.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_state.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_notifier.dart';
 
+import '../../../core/network/fake_shopping_proposals.dart';
 import '../fake_shopping_repository.dart';
 
 void main() {
   late FakeShoppingRepository repository;
+  late FakeShoppingProposals proposals;
 
-  setUp(() => repository = FakeShoppingRepository());
+  setUp(() {
+    repository = FakeShoppingRepository();
+    proposals = FakeShoppingProposals();
+  });
 
   Future<ShoppingNotifier> create({
     Duration delay = const Duration(hours: 1),
   }) async {
-    final notifier = ShoppingNotifier(repository, rereadDelay: delay);
+    final notifier = ShoppingNotifier(repository, proposals, rereadDelay: delay);
     await notifier.load();
     return notifier;
   }
@@ -230,5 +236,68 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 30));
 
     expect(repository.reads, reads + 2);
+  });
+
+  group('proposals', () {
+    List<ShoppingProposalRow> rows(ShoppingNotifier notifier) =>
+        (notifier.state as ShoppingLoaded).proposals;
+
+    setUp(() => proposals.rows = [sampleProposal()]);
+
+    test('the waiting ones are read with the list', () async {
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+
+      expect(proposals.lastConversationId, isNull);
+      expect(rows(notifier).single.proposal.id, 'p1');
+    });
+
+    test('a failed read leaves the list and the cards shown', () async {
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+
+      proposals.failReads = true;
+      await notifier.load();
+
+      expect((notifier.state as ShoppingLoaded).items, isNotEmpty);
+      expect(rows(notifier).single.proposal.id, 'p1');
+    });
+
+    test('an answer reads the list again and the card goes', () async {
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+      final reads = repository.reads;
+      proposals.onAnswer = () => proposals.rows = [];
+
+      await notifier.answerProposal('p1', accept: false);
+
+      expect(proposals.skipped, ['p1']);
+      expect(repository.reads, reads + 1);
+      expect(rows(notifier), isEmpty);
+    });
+
+    test('an added item is read once more for its tags', () async {
+      final notifier = await create(delay: const Duration(milliseconds: 10));
+      addTearDown(notifier.dispose);
+      final reads = repository.reads;
+
+      await notifier.answerProposal('p1', accept: true);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(repository.reads, reads + 2);
+    });
+
+    test('an item gone stays on a read, with only skip', () async {
+      proposals.nextAnswer = const ProposalItemRemoved();
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+
+      await notifier.answerProposal('p1', accept: true);
+      await notifier.load();
+
+      final row = rows(notifier).single;
+      expect(row.canAccept, isFalse);
+      expect(row.note, isNotNull);
+    });
   });
 }

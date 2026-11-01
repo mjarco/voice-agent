@@ -13,6 +13,9 @@ import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
+import 'package:voice_agent/core/network/shopping_proposals_port.dart';
+
+import '../../core/network/fake_shopping_proposals.dart';
 
 /// Regression test for the pin -> source-conversation navigation.
 ///
@@ -120,6 +123,8 @@ void main() {
             pinsRepositoryProvider.overrideWithValue(_StubPinsRepository()),
             chatRepositoryProvider.overrideWithValue(_StubChatRepository()),
             pinWriterProvider.overrideWithValue(_NoopPinWriter()),
+            shoppingProposalsPortProvider
+                .overrideWithValue(FakeShoppingProposals()),
           ],
           child: MaterialApp.router(
             routerConfig: createRouter(initialLocation: '/pins/abc'),

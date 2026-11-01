@@ -23,6 +23,7 @@ import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
+import 'package:voice_agent/core/network/shopping_proposals_port.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
@@ -35,7 +36,10 @@ import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
+import 'package:voice_agent/features/shopping/presentation/shopping_providers.dart';
 
+import '../core/network/fake_shopping_proposals.dart';
+import '../features/shopping/fake_shopping_repository.dart';
 import '../helpers/stub_background_service.dart';
 import '../helpers/stub_media_button.dart';
 import '../helpers/stub_session_control.dart';
@@ -210,6 +214,33 @@ void main() {
     of: find.byType(NavigationBar),
     matching: find.byIcon(Icons.mic),
   );
+
+  testWidgets('opening the Shopping tab reads the proposals again',
+      (tester) async {
+    final proposals = FakeShoppingProposals();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ..._baseOverrides,
+        shoppingRepositoryProvider.overrideWithValue(FakeShoppingRepository()),
+        shoppingProposalsPortProvider.overrideWithValue(proposals),
+      ],
+      child: const App(),
+    ));
+    await tester.pumpAndSettle();
+
+    final shopping = find.byIcon(Icons.shopping_cart_outlined);
+    await tester.tap(shopping);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shopping-proposal-p1')), findsNothing);
+
+    await tester.tap(recordNavIcon);
+    await tester.pumpAndSettle();
+    proposals.rows = [sampleProposal()];
+    await tester.tap(shopping);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('shopping-proposal-p1')), findsOneWidget);
+  });
 
   testWidgets('switching away from Record tab calls stopSession', (tester) async {
     late _TrackingHfController controller;

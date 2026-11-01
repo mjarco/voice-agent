@@ -8,10 +8,13 @@ import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
+import 'package:voice_agent/core/network/shopping_proposals_port.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
 import 'package:voice_agent/features/chat/presentation/thread_screen.dart';
+
+import '../../../core/network/fake_shopping_proposals.dart';
 
 // ---------------------------------------------------------------------------
 // Stub repository
@@ -155,6 +158,7 @@ Future<void> _pumpScreen(
   required _StubRepository repository,
   String conversationId = 'conv-1',
   _FakePinWriter? pinWriter,
+  FakeShoppingProposals? proposals,
 }) async {
   final router = GoRouter(
     initialLocation: '/chat/$conversationId',
@@ -180,6 +184,8 @@ Future<void> _pumpScreen(
       overrides: [
         chatRepositoryProvider.overrideWithValue(repository),
         pinWriterProvider.overrideWithValue(pinWriter ?? _FakePinWriter()),
+        shoppingProposalsPortProvider
+            .overrideWithValue(proposals ?? FakeShoppingProposals()),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -210,6 +216,8 @@ void main() {
           overrides: [
             chatRepositoryProvider.overrideWithValue(repo),
             pinWriterProvider.overrideWithValue(_FakePinWriter()),
+            shoppingProposalsPortProvider
+                .overrideWithValue(FakeShoppingProposals()),
           ],
           child: MaterialApp.router(routerConfig: router),
         ),
@@ -588,6 +596,167 @@ void main() {
 
       expect(find.byKey(const Key('pin-confirm-dialog')), findsNothing);
       expect(find.textContaining('Could not prepare pin'), findsOneWidget);
+    });
+  });
+
+  group('ThreadScreen — shopping proposals', () {
+    Future<void> settle(WidgetTester tester) => tester.pumpAndSettle();
+
+    double top(WidgetTester tester, String key) =>
+        tester.getTopLeft(find.byKey(Key(key))).dy;
+
+    testWidgets('a card sits under the reply to its message', (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [
+          _event(id: 'u1'),
+          _event(id: 'a1', role: EventRole.agent),
+          _event(id: 'u2'),
+          _event(id: 'a2', role: EventRole.agent),
+        ];
+      final proposals = FakeShoppingProposals()
+        ..rows = [sampleProposal(id: 'p1', userEventId: 'u1')];
+
+      await _pumpScreen(tester, repository: repo, proposals: proposals);
+
+      final card = top(tester, 'shopping-proposal-p1');
+      expect(card, greaterThan(top(tester, 'thread-event-a1')));
+      expect(card, lessThan(top(tester, 'thread-event-u2')));
+    });
+
+    testWidgets('with no reply the card sits under the message',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(id: 'u1')];
+      final proposals = FakeShoppingProposals()
+        ..rows = [sampleProposal(id: 'p1', userEventId: 'u1')];
+
+      await _pumpScreen(tester, repository: repo, proposals: proposals);
+
+      expect(
+        top(tester, 'shopping-proposal-p1'),
+        greaterThan(top(tester, 'thread-event-u1')),
+      );
+    });
+
+    testWidgets('two cards of one message keep their order', (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [
+          _event(id: 'u1'),
+          _event(id: 'a1', role: EventRole.agent),
+        ];
+      final proposals = FakeShoppingProposals()
+        ..rows = [
+          sampleProposal(id: 'p1', userEventId: 'u1'),
+          sampleProposal(id: 'p2', userEventId: 'u1', text: 'mleko'),
+        ];
+
+      await _pumpScreen(tester, repository: repo, proposals: proposals);
+
+      expect(
+        top(tester, 'shopping-proposal-p1'),
+        lessThan(top(tester, 'shopping-proposal-p2')),
+      );
+    });
+
+    testWidgets('a proposal of a message not in the thread is not shown',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(id: 'u1')];
+      final proposals = FakeShoppingProposals()
+        ..rows = [sampleProposal(id: 'p1', userEventId: 'elsewhere')];
+
+      await _pumpScreen(tester, repository: repo, proposals: proposals);
+
+      expect(find.byKey(const Key('shopping-proposal-p1')), findsNothing);
+    });
+
+    testWidgets('a reopened thread shows what became of a proposal',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(id: 'u1')];
+      final proposals = FakeShoppingProposals()
+        ..rows = [
+          sampleProposal(id: 'p1', userEventId: 'u1', state: 'accepted'),
+        ];
+
+      await _pumpScreen(tester, repository: repo, proposals: proposals);
+
+      expect(find.text('added'), findsOneWidget);
+      expect(
+        find.byKey(const Key('shopping-proposal-accept-p1')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('tapping a button answers and the card shows it',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(id: 'u1')];
+      final proposals = FakeShoppingProposals()
+        ..rows = [sampleProposal(id: 'p1', userEventId: 'u1')];
+
+      await _pumpScreen(tester, repository: repo, proposals: proposals);
+      await tester.tap(find.byKey(const Key('shopping-proposal-skip-p1')));
+      await settle(tester);
+
+      expect(proposals.skipped, ['p1']);
+      expect(find.text('skipped'), findsOneWidget);
+    });
+
+    testWidgets('a thread opened again shows an answer given elsewhere',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(id: 'u1')];
+      final proposals = FakeShoppingProposals()
+        ..rows = [sampleProposal(id: 'p1', userEventId: 'u1')];
+      final show = ValueNotifier(true);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            chatRepositoryProvider.overrideWithValue(repo),
+            pinWriterProvider.overrideWithValue(_FakePinWriter()),
+            shoppingProposalsPortProvider.overrideWithValue(proposals),
+          ],
+          child: MaterialApp(
+            home: ValueListenableBuilder<bool>(
+              valueListenable: show,
+              builder: (_, visible, _) => visible
+                  ? const ThreadScreen(conversationId: 'conv-1')
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+      expect(find.text('skipped'), findsNothing);
+
+      show.value = false;
+      await settle(tester);
+      proposals.rows = [
+        sampleProposal(id: 'p1', userEventId: 'u1', state: 'skipped'),
+      ];
+      show.value = true;
+      await settle(tester);
+
+      expect(find.text('skipped'), findsOneWidget);
+    });
+
+    testWidgets('a failed read leaves the thread standing', (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(id: 'u1', content: 'Still here')];
+      final proposals = FakeShoppingProposals()..failReads = true;
+
+      await _pumpScreen(tester, repository: repo, proposals: proposals);
+
+      expect(find.text('Still here'), findsOneWidget);
     });
   });
 }
