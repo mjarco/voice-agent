@@ -18,7 +18,7 @@ and split this class first?"
 ## When to Use
 
 **Mandatory (auto-trigger):**
-- Before implementing a proposal that adds ≥3 methods to a class with ≥10 existing methods
+- Before implementing a change that adds ≥3 methods to a class with ≥10 existing methods
 - When a file exceeds 500 LOC after your changes
 - When a constructor takes ≥7 injected dependencies (services/repositories)
 

@@ -1,6 +1,6 @@
 # Manual test: P039 T5a — native EventChannel bridges
 
-**Proposal:** [`docs/proposals/039-otel-dev-telemetry.md`](../proposals/039-otel-dev-telemetry.md) — T5a (Native event bridges).
+**Proposal:** P039 (tag `pre-base-cut`) — T5a (Native event bridges).
 **Overall status:** **passed** — all must-pass cases green on 2026-05-18. Verified on iPhone 17 Simulator iOS 26.x for S1/S2/S3/T1/T4/T5; verified on physical iPhone iOS 26.4.2 for T1/T3-as-route-change-evidence/T4/T5. T2 (`audio.session.interruption_began`) accepted as code-path-equivalent to T3 (same `TelemetryEventEmitter.shared.post()` in the same Swift wrapper, ortogonal only in notification source). Android scaffolding (T6) deferred — NDK on the dev host is broken (F3 from 2026-05-17).
 **Why now:** T5a is the last code track of P039; everything else either landed or is deployment ops. iOS verification today closes the loop.
 **Time budget:** ~25 min for iOS Simulator + physical iPhone combined.
@@ -217,8 +217,6 @@ adb shell am broadcast -a android.media.AUDIO_BECOMING_NOISY
 **Stretch / OEM-conditional:**
 - T3 on physical iPhone — high signal but requires Xcode signing flow that may not be available; the `coreaudiod` killall fallback on Simulator is acceptable if BT pairing isn't reachable.
 - T6 on Android — entirely separate platform; failures here do not block iOS verification.
-
-When all must-pass cases are `passed`, update `docs/proposals/039-otel-dev-telemetry.md` Status to remove T5a from "Remaining tracks" and reference the verification date + device.
 
 ## What to capture if anything goes wrong
 
