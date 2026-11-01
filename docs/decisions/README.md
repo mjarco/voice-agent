@@ -83,6 +83,7 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-NET-002](ADR-NET-002-foreground-only-sync.md) | Foreground-only sync with no background processing | Accepted |
 | [ADR-NET-003](ADR-NET-003-sse-streaming-client.md) | SSE streaming client | Accepted |
 | [ADR-NET-004](ADR-NET-004-app-version-sync-header.md) | Report installed app version via X-App-Version sync header | Accepted |
+| [ADR-NET-005](ADR-NET-005-location-log-background-upload.md) | The location log uploads in the background | Accepted |
 
 ### NOTIF — Local Notifications
 
@@ -98,3 +99,4 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-PLATFORM-001](ADR-PLATFORM-001-direct-save-without-review.md) | Direct save without review screen | Accepted |
 | [ADR-PLATFORM-002](ADR-PLATFORM-002-cancel-on-background.md) | Cancel-on-background policy for recording | Accepted |
 | [ADR-PLATFORM-003](ADR-PLATFORM-003-permission-via-record-package.md) | Microphone permission via record package | Accepted |
+| [ADR-PLATFORM-009](ADR-PLATFORM-009-native-location-pipeline.md) | The location log runs natively, apart from Flutter | Accepted |
