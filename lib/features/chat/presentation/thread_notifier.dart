@@ -339,7 +339,10 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     _subscription = null;
     final sessionId = _activeSessionId!;
     final idempotencyKey = _currentIdempotencyKey!;
+    // The state from before the send does not know the answers since.
+    final rows = _proposalRows;
     state = _preSendState ?? const ThreadLoading();
+    if (!identical(rows, _proposalRows)) _setProposalRows(rows);
     _preSendState = null;
     _repository
         .cancelChat(sessionId: sessionId, idempotencyKey: idempotencyKey)
@@ -503,6 +506,17 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     if (answer.settled) _onShoppingChanged?.call();
   }
 
+  /// Reads the proposals of a loaded thread again. The notifier outlives its
+  /// screen, so a thread opened again would otherwise show what it knew when
+  /// left, while a proposal may have been answered on the tab or the web.
+  Future<void> refreshProposals() async {
+    final current = state;
+    if (current is! ThreadLoaded) return;
+    final read = await _readProposals(current.conversation.conversationId);
+    if (read == null || !mounted) return;
+    _setProposalRows(ShoppingProposalRow.fromRead(read, _proposalRows));
+  }
+
   List<ShoppingProposalRow> get _proposalRows => switch (state) {
         ThreadLoaded(proposals: final rows) => rows,
         ThreadStreaming(proposals: final rows) => rows,
@@ -513,10 +527,13 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     String id,
     ShoppingProposalRow Function(ShoppingProposalRow) update,
   ) {
-    final rows = [
+    _setProposalRows([
       for (final row in _proposalRows)
         row.proposal.id == id ? update(row) : row,
-    ];
+    ]);
+  }
+
+  void _setProposalRows(List<ShoppingProposalRow> rows) {
     final current = state;
     switch (current) {
       case ThreadLoaded():

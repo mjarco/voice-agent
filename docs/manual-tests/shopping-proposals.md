@@ -1,7 +1,7 @@
 # Manual test: shopping proposals on the phone
 
 **Design:** [voice-agent#372](https://github.com/mjarco/voice-agent/issues/372); personal-agent ADR-API-108.
-**Overall status:** pending
+**Overall status:** **passed** (2026-11-02, Pixel 11 Pro, Android 17, 1.11.0+25 from `e15a31e`, against production; run by the owner)
 **Why now:** the lab drives the server's chat stream, not the app, so nothing else exercises the card. The hands-free case is also the first device check of the voice rule ADR-API-108 expects: a purchase said aloud is asked about aloud, and no card follows it.
 **Time budget:** ~15 min, Pixel, stable flavor, against production personal-agent.
 **What we are testing:** that a purchase said in a conversation reaches the card, that the answer changes the list, that a reopened thread shows what became of it, and that a proposal made by voice waits on the Shopping tab.
@@ -14,15 +14,15 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 | # | Case | Status |
 |---|---|---|
-| S1 | Install 1.11.0+25 | pending |
-| T1 | A purchase said in the chat shows a card | pending |
-| T2 | Add puts the item on the list | pending |
-| T3 | A reopened thread shows the state | pending |
-| T4 | Skip leaves the list alone | pending |
-| T5 | Tick off an item on the list | pending |
-| T6 | Answered on the web first | pending |
-| T7 | A purchase said hands-free waits on the tab | pending |
-| T8 | Answering on the tab | pending |
+| S1 | Install 1.11.0+25 | passed (2026-11-02, Pixel 11 Pro, Android 17) |
+| T1 | A purchase said in the chat shows a card | passed (2026-11-02, Pixel 11 Pro, Android 17) |
+| T2 | Add puts the item on the list | passed (2026-11-02, Pixel 11 Pro, Android 17) |
+| T3 | A reopened thread shows the state | passed (2026-11-02, Pixel 11 Pro, Android 17) |
+| T4 | Skip leaves the list alone | passed (2026-11-02, Pixel 11 Pro, Android 17) |
+| T5 | Tick off an item on the list | passed (2026-11-02, Pixel 11 Pro, Android 17) |
+| T6 | Answered on the web first | passed (2026-11-02, Pixel 11 Pro, Android 17) |
+| T7 | A purchase said hands-free waits on the tab | passed (2026-11-02, Pixel 11 Pro, Android 17) |
+| T8 | Answering on the tab | passed (2026-11-02, Pixel 11 Pro, Android 17) |
 
 ---
 
@@ -30,7 +30,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### S1 — Install
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17)
 
 **Do:**
 1. Connect the Pixel over adb. Copy `.env.mobile` into the worktree if it is missing.
@@ -43,7 +43,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T1 — A purchase said in the chat shows a card
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17)
 
 **Do:**
 1. Open a new chat.
@@ -57,7 +57,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T2 — Add puts the item on the list
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17)
 
 **Do:**
 1. Tap Add on the card from T1.
@@ -71,7 +71,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T3 — A reopened thread shows the state
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17)
 
 **Do:**
 1. Leave the thread and reopen it from the list.
@@ -84,7 +84,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T4 — Skip leaves the list alone
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17)
 
 **Do:**
 1. Make another proposal as in T1.
@@ -98,7 +98,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T5 — Tick off an item on the list
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17)
 
 **Do:**
 1. Send "kupiłem filtr do wody", with the item from T2 on the list.
@@ -112,7 +112,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T6 — Answered on the web first
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17)
 
 **Do:**
 1. Make a proposal as in T1 and leave the thread open on the phone.
@@ -127,7 +127,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T7 — A purchase said hands-free waits on the tab
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17)
 
 **Do:**
 1. Start a hands-free session on the Record tab.
@@ -142,7 +142,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T8 — Answering on the tab
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17)
 
 **Do:**
 1. Tap Add on the card from T7.

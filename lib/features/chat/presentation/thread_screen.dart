@@ -24,6 +24,14 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
   final _textController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    ref
+        .read(threadNotifierProvider(widget.conversationId).notifier)
+        .refreshProposals();
+  }
+
+  @override
   void dispose() {
     _textController.dispose();
     super.dispose();

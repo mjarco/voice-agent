@@ -913,6 +913,43 @@ void main() {
       expect(proposals.accepted, ['p1']);
     });
 
+    test('an answer given during a cancelled turn stays', () async {
+      final gate = Completer<void>();
+      proposals.gate = gate;
+      final notifier = create();
+      await pumpEventQueue();
+
+      final answer = notifier.answerProposal('p1', accept: true);
+      notifier.send('kup filtr');
+      gate.complete();
+      await answer;
+      notifier.cancelStream();
+
+      final row = rows(notifier).single;
+      expect(row.proposal.state, 'accepted');
+      expect(row.answering, isFalse);
+    });
+
+    test('refreshProposals shows what happened elsewhere', () async {
+      final notifier = create();
+      await pumpEventQueue();
+      proposals.rows = [sampleProposal(state: 'skipped')];
+
+      await notifier.refreshProposals();
+
+      expect(rows(notifier).single.proposal.state, 'skipped');
+    });
+
+    test('a failed refresh keeps the cards', () async {
+      final notifier = create();
+      await pumpEventQueue();
+      proposals.failReads = true;
+
+      await notifier.refreshProposals();
+
+      expect(rows(notifier).single.proposal.id, 'p1');
+    });
+
     test('an answer survives a change of model', () async {
       proposals.nextAnswer = const ProposalItemRemoved();
       final notifier = create();

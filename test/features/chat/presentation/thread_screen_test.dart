@@ -709,6 +709,45 @@ void main() {
       expect(find.text('skipped'), findsOneWidget);
     });
 
+    testWidgets('a thread opened again shows an answer given elsewhere',
+        (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(id: 'u1')];
+      final proposals = FakeShoppingProposals()
+        ..rows = [sampleProposal(id: 'p1', userEventId: 'u1')];
+      final show = ValueNotifier(true);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            chatRepositoryProvider.overrideWithValue(repo),
+            pinWriterProvider.overrideWithValue(_FakePinWriter()),
+            shoppingProposalsPortProvider.overrideWithValue(proposals),
+          ],
+          child: MaterialApp(
+            home: ValueListenableBuilder<bool>(
+              valueListenable: show,
+              builder: (_, visible, _) => visible
+                  ? const ThreadScreen(conversationId: 'conv-1')
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+      expect(find.text('skipped'), findsNothing);
+
+      show.value = false;
+      await settle(tester);
+      proposals.rows = [
+        sampleProposal(id: 'p1', userEventId: 'u1', state: 'skipped'),
+      ];
+      show.value = true;
+      await settle(tester);
+
+      expect(find.text('skipped'), findsOneWidget);
+    });
+
     testWidgets('a failed read leaves the thread standing', (tester) async {
       final repo = _StubRepository()
         ..conversationResult = _conv()
