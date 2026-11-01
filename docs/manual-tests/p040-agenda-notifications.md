@@ -1,6 +1,6 @@
 # Manual test: P040 — Agenda notifications & background refresh
 
-**Proposal:** [`docs/proposals/040-agenda-notifications-and-background-refresh.md`](../proposals/040-agenda-notifications-and-background-refresh.md)
+**Proposal:** P040 (tag `pre-base-cut`)
 **Overall status:** **pending** — no case yet executed on a physical device.
 **Why now:** P040 is code-complete and review-clean, but 11 contracts can only be verified on physical devices (notification delivery, OS-level scheduling, permission prompts, BGAppRefresh, WorkManager). This plan exists so the device pass can be run cold by anyone — no archaeology required.
 **Time budget:** ~90 min total (60 min iOS + 30 min Android). Steps independent: skip any case the device can't exercise (e.g. Android-only on iPhone) without losing the rest.

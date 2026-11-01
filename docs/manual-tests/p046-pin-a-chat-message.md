@@ -1,6 +1,6 @@
 # Manual test: P046 — Pin a chat message from the app
 
-**Proposal:** [`docs/proposals/046-pin-a-chat-message.md`](../proposals/046-pin-a-chat-message.md)
+**Proposal:** P046 (tag `pre-base-cut`)
 **Overall status:** **pending** — no case yet executed on a physical device.
 **Why now:** P046 is code-complete and review-clean (T1 + T2 merged, `make verify` green). The suggest→confirm→create flow, the `{"data":…}` envelope, and the create→navigate→appears-on-pinboard loop can only be verified end-to-end against a live personal-agent with the pin write endpoints deployed. Unit + widget tests already cover the notifier logic, the icon gating, the dialog seeding, and the exact request payload (65 chat-feature cases on `main`); this plan covers only what those can't — the real network round-trip and cross-screen navigation.
 **Time budget:** ~20 min, single platform is enough (this is API + navigation, not OS-level behavior). Run on iOS or Android.
