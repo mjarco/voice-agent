@@ -12,6 +12,7 @@ import 'package:voice_agent/features/history/history_screen.dart';
 import 'package:voice_agent/features/history/transcript_detail_screen.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
 import 'package:voice_agent/features/debug/notifications_debug_screen.dart';
+import 'package:voice_agent/features/location_log/presentation/location_log_screen.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_screen.dart';
@@ -149,6 +150,10 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
         GoRoute(
           path: 'advanced',
           builder: (context, state) => const AdvancedSettingsScreen(),
+        ),
+        GoRoute(
+          path: 'location',
+          builder: (context, state) => const LocationLogScreen(),
         ),
         GoRoute(
           path: 'usage',

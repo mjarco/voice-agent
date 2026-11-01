@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
+import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
 
 class App extends ConsumerStatefulWidget {
   const App({super.key, this.scaffoldMessengerKey});
@@ -52,6 +53,8 @@ class _AppState extends ConsumerState<App> {
         if (payload.isNotEmpty) _router.go(payload);
       });
     });
+
+    ref.watch(locationLogSyncProvider);
 
     final isDev = appFlavor == 'dev';
     return MaterialApp.router(

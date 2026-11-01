@@ -31,6 +31,7 @@ P019 introduced two platform channels: `MethodChannel('com.voiceagent/audio_sess
 | `com.voiceagent/audio_session` | MethodChannel | P019 (audio_session.dart) | Dart ⇄ native |
 | `com.voiceagent/media_button` | MethodChannel + EventChannel | P037/P038 (`MediaButtonBridge`) | bidirectional |
 | `com.voiceagent/telemetry_native_events` | EventChannel | P039 (`TelemetryEventEmitter`) | native → Dart |
+| `com.voiceagent/location_log` | MethodChannel | ADR-PLATFORM-009 (`LocationBridge`) | Dart → native |
 
 ## Rationale
 

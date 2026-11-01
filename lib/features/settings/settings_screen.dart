@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -276,6 +277,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/advanced'),
           ),
+          if (Platform.isAndroid) ...[
+            _buildSectionHeader('Location'),
+            ListTile(
+              key: const Key('location-log-tile'),
+              title: const Text('Dziennik lokalizacji'),
+              subtitle: const Text('Odczyty GPS dla personal-agent'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/settings/location'),
+            ),
+          ],
           _buildSectionHeader('Usage'),
           ListTile(
             key: const Key('usage-costs-tile'),

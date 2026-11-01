@@ -1,0 +1,104 @@
+package com.voiceagent.voice_agent.location
+
+import android.content.Context
+import java.net.HttpURLConnection
+import java.net.URL
+import java.time.Instant
+import java.util.concurrent.locks.ReentrantLock
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * Sends the oldest queued rows. Rows leave the queue only after personal-agent
+ * has answered for them, and a repeat is harmless because each row carries its
+ * own id. Never touches the transcript sync queue.
+ */
+class LocationUploader(private val context: Context) {
+    enum class Outcome { DONE, MORE, BUSY, FAILED }
+
+    fun sendBatch(): Outcome {
+        if (!lock.tryLock()) return Outcome.BUSY
+        try {
+            return send()
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    private fun send(): Outcome {
+        val store = LocationStore.get(context)
+        val config = LocationConfig(context)
+        val batch = store.oldest(BATCH_SIZE)
+        if (batch.isEmpty()) return Outcome.DONE
+        val base = config.apiUrl
+        if (base.isNullOrBlank()) return failed(config, "no server URL")
+
+        val result = try {
+            post(base.trimEnd('/') + PATH, config.token, batch)
+        } catch (failure: Exception) {
+            return failed(config, failure.toString())
+        }
+        if (result.first !in 200..299) return failed(config, "HTTP ${result.first}")
+
+        val rejected = answered(result.second, batch.size)
+            ?: return failed(config, "a reply that does not account for the batch")
+
+        store.delete(batch.map { it.id })
+        config.lastSentAtMs = System.currentTimeMillis()
+        config.lastError = null
+        if (rejected > 0) {
+            // Refused for good: kept out of the queue, and the log says so.
+            LocationPipeline.recordStatus(context, "rejected", "$rejected rows refused by the server")
+        }
+        return if (store.count() > 0) Outcome.MORE else Outcome.DONE
+    }
+
+    /**
+     * The rows refused, or null unless the reply accounts for every row sent.
+     * A 200 from something other than personal-agent must not empty the queue.
+     */
+    private fun answered(body: String, sent: Int): Int? = try {
+        val data = JSONObject(body).getJSONObject("data")
+        val rejected = data.getJSONArray("rejected").length()
+        if (data.getInt("accepted") + data.getInt("duplicates") + rejected == sent) rejected else null
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun failed(config: LocationConfig, reason: String): Outcome {
+        config.lastError = "${Instant.now()}: $reason"
+        return Outcome.FAILED
+    }
+
+    private fun post(url: String, token: String?, batch: List<LogEntry>): Pair<Int, String> {
+        val body = JSONObject().put("entries", JSONArray(batch.map { it.json })).toString().toByteArray()
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            // A redirect would turn this POST into a GET, and its 200 into a false yes.
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = TIMEOUT_MS
+            connection.readTimeout = TIMEOUT_MS
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            if (!token.isNullOrEmpty()) connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.outputStream.use { it.write(body) }
+            val code = connection.responseCode
+            val text = if (code in 200..299) {
+                connection.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                ""
+            }
+            return code to text
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    companion object {
+        private const val PATH = "/location/entries"
+        private const val BATCH_SIZE = 200
+        private const val TIMEOUT_MS = 6_000
+        private val lock = ReentrantLock()
+    }
+}
