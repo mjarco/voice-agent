@@ -158,8 +158,8 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
             label: 'Agenda',
           ),
           NavigationDestination(
-            icon: Icon(Icons.checklist),
-            label: 'Plan',
+            icon: Icon(Icons.shopping_cart_outlined),
+            label: 'Shopping',
           ),
           NavigationDestination(
             icon: Icon(Icons.mic),

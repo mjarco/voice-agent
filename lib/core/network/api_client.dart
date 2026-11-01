@@ -8,8 +8,11 @@ sealed class ApiResult {
 }
 
 class ApiSuccess extends ApiResult {
-  const ApiSuccess({this.body});
+  const ApiSuccess({this.body, this.statusCode});
   final String? body;
+
+  /// Set by [ApiClient.request], for a caller that tells 200 from 201.
+  final int? statusCode;
 }
 
 class ApiPermanentFailure extends ApiResult {
@@ -172,7 +175,7 @@ class ApiClient {
             : (responseData is String
                 ? responseData
                 : jsonEncode(responseData));
-        return ApiSuccess(body: body);
+        return ApiSuccess(body: body, statusCode: statusCode);
       }
       return classifyStatusCode(statusCode, response.statusMessage,
           body: _bodyText(response.data));

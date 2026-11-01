@@ -5,7 +5,6 @@ import 'package:voice_agent/features/chat/presentation/conversations_screen.dart
 import 'package:voice_agent/features/chat/presentation/thread_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pin_detail_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pins_screen.dart';
-import 'package:voice_agent/features/plan/presentation/plan_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_form_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
@@ -15,6 +14,7 @@ import 'package:voice_agent/features/recording/presentation/recording_screen.dar
 import 'package:voice_agent/features/debug/notifications_debug_screen.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
+import 'package:voice_agent/features/shopping/presentation/shopping_screen.dart';
 import 'package:voice_agent/features/usage/presentation/usage_screen.dart';
 
 GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
@@ -34,12 +34,12 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
             ),
           ],
         ),
-        // Branch 1: Plan
+        // Branch 1: Shopping
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/plan',
-              builder: (context, state) => const PlanScreen(),
+              path: '/shopping',
+              builder: (context, state) => const ShoppingScreen(),
             ),
           ],
         ),

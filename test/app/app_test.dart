@@ -108,7 +108,7 @@ void main() {
 
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Agenda'), findsWidgets);
-    expect(find.text('Plan'), findsWidgets);
+    expect(find.text('Shopping'), findsWidgets);
     expect(find.text('Record'), findsWidgets);
     expect(find.text('Routines'), findsWidgets);
     expect(find.text('Chat'), findsWidgets);
