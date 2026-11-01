@@ -417,7 +417,7 @@ final recordingControllerProvider =
 All navigation uses GoRouter:
 
 - Routes are defined in `lib/app/router.dart`.
-- The shell uses `StatefulShellRoute.indexedStack` with 5 tabs (Agenda, Plan, Record, Routines, Chat).
+- The shell uses `StatefulShellRoute.indexedStack` with 5 tabs (Agenda, Shopping, Record, Routines, Chat).
 - Child routes (e.g., `/record/history`) stay within their branch.
 - Navigation arguments pass via GoRouter `extra` parameter.
 - P020 established the 5-branch route structure. Feature work (P021–P024)
@@ -580,7 +580,7 @@ screens within this structure — it does not add routes.
 | Route | Owner | Content owner |
 |-------|-------|---------------|
 | `/agenda` | 020 (shell branch 0) | 021 (AgendaPlaceholderScreen → real screen) |
-| `/plan` | 020 (shell branch 1) | 023 (PlanPlaceholderScreen → real screen) |
+| `/shopping` | 020 (shell branch 1) | voice-agent#371 (replaced Plan) |
 | `/record` | 020 (shell branch 2) | 001 (RecordingScreen) |
 | `/record/history` | 020 (child of /record) | 007 (HistoryScreen) |
 | `/record/history/:id` | 020 (child of /record/history) | 007 (TranscriptDetailScreen) |

@@ -7,7 +7,7 @@ import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 /// `ApiClient`-backed pins repository.
 ///
 /// Unwraps the `{"data": ...}` envelope in feature code (P025 convention,
-/// matching `api_agenda_repository.dart` / `api_plan_repository.dart`);
+/// matching `api_agenda_repository.dart` / `api_routines_repository.dart`);
 /// ADR-NET-001 governs only the dio -> [ApiResult] error classification reused
 /// here, not the envelope.
 class ApiPinsRepository implements PinsRepository {
