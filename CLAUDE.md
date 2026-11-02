@@ -589,7 +589,9 @@ screens within this structure — it does not add routes.
 | `/chat` | 020 (shell branch 4) | 024 (ChatPlaceholderScreen → real screen) |
 | `/places` | outside shell | places (PlacesScreen) — reached from Shopping + Record app bars |
 | `/pins` | 045 (outside shell) | 045 (PinsScreen) — reached from Record + Chat app bars |
+| `/pins/new` | voice-agent#386 (child of /pins) | voice-agent#386 (PinFormScreen) — `extra`: starting text |
 | `/pins/:id` | 045 (child of /pins) | 045 (PinDetailScreen) |
+| `/pins/:id/edit` | voice-agent#386 (child of /pins/:id) | voice-agent#386 (PinFormScreen) — `extra`: the PinDetail |
 | `/settings` | 020 (outside shell) | 006 (SettingsScreen) |
 | `/settings/advanced` | 020 (child of /settings) | 013 (AdvancedSettingsScreen) |
 

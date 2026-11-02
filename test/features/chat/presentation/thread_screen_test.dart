@@ -121,6 +121,22 @@ ConversationRecord _record({String id = 'rec-1', bool endorsed = false, String s
 }
 
 class _FakePinWriter implements PinWriter {
+  @override
+  Future<PinSuggestion> suggestPinFromText(String text) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<PinCreateResult> createTextPin(PinTextCreateRequest request) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<PinCreateResult> editPin(
+    String recordId, {
+    String? name,
+    String? text,
+  }) async =>
+      throw UnimplementedError();
+
   PinSuggestion suggestResult =
       const PinSuggestion(name: 'ESP32 pinout', topicLabel: 'Electronics');
   Object? suggestError;

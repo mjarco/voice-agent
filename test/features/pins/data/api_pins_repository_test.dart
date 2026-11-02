@@ -177,5 +177,23 @@ void main() {
         throwsA(isA<PinsGeneralException>()),
       );
     });
+
+    test('a 409 pin_changed is a stale refusal with the server message',
+        () async {
+      apiClient.nextDeleteResult = ApiPermanentFailure(
+        statusCode: 409,
+        message: 'Conflict',
+        body: jsonEncode({
+          'error': {'code': 'pin_changed', 'message': 'wczytaj ponownie'},
+        }),
+      );
+
+      expect(
+        () => repo.unpin('abc123'),
+        throwsA(isA<PinRefusedException>()
+            .having((e) => e.isStale, 'isStale', isTrue)
+            .having((e) => e.message, 'message', 'wczytaj ponownie')),
+      );
+    });
   });
 }

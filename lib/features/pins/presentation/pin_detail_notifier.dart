@@ -27,14 +27,17 @@ class PinDetailNotifier extends StateNotifier<PinDetailState> {
 
   /// Unpin this reference. Returns true on success; on failure records
   /// [lastActionError] and returns false. The list refreshes on return per
-  /// ADR-ARCH-011, so this notifier does not mutate list state.
+  /// ADR-ARCH-011, so this notifier does not mutate list state. A refusal
+  /// because the pin has a newer version reads it again.
   Future<bool> unpin() async {
     lastActionError = null;
     try {
       await _repository.unpin(_recordId);
       return true;
     } catch (e) {
-      lastActionError = e is PinsException ? e.message : e.toString();
+      final message = e is PinsException ? e.message : e.toString();
+      if (e is PinRefusedException && e.isStale) await load();
+      lastActionError = message;
       return false;
     }
   }

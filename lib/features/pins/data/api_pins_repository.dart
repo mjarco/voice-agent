@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/network/api_client.dart';
+import 'package:voice_agent/features/pins/data/pin_api_failure.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 
 /// `ApiClient`-backed pins repository.
@@ -51,18 +52,8 @@ class ApiPinsRepository implements PinsRepository {
   @override
   Future<void> unpin(String recordId) async {
     final result = await _apiClient.delete('/pins/$recordId');
-    switch (result) {
-      case ApiSuccess():
-        return;
-      case ApiPermanentFailure(statusCode: 404):
-        throw PinNotFoundException();
-      case ApiPermanentFailure(message: final msg, statusCode: final code):
-        throw PinsGeneralException('Server error $code: $msg');
-      case ApiTransientFailure(reason: final reason):
-        throw PinsGeneralException(reason);
-      case ApiNotConfigured():
-        throw PinsGeneralException('API not configured');
-    }
+    if (result is ApiSuccess) return;
+    throw pinFailure(result);
   }
 
   List<PinSummary> _parseList(String? body) {

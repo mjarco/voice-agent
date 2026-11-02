@@ -19,6 +19,15 @@ class PinsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pins')),
+      floatingActionButton: FloatingActionButton(
+        key: const Key('pins-add'),
+        tooltip: 'New pin',
+        onPressed: () async {
+          await context.push('/pins/new');
+          notifier.refresh();
+        },
+        child: const Icon(Icons.add),
+      ),
       body: Column(
         children: [
           _ViewToggle(
@@ -268,7 +277,7 @@ class _EmptyState extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 32),
         child: Text(
-          'No pins yet. Say "zapamiętaj ..." in a chat to save a reference.',
+          'No pins yet. Tap + to write one, or say "zapamiętaj ..." in a chat.',
           textAlign: TextAlign.center,
         ),
       ),

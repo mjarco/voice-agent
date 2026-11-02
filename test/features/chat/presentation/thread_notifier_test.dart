@@ -94,6 +94,22 @@ class _StubRepository implements ChatRepository {
 }
 
 class _FakePinWriter implements PinWriter {
+  @override
+  Future<PinSuggestion> suggestPinFromText(String text) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<PinCreateResult> createTextPin(PinTextCreateRequest request) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<PinCreateResult> editPin(
+    String recordId, {
+    String? name,
+    String? text,
+  }) async =>
+      throw UnimplementedError();
+
   PinSuggestion suggestResult =
       const PinSuggestion(name: 'Suggested', topicLabel: 'Topic');
   Object? suggestError;

@@ -14,6 +14,22 @@ abstract class PinWriter {
 
   /// Pins the message identified by [request].
   Future<PinCreateResult> createPin(PinCreateRequest request);
+
+  /// Proposes a name + matching existing topic for a text that is in no
+  /// conversation yet. Writes nothing.
+  Future<PinSuggestion> suggestPinFromText(String text);
+
+  /// Saves the text in [request] as a pin with no conversation. The same title
+  /// and text return the existing pin, so a retried save is harmless.
+  Future<PinCreateResult> createTextPin(PinTextCreateRequest request);
+
+  /// Writes a new version of the pin [recordId]. A null field keeps its value.
+  /// The result carries the new `recordId`, which the caller must follow.
+  Future<PinCreateResult> editPin(
+    String recordId, {
+    String? name,
+    String? text,
+  });
 }
 
 /// Default-throws provider (ADR-ARCH-004): the real [PinWriter] is bound by an

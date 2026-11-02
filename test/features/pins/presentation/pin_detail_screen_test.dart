@@ -14,6 +14,7 @@ class _StubRepository implements PinsRepository {
   Exception? fetchError;
   Exception? unpinError;
   String? lastUnpinId;
+  int fetchCount = 0;
 
   @override
   Future<List<PinSummary>> fetchPins(PinView view) async =>
@@ -21,6 +22,7 @@ class _StubRepository implements PinsRepository {
 
   @override
   Future<PinDetail> fetchPin(String recordId) async {
+    fetchCount++;
     if (fetchError != null) throw fetchError!;
     return pin ??
         PinDetail(
@@ -50,6 +52,35 @@ Future<void> _pump(WidgetTester tester, PinsRepository repo) async {
             path: ':id',
             builder: (context, state) =>
                 PinDetailScreen(recordId: state.pathParameters['id']!),
+            routes: [
+              GoRoute(
+                path: 'edit',
+                builder: (context, state) {
+                  final pin = state.extra! as PinDetail;
+                  return Scaffold(
+                    body: Column(
+                      children: [
+                        TextButton(
+                          onPressed: () => context.pop(
+                            PinDetail(
+                              recordId: 'edited',
+                              pinName: pin.pinName,
+                              text: pin.text,
+                              createdAt: pin.createdAt,
+                            ),
+                          ),
+                          child: const Text('Save form'),
+                        ),
+                        TextButton(
+                          onPressed: () => context.pop(),
+                          child: const Text('Cancel form'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -72,6 +103,54 @@ Future<void> _pump(WidgetTester tester, PinsRepository repo) async {
 
 void main() {
   group('PinDetailScreen', () {
+    testWidgets('after an edit the screen follows the new record id',
+        (tester) async {
+      await _pump(tester, _StubRepository());
+
+      await tester.tap(find.byKey(const Key('pin-detail-edit')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save form'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('pin edited'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('unpin after an edit names the new record id', (tester) async {
+      final repo = _StubRepository();
+      await _pump(tester, repo);
+
+      await tester.tap(find.byKey(const Key('pin-detail-edit')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save form'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-detail-unpin')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-detail-unpin-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(repo.lastUnpinId, 'edited');
+    });
+
+    testWidgets('a form closed without a write reads the pin again',
+        (tester) async {
+      final repo = _StubRepository();
+      await _pump(tester, repo);
+      final fetchesBefore = repo.fetchCount;
+
+      await tester.tap(find.byKey(const Key('pin-detail-edit')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel form'));
+      await tester.pumpAndSettle();
+
+      expect(repo.fetchCount, fetchesBefore + 1);
+    });
+
     testWidgets('renders the pin name and markdown body', (tester) async {
       await _pump(tester, _StubRepository());
 

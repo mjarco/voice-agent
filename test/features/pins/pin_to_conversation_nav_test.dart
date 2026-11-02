@@ -10,6 +10,8 @@ import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
 import 'package:voice_agent/features/chat/presentation/conversations_screen.dart';
 import 'package:voice_agent/features/chat/presentation/thread_screen.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
+import 'package:voice_agent/features/pins/presentation/pin_detail_screen.dart';
+import 'package:voice_agent/features/pins/presentation/pin_form_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
@@ -95,6 +97,22 @@ class _StubChatRepository implements ChatRepository {
 
 class _NoopPinWriter implements PinWriter {
   @override
+  Future<PinSuggestion> suggestPinFromText(String text) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<PinCreateResult> createTextPin(PinTextCreateRequest request) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<PinCreateResult> editPin(
+    String recordId, {
+    String? name,
+    String? text,
+  }) async =>
+      throw UnimplementedError();
+
+  @override
   Future<PinSuggestion> suggestPin(String conversationId, String eventId) async =>
       const PinSuggestion(name: 'stub');
 
@@ -145,4 +163,48 @@ void main() {
       expect(find.byType(ConversationsScreen), findsNothing);
     },
   );
+
+  Future<void> pumpAt(WidgetTester tester, String location) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          pinsRepositoryProvider.overrideWithValue(_StubPinsRepository()),
+          pinWriterProvider.overrideWithValue(_NoopPinWriter()),
+        ],
+        child: MaterialApp.router(
+          routerConfig: createRouter(initialLocation: location),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('/pins/new is the form, not a pin with the id "new"',
+      (tester) async {
+    await pumpAt(tester, '/pins/new');
+
+    expect(find.byType(PinFormScreen), findsOneWidget);
+    expect(find.byType(PinDetailScreen), findsNothing);
+  });
+
+  testWidgets('Edit on a pin opens the form filled with that pin',
+      (tester) async {
+    await pumpAt(tester, '/pins/abc');
+
+    await tester.tap(find.byKey(const Key('pin-detail-edit')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PinFormScreen), findsOneWidget);
+    final title =
+        tester.widget<TextField>(find.byKey(const Key('pin-form-title')));
+    expect(title.controller!.text, isNotEmpty);
+  });
+
+  testWidgets('/pins/:id/edit with no pin given goes to the pin\'s screen',
+      (tester) async {
+    await pumpAt(tester, '/pins/abc/edit');
+
+    expect(find.byType(PinFormScreen), findsNothing);
+    expect(find.byType(PinDetailScreen), findsOneWidget);
+  });
 }
