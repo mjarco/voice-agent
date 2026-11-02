@@ -10,15 +10,25 @@ import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 /// Full verbatim view of a single saved reference (proposal 045).
 /// Renders the markdown body with `flutter_markdown_plus`, mirroring how the
 /// Chat thread screen renders agent messages.
-class PinDetailScreen extends ConsumerWidget {
+///
+/// An edit gives the pin a new `record_id` (ADR-CORE-111 of personal-agent), so
+/// the screen keeps the current id itself and follows it.
+class PinDetailScreen extends ConsumerStatefulWidget {
   const PinDetailScreen({super.key, required this.recordId});
 
   final String recordId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(pinDetailNotifierProvider(recordId));
-    final notifier = ref.read(pinDetailNotifierProvider(recordId).notifier);
+  ConsumerState<PinDetailScreen> createState() => _PinDetailScreenState();
+}
+
+class _PinDetailScreenState extends ConsumerState<PinDetailScreen> {
+  late String _recordId = widget.recordId;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(pinDetailNotifierProvider(_recordId));
+    final notifier = ref.read(pinDetailNotifierProvider(_recordId).notifier);
 
     return Scaffold(
       appBar: AppBar(
@@ -36,13 +46,19 @@ class PinDetailScreen extends ConsumerWidget {
               key: const Key('pin-detail-copy'),
               icon: const Icon(Icons.copy),
               tooltip: 'Copy',
-              onPressed: () => _copy(context, state.pin.text),
+              onPressed: () => _copy(state.pin.text),
+            ),
+            IconButton(
+              key: const Key('pin-detail-edit'),
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit',
+              onPressed: () => _edit(state.pin),
             ),
             IconButton(
               key: const Key('pin-detail-unpin'),
               icon: const Icon(Icons.delete_outline),
               tooltip: 'Unpin',
-              onPressed: () => _confirmUnpin(context, ref),
+              onPressed: _confirmUnpin,
             ),
           ],
         ],
@@ -64,14 +80,38 @@ class PinDetailScreen extends ConsumerWidget {
     return (id == null || id.isEmpty) ? null : id;
   }
 
-  void _copy(BuildContext context, String text) {
+  void _copy(String text) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Copied to clipboard')),
     );
   }
 
-  Future<void> _confirmUnpin(BuildContext context, WidgetRef ref) async {
+  /// A form closed without a write may have been refused because the pin has a
+  /// newer version, so what this screen shows is read again.
+  Future<void> _edit(PinDetail pin) async {
+    final saved = await context.push<PinDetail>(
+      '/pins/${pin.recordId}/edit',
+      extra: pin,
+    );
+    if (!mounted) return;
+    if (saved != null) {
+      setState(() => _recordId = saved.recordId);
+      return;
+    }
+    await ref.read(pinDetailNotifierProvider(_recordId).notifier).refresh();
+    _leaveIfGone();
+  }
+
+  /// An earlier version answers 404 for good (ADR-CORE-111), so only the list,
+  /// which reloads on return, can lead to the pin now.
+  void _leaveIfGone() {
+    if (!mounted) return;
+    final state = ref.read(pinDetailNotifierProvider(_recordId));
+    if (state is PinDetailError && state.gone) context.pop();
+  }
+
+  Future<void> _confirmUnpin() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -93,15 +133,16 @@ class PinDetailScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
 
-    final notifier = ref.read(pinDetailNotifierProvider(recordId).notifier);
+    final notifier = ref.read(pinDetailNotifierProvider(_recordId).notifier);
     final ok = await notifier.unpin();
-    if (!context.mounted) return;
+    if (!mounted) return;
     if (ok) {
       context.pop();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(notifier.lastActionError ?? 'Unpin failed')),
       );
+      _leaveIfGone();
     }
   }
 }

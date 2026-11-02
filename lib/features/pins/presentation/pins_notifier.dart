@@ -34,7 +34,8 @@ class PinsNotifier extends StateNotifier<PinsListState> {
 
   /// Unpin a reference. On success removes the row from the loaded list and
   /// returns true; on failure records [lastActionError] and returns false
-  /// (the screen surfaces it via a SnackBar — no state change on failure).
+  /// (the screen surfaces it via a SnackBar — no state change on failure, but
+  /// a refusal because the pin has a newer version reads the list again).
   Future<bool> unpin(String recordId) async {
     lastActionError = null;
     try {
@@ -49,7 +50,9 @@ class PinsNotifier extends StateNotifier<PinsListState> {
       }
       return true;
     } catch (e) {
-      lastActionError = e is PinsException ? e.message : e.toString();
+      final message = e is PinsException ? e.message : e.toString();
+      if (e is PinRefusedException && e.isStale) await load();
+      lastActionError = message;
       return false;
     }
   }

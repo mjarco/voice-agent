@@ -1,9 +1,11 @@
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
+import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
 import 'package:voice_agent/features/chat/presentation/conversations_screen.dart';
 import 'package:voice_agent/features/chat/presentation/thread_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pin_detail_screen.dart';
+import 'package:voice_agent/features/pins/presentation/pin_form_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pins_screen.dart';
 import 'package:voice_agent/features/places/presentation/places_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
@@ -129,9 +131,26 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
       builder: (context, state) => const PinsScreen(),
       routes: [
         GoRoute(
+          path: 'new',
+          builder: (context, state) =>
+              PinFormScreen(initialText: state.extra as String?),
+        ),
+        GoRoute(
           path: ':id',
           builder: (context, state) =>
               PinDetailScreen(recordId: state.pathParameters['id']!),
+          routes: [
+            GoRoute(
+              path: 'edit',
+              // The form edits the pin it is given; without one, the pin's
+              // screen is the place to start from.
+              redirect: (context, state) => state.extra is PinDetail
+                  ? null
+                  : '/pins/${state.pathParameters['id']}',
+              builder: (context, state) =>
+                  PinFormScreen(pin: state.extra! as PinDetail),
+            ),
+          ],
         ),
       ],
     ),

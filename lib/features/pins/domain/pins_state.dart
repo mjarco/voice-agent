@@ -38,6 +38,9 @@ class PinDetailLoaded extends PinDetailState {
 }
 
 class PinDetailError extends PinDetailState {
-  const PinDetailError({required this.message});
+  const PinDetailError({required this.message, this.gone = false});
   final String message;
+
+  /// The server has no such pin: retrying cannot help.
+  final bool gone;
 }

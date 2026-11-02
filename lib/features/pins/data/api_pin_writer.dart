@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
+import 'package:voice_agent/features/pins/data/pin_api_failure.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 
 /// `ApiClient`-backed [PinWriter] (proposal 046).
@@ -10,11 +11,11 @@ import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 /// Mirrors `ApiPinsRepository`: unwraps the `{"data": ...}` envelope in feature
 /// code (P025 convention) and reuses the dio -> [ApiResult] error
 /// classification (ADR-NET-001) mapped onto the shared [PinsException]
-/// hierarchy. A `404` (message/conversation gone) becomes
-/// [PinNotFoundException]; everything else non-success becomes
-/// [PinsGeneralException].
+/// hierarchy by [pinFailure].
 class ApiPinWriter implements PinWriter {
   ApiPinWriter(this._apiClient);
+
+  static const _messageNotFound = 'Message not found';
 
   final ApiClient _apiClient;
 
@@ -27,35 +28,59 @@ class ApiPinWriter implements PinWriter {
       '/pins/suggest',
       data: {'conversation_id': conversationId, 'event_id': eventId},
     );
-    switch (result) {
-      case ApiSuccess(body: final body):
-        return PinSuggestion.fromMap(_dataMap(body));
-      case ApiPermanentFailure(statusCode: 404):
-        throw PinNotFoundException('Message not found');
-      case ApiPermanentFailure(message: final msg, statusCode: final code):
-        throw PinsGeneralException('Server error $code: $msg');
-      case ApiTransientFailure(reason: final reason):
-        throw PinsGeneralException(reason);
-      case ApiNotConfigured():
-        throw PinsGeneralException('API not configured');
+    if (result case ApiSuccess(body: final body)) {
+      return PinSuggestion.fromMap(_dataMap(body));
     }
+    throw pinFailure(result, notFoundMessage: _messageNotFound);
   }
 
   @override
   Future<PinCreateResult> createPin(PinCreateRequest request) async {
     final result = await _apiClient.postJson('/pins', data: request.toMap());
-    switch (result) {
-      case ApiSuccess(body: final body):
-        return PinCreateResult.fromMap(_dataMap(body));
-      case ApiPermanentFailure(statusCode: 404):
-        throw PinNotFoundException('Message not found');
-      case ApiPermanentFailure(message: final msg, statusCode: final code):
-        throw PinsGeneralException('Server error $code: $msg');
-      case ApiTransientFailure(reason: final reason):
-        throw PinsGeneralException(reason);
-      case ApiNotConfigured():
-        throw PinsGeneralException('API not configured');
+    if (result case ApiSuccess(body: final body)) {
+      return PinCreateResult.fromMap(_dataMap(body));
     }
+    throw pinFailure(result, notFoundMessage: _messageNotFound);
+  }
+
+  @override
+  Future<PinSuggestion> suggestPinFromText(String text) async {
+    final result = await _apiClient.postJson(
+      '/pins/suggest',
+      data: {'text': text},
+    );
+    if (result case ApiSuccess(body: final body)) {
+      return PinSuggestion.fromMap(_dataMap(body));
+    }
+    throw pinFailure(result);
+  }
+
+  @override
+  Future<PinCreateResult> createTextPin(PinTextCreateRequest request) async {
+    final result = await _apiClient.postJson('/pins', data: request.toMap());
+    if (result case ApiSuccess(body: final body)) {
+      return PinCreateResult.fromMap(_dataMap(body));
+    }
+    throw pinFailure(result);
+  }
+
+  @override
+  Future<PinCreateResult> editPin(
+    String recordId, {
+    String? name,
+    String? text,
+  }) async {
+    final result = await _apiClient.patch(
+      '/pins/$recordId',
+      data: {
+        'name': ?name,
+        'text': ?text,
+      },
+    );
+    if (result case ApiSuccess(body: final body)) {
+      return PinCreateResult.fromMap(_dataMap(body));
+    }
+    throw pinFailure(result);
   }
 
   Map<String, dynamic> _dataMap(String? body) {

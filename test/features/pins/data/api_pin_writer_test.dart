@@ -10,9 +10,12 @@ class _StubApiClient extends ApiClient {
   _StubApiClient() : super(baseUrl: 'https://test.com/api/v1');
 
   ApiResult nextPostResult = const ApiSuccess(body: '{"data":{}}');
+  ApiResult nextPatchResult = const ApiSuccess(body: '{"data":{}}');
 
   String? lastPostPath;
   Map<String, dynamic>? lastPostData;
+  String? lastPatchPath;
+  Map<String, dynamic>? lastPatchData;
 
   @override
   Future<ApiResult> postJson(String path, {Map<String, dynamic>? data}) async {
@@ -20,7 +23,22 @@ class _StubApiClient extends ApiClient {
     lastPostData = data;
     return nextPostResult;
   }
+
+  @override
+  Future<ApiResult> patch(String path, {Map<String, dynamic>? data}) async {
+    lastPatchPath = path;
+    lastPatchData = data;
+    return nextPatchResult;
+  }
 }
+
+ApiResult _refusal(int status, String code) => ApiPermanentFailure(
+      statusCode: status,
+      message: 'refused',
+      body: jsonEncode({
+        'error': {'code': code, 'message': 'komunikat serwera'},
+      }),
+    );
 
 String _suggestBody() => jsonEncode({
       'data': {
@@ -179,6 +197,125 @@ void main() {
         )),
         throwsA(isA<PinsGeneralException>()
             .having((e) => e.message, 'message', contains('500'))),
+      );
+    });
+  });
+
+  group('suggestPinFromText', () {
+    test('posts only the text and keeps the aliases', () async {
+      apiClient.nextPostResult = ApiSuccess(body: _suggestBody());
+
+      final suggestion = await writer.suggestPinFromText('a recipe');
+
+      expect(apiClient.lastPostPath, '/pins/suggest');
+      expect(apiClient.lastPostData, {'text': 'a recipe'});
+      expect(suggestion.name, 'ESP32 GPIO pinout');
+      expect(suggestion.topicLabel, 'Electronics');
+      expect(suggestion.aliases, ['pinout']);
+    });
+  });
+
+  group('createTextPin', () {
+    test('posts text, name, topic and aliases', () async {
+      apiClient.nextPostResult = ApiSuccess(body: _createBody());
+
+      final result = await writer.createTextPin(const PinTextCreateRequest(
+        text: 'a recipe',
+        name: 'Tarta',
+        topicLabel: 'Kuchnia',
+        aliases: ['ciasto'],
+      ));
+
+      expect(apiClient.lastPostPath, '/pins');
+      expect(apiClient.lastPostData, {
+        'text': 'a recipe',
+        'name': 'Tarta',
+        'topic_label': 'Kuchnia',
+        'aliases': ['ciasto'],
+      });
+      expect(result.pin.recordId, 'abc123');
+    });
+
+    test('leaves out an empty topic and empty aliases', () async {
+      apiClient.nextPostResult = ApiSuccess(body: _createBody());
+
+      await writer.createTextPin(
+        const PinTextCreateRequest(text: 't', name: 'n', topicLabel: ''),
+      );
+
+      expect(apiClient.lastPostData, {'text': 't', 'name': 'n'});
+    });
+
+    for (final (status, code) in [
+      (409, 'name_taken'),
+      (413, 'text_too_large'),
+      (400, 'invalid_request'),
+    ]) {
+      test('a $status $code refusal carries the server message', () async {
+        apiClient.nextPostResult = _refusal(status, code);
+
+        expect(
+          () => writer.createTextPin(
+            const PinTextCreateRequest(text: 't', name: 'n'),
+          ),
+          throwsA(isA<PinRefusedException>()
+              .having((e) => e.code, 'code', code)
+              .having((e) => e.message, 'message', 'komunikat serwera')),
+        );
+      });
+    }
+
+    test('a refusal with no envelope stays a general error', () async {
+      apiClient.nextPostResult =
+          const ApiPermanentFailure(statusCode: 409, message: 'Conflict');
+
+      expect(
+        () => writer.createTextPin(
+          const PinTextCreateRequest(text: 't', name: 'n'),
+        ),
+        throwsA(isA<PinsGeneralException>()
+            .having((e) => e.message, 'message', contains('409'))),
+      );
+    });
+  });
+
+  group('editPin', () {
+    test('patches only the fields given and parses the new version', () async {
+      apiClient.nextPatchResult = ApiSuccess(body: _createBody());
+
+      final result = await writer.editPin('old-id', text: 'new text');
+
+      expect(apiClient.lastPatchPath, '/pins/old-id');
+      expect(apiClient.lastPatchData, {'text': 'new text'});
+      expect(result.pin.recordId, 'abc123');
+    });
+
+    test('sends both fields when both changed', () async {
+      apiClient.nextPatchResult = ApiSuccess(body: _createBody());
+
+      await writer.editPin('old-id', name: 'n', text: 't');
+
+      expect(apiClient.lastPatchData, {'name': 'n', 'text': 't'});
+    });
+
+    test('a 409 pin_changed is a stale refusal', () async {
+      apiClient.nextPatchResult = _refusal(409, 'pin_changed');
+
+      expect(
+        () => writer.editPin('old-id', name: 'n'),
+        throwsA(isA<PinRefusedException>()
+            .having((e) => e.isStale, 'isStale', isTrue)),
+      );
+    });
+
+    test('a 404 is PinNotFoundException', () async {
+      apiClient.nextPatchResult =
+          const ApiPermanentFailure(statusCode: 404, message: 'gone');
+
+      expect(
+        () => writer.editPin('old-id', name: 'n'),
+        throwsA(isA<PinNotFoundException>()
+            .having((e) => e.message, 'message', 'Pin not found')),
       );
     });
   });

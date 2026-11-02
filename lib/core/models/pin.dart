@@ -9,6 +9,10 @@
 // `PinCreateResult` (the create response wrapper). The write path is reached
 // through the `core` `PinWriter` port (`core/network/pin_writer.dart`), not by
 // `features/chat` importing `features/pins`.
+//
+// Pins written by hand (ADR-CORE-111 of personal-agent): `PinTextCreateRequest`
+// is the `POST /pins` body that carries the text, and an edit's response is a
+// `PinCreateResult` too, under a new `record_id`.
 
 class PinSummary {
   const PinSummary({
@@ -82,22 +86,28 @@ List<String> _stringList(dynamic value) {
 /// Proposed name + best-matching existing topic for a message, from
 /// `POST /api/v1/pins/suggest`. Writes nothing on the backend.
 ///
-/// `aliases` and `topic_ref` are intentionally ignored: the confirm dialog
-/// edits only name + topic, and the client sends back `topic_label`, not the
-/// ref (proposal 046 §Solution Design).
+/// `topic_ref` is intentionally ignored: the client sends back `topic_label`,
+/// not the ref (proposal 046 §Solution Design). The chat's confirm dialog edits
+/// only name + topic; the pin form sends [aliases] back with a hand-written pin.
 class PinSuggestion {
-  const PinSuggestion({required this.name, this.topicLabel});
+  const PinSuggestion({
+    required this.name,
+    this.topicLabel,
+    this.aliases = const [],
+  });
 
   final String name;
 
   /// Canonical name of a matching existing topic, or null/empty when the
   /// backend found none similar enough.
   final String? topicLabel;
+  final List<String> aliases;
 
   factory PinSuggestion.fromMap(Map<String, dynamic> map) {
     return PinSuggestion(
       name: map['name'] as String? ?? '',
       topicLabel: map['topic_label'] as String?,
+      aliases: _stringList(map['aliases']),
     );
   }
 }
@@ -135,9 +145,36 @@ class PinCreateRequest {
   }
 }
 
-/// Result of `POST /api/v1/pins`: the created (or re-pinned) [PinDetail] plus
-/// idempotency metadata. `created` is false on an idempotent re-pin;
-/// `supersededRecordId` names a prior same-name pin that was replaced, or "".
+/// Body for `POST /api/v1/pins` that saves [text] as a pin with no conversation.
+/// Empty optional fields are left out, as the backend's `omitempty` expects.
+class PinTextCreateRequest {
+  const PinTextCreateRequest({
+    required this.text,
+    required this.name,
+    this.topicLabel,
+    this.aliases = const [],
+  });
+
+  final String text;
+  final String name;
+  final String? topicLabel;
+  final List<String> aliases;
+
+  Map<String, dynamic> toMap() {
+    final topic = topicLabel;
+    return {
+      'text': text,
+      'name': name,
+      if (topic != null && topic.isNotEmpty) 'topic_label': topic,
+      if (aliases.isNotEmpty) 'aliases': aliases,
+    };
+  }
+}
+
+/// Result of `POST /api/v1/pins` and `PATCH /api/v1/pins/{id}`: the
+/// [PinDetail] as saved plus idempotency metadata. `created` is false on an
+/// idempotent re-pin; `supersededRecordId` names a prior same-name pin that was
+/// replaced, or "". An edit gives the pin a new `recordId`.
 class PinCreateResult {
   const PinCreateResult({
     required this.pin,

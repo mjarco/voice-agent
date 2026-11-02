@@ -55,6 +55,15 @@ Future<void> _pump(WidgetTester tester, PinsRepository repo) async {
         builder: (context, state) => const PinsScreen(),
         routes: [
           GoRoute(
+            path: 'new',
+            builder: (context, state) => Scaffold(
+              body: TextButton(
+                onPressed: () => context.pop(),
+                child: const Text('Close form'),
+              ),
+            ),
+          ),
+          GoRoute(
             path: ':id',
             builder: (context, state) => Scaffold(
               body: Text('Detail ${state.pathParameters['id']}'),
@@ -110,6 +119,45 @@ void main() {
       );
 
       expect(find.byKey(const Key('pins-retry-button')), findsOneWidget);
+    });
+
+    for (final (name, repo) in [
+      ('the empty state', _StubRepository()),
+      ('the error state', _StubRepository()..fetchError = Exception('network')),
+    ]) {
+      testWidgets('"+" is on $name', (tester) async {
+        await _pump(tester, repo);
+
+        expect(find.byKey(const Key('pins-add')), findsOneWidget);
+      });
+    }
+
+    testWidgets('"+" leaves the last row\'s menu reachable', (tester) async {
+      final repo = _StubRepository(
+        pins: [for (var i = 0; i < 30; i++) _pin('p$i')],
+      );
+      await _pump(tester, repo);
+
+      await tester.drag(find.byType(ListView), const Offset(0, -5000));
+      await tester.pumpAndSettle();
+      final menu = tester.getRect(find.byKey(const Key('pin-menu-p29')));
+      final add = tester.getRect(find.byKey(const Key('pins-add')));
+
+      expect(menu.overlaps(add), isFalse);
+    });
+
+    testWidgets('"+" opens the form and the list reloads on return',
+        (tester) async {
+      final repo = _StubRepository(pins: [_pin('a')]);
+      await _pump(tester, repo);
+
+      await tester.tap(find.byKey(const Key('pins-add')));
+      await tester.pumpAndSettle();
+      repo.pins = [_pin('b'), _pin('a')];
+      await tester.tap(find.text('Close form'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('pin-tile-b')), findsOneWidget);
     });
 
     testWidgets('By topic groups pins under labels with a No topic section',

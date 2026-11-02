@@ -110,4 +110,19 @@ void main() {
     expect(notifier.lastActionError, 'nope');
     expect((notifier.state as PinsListLoaded).pins, hasLength(1));
   });
+
+  test('a stale unpin reads the list again and keeps the message', () async {
+    final repo = _MockRepository(pins: [_pin('a')])
+      ..unpinError = PinRefusedException('pin_changed', 'wczytaj ponownie');
+    final notifier = PinsNotifier(repo);
+    await Future<void>.delayed(Duration.zero);
+    final countAfterLoad = repo.fetchCount;
+
+    final ok = await notifier.unpin('a');
+
+    expect(ok, isFalse);
+    expect(repo.fetchCount, countAfterLoad + 1);
+    expect(notifier.lastActionError, 'wczytaj ponownie');
+    expect(notifier.state, isA<PinsListLoaded>());
+  });
 }
