@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
+import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/features/places/presentation/places_sync.dart';
 
 class App extends ConsumerStatefulWidget {
@@ -42,7 +43,29 @@ class _AppState extends ConsumerState<App> {
         _router.go(pending);
         ref.read(pendingDeepLinkProvider.notifier).state = null;
       }
+      final sharedText = ref.read(pendingSharedTextProvider);
+      if (sharedText != null) {
+        _openSharedText(sharedText);
+        ref.read(pendingSharedTextProvider.notifier).state = null;
+      }
     });
+  }
+
+  /// Pushes, as `go` would drop the shell and the hands-free session under it.
+  /// A new-pin form on top is replaced, so two forms never write one draft.
+  void _openSharedText(String text) {
+    if (text.trim().isEmpty) return;
+    final closed = _router.state.fullPath == '/pins/new'
+        ? _router.pushReplacement<Object?>('/pins/new', extra: text)
+        : _router.push<Object?>('/pins/new', extra: text);
+    closed.then((_) => _refreshPins());
+  }
+
+  /// The list loads once, and a form opened from here has no list to return to.
+  void _refreshPins() {
+    if (mounted && ref.exists(pinsNotifierProvider)) {
+      ref.read(pinsNotifierProvider.notifier).refresh();
+    }
   }
 
   @override
@@ -53,6 +76,10 @@ class _AppState extends ConsumerState<App> {
       next.whenData((payload) {
         if (payload.isNotEmpty) _router.go(payload);
       });
+    });
+
+    ref.listen<AsyncValue<SharedText>>(sharedTextStreamProvider, (prev, next) {
+      next.whenData((shared) => _openSharedText(shared.text));
     });
 
     ref.watch(locationLogSyncProvider);

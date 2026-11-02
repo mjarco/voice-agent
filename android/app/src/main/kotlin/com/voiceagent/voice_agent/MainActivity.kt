@@ -1,5 +1,7 @@
 package com.voiceagent.voice_agent
 
+import android.content.Intent
+import android.os.Bundle
 import com.voiceagent.voice_agent.location.LocationBridge
 import com.voiceagent.voice_agent.location.PlaceReadingBridge
 import io.flutter.embedding.android.FlutterActivity
@@ -10,6 +12,15 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private var mediaButtonBridge: MediaButtonBridge? = null
+    private var shareBridge: ShareBridge? = null
+
+    /** A recreated activity gets its starting intent again. */
+    private var recreated = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        recreated = savedInstanceState != null
+        super.onCreate(savedInstanceState)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -29,11 +40,23 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(messenger, "com.voiceagent/place_reading")
             .setMethodCallHandler(PlaceReadingBridge(this))
+
+        val shareChannel = MethodChannel(messenger, "com.voiceagent/share")
+        val share = ShareBridge(shareChannel)
+        shareChannel.setMethodCallHandler(share)
+        shareBridge = share
+        if (!recreated) share.accept(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        shareBridge?.accept(intent)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         mediaButtonBridge?.deactivateSession()
         mediaButtonBridge = null
+        shareBridge = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 

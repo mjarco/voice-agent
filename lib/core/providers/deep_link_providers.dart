@@ -22,3 +22,21 @@ final pendingDeepLinkProvider = StateProvider<String?>((ref) => null);
 final notificationTapStreamProvider = StreamProvider<String>((ref) {
   return const Stream<String>.empty();
 });
+
+/// One share from another app. No `==`, so the same text shared twice still
+/// reaches a listener.
+class SharedText {
+  SharedText(this.text);
+
+  final String text;
+}
+
+/// Cold-start shared text: read in `app_main.dart` before `runApp`, consumed
+/// once on first frame, then set to null (ADR-PLATFORM-008).
+final pendingSharedTextProvider = StateProvider<String?>((ref) => null);
+
+/// Text shared while the app runs (ADR-PLATFORM-008). In production overridden
+/// in `app_main.dart`; the default for tests is an empty stream.
+final sharedTextStreamProvider = StreamProvider<SharedText>((ref) {
+  return const Stream<SharedText>.empty();
+});
