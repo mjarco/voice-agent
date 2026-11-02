@@ -127,6 +127,12 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
         title: const Text('Shopping'),
         actions: [
           IconButton(
+            key: const Key('shopping-places-button'),
+            icon: const Icon(Icons.place_outlined),
+            tooltip: 'Miejsca',
+            onPressed: () => context.push('/places'),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => context.push('/settings'),
           ),

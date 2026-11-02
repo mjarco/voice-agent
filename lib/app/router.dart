@@ -5,6 +5,7 @@ import 'package:voice_agent/features/chat/presentation/conversations_screen.dart
 import 'package:voice_agent/features/chat/presentation/thread_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pin_detail_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pins_screen.dart';
+import 'package:voice_agent/features/places/presentation/places_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_form_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
@@ -88,7 +89,8 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
                     GoRoute(
                       path: 'edit',
                       builder: (context, state) => RoutineFormScreen(
-                          editId: state.pathParameters['id']!),
+                        editId: state.pathParameters['id']!,
+                      ),
                     ),
                   ],
                 ),
@@ -116,6 +118,9 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
         ),
       ],
     ),
+    // Places — top-level like Pins, reached from the Shopping and Record app
+    // bars; a place is named standing there, so it is rare, and not a tab.
+    GoRoute(path: '/places', builder: (context, state) => const PlacesScreen()),
     // Pins — top-level (full-screen, outside shell) so the saved-references
     // screen is reachable from anywhere: the Record landing screen's app bar
     // and the Chat app bar both push '/pins' (P045 + quick-access).

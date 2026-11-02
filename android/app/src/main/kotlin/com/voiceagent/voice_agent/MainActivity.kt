@@ -1,6 +1,7 @@
 package com.voiceagent.voice_agent
 
 import com.voiceagent.voice_agent.location.LocationBridge
+import com.voiceagent.voice_agent.location.PlaceReadingBridge
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -25,6 +26,9 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(messenger, "com.voiceagent/location_log")
             .setMethodCallHandler(LocationBridge(this))
+
+        MethodChannel(messenger, "com.voiceagent/place_reading")
+            .setMethodCallHandler(PlaceReadingBridge(this))
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {

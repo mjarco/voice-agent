@@ -273,6 +273,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
                   },
           ),
           IconButton(
+            key: const Key('record-places-button'),
+            icon: const Icon(Icons.place_outlined),
+            tooltip: 'Miejsca',
+            onPressed: () => context.push('/places'),
+          ),
+          IconButton(
             key: const Key('record-pins-button'),
             icon: const Icon(Icons.push_pin_outlined),
             tooltip: 'Pins',
