@@ -84,6 +84,7 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-NET-003](ADR-NET-003-sse-streaming-client.md) | SSE streaming client | Accepted |
 | [ADR-NET-004](ADR-NET-004-app-version-sync-header.md) | Report installed app version via X-App-Version sync header | Accepted |
 | [ADR-NET-005](ADR-NET-005-location-log-background-upload.md) | The location log uploads in the background | Accepted |
+| [ADR-NET-006](ADR-NET-006-places-local-copy-and-queue.md) | Places are written on the phone first and sent while the app is in use | Accepted |
 
 ### NOTIF — Local Notifications
 

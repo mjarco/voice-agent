@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
+import 'package:voice_agent/features/places/presentation/places_sync.dart';
 
 class App extends ConsumerStatefulWidget {
   const App({super.key, this.scaffoldMessengerKey});
@@ -55,6 +56,7 @@ class _AppState extends ConsumerState<App> {
     });
 
     ref.watch(locationLogSyncProvider);
+    ref.watch(placesSyncProvider);
 
     final isDev = appFlavor == 'dev';
     return MaterialApp.router(
