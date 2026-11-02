@@ -66,7 +66,7 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
   /// Set after a save: no draft may be written behind it.
   bool _draftDone = false;
 
-  /// The server refused this version as out of date: its draft has no future.
+  /// The server no longer takes this version: its draft has no future.
   bool _stale = false;
 
   bool get _isEdit => widget.pin != null;
@@ -94,12 +94,7 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _proposalTimer?.cancel();
-    if (_stale) {
-      _draftTimer?.cancel();
-      _removeDraft();
-    } else {
-      _writeDraft();
-    }
+    _closeDraft();
     _text.dispose();
     _title.dispose();
     super.dispose();
@@ -124,13 +119,27 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
       _draftRestored = true;
       _title.text = draft.title;
       _titleTyped = draft.titleTyped;
-      // Text brought to the form joins the draft instead of replacing it.
-      final brought = widget.initialText;
-      _text.text = brought == null || brought.trim().isEmpty
-          ? draft.text
-          : '${draft.text}\n\n$brought';
+      _topicLabel = draft.topicLabel;
+      _aliases = draft.aliases;
+      _text.text = _joined(draft.text, widget.initialText);
     });
     if (!_titleTyped) _proposeNow();
+  }
+
+  /// Text brought to the form joins the draft instead of replacing it.
+  String _joined(String draft, String? brought) {
+    if (brought == null || brought.trim().isEmpty) return draft;
+    if (draft.trim().isEmpty) return brought;
+    return '$draft\n\n$brought';
+  }
+
+  void _closeDraft() {
+    if (_stale) {
+      _draftTimer?.cancel();
+      _removeDraft();
+    } else {
+      _writeDraft();
+    }
   }
 
   void _discardDraft() {
@@ -164,7 +173,9 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
     final pin = widget.pin;
     final titleLeft = title.trim().isNotEmpty && (pin != null || _titleTyped);
     final nothingToKeep = text.trim().isEmpty && !titleLeft;
-    final unchanged = pin != null && title == pin.pinName && text == pin.text;
+    // Save trims the title, so spaces alone are no change.
+    final unchanged =
+        pin != null && title.trim() == pin.pinName && text == pin.text;
     if (nothingToKeep || unchanged) {
       _removeDraft();
       return;
@@ -173,7 +184,13 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
     _drafts
         .save(
           pin?.recordId,
-          PinDraft(title: title, text: text, titleTyped: _titleTyped),
+          PinDraft(
+            title: title,
+            text: text,
+            titleTyped: _titleTyped,
+            topicLabel: _topicLabel,
+            aliases: _aliases,
+          ),
         )
         .catchError((Object _) {});
   }
@@ -218,6 +235,7 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
         _aliases = proposal.aliases;
         if (!_titleTyped) _title.text = proposal.name;
       });
+      _scheduleDraftWrite();
     } catch (_) {
       if (!mounted || round != _proposalRound) return;
       setState(() {
@@ -270,8 +288,9 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
       if (!mounted) return;
       context.pop(saved.pin);
     } catch (e) {
-      final stale = e is PinRefusedException && e.isStale;
-      _stale = stale;
+      final gone = (e is PinRefusedException && e.isStale) ||
+          e is PinNotFoundException;
+      _stale = _stale || gone;
       if (!mounted) return;
       setState(() => _saving = false);
       final reason = e is PinsException ? e.message : e.toString();
@@ -282,7 +301,7 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
         ..showSnackBar(
           SnackBar(
             content: Text('Not saved: $reason'),
-            action: stale
+            action: gone
                 ? SnackBarAction(
                     label: 'Copy text',
                     onPressed: () =>
@@ -307,6 +326,10 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
     // Back during a save would lose the new record_id the caller must follow.
     return PopScope(
       canPop: !_saving,
+      // At once, not at dispose: the next form may open during the transition.
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _closeDraft();
+      },
       child: Scaffold(
         appBar: AppBar(
           title: Text(_isEdit ? 'Edit pin' : 'New pin'),

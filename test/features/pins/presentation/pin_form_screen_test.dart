@@ -80,9 +80,11 @@ class _FakeDrafts implements PinDraftStore {
   final Map<String?, PinDraft> drafts = {};
   int writes = 0;
   bool loadFails = false;
+  Completer<void>? loadHold;
 
   @override
   Future<PinDraft?> load(String? recordId) async {
+    await loadHold?.future;
     if (loadFails) throw Exception('broken');
     return drafts[recordId];
   }
@@ -651,7 +653,152 @@ void main() {
       await tester.tap(_save);
       await tester.pumpAndSettle();
 
+      expect(writer.created, hasLength(1));
       expect(drafts.drafts[null]?.text, 'kept');
+    });
+
+    testWidgets('a draft keeps the proposal for the save', (tester) async {
+      final writer = _FakeWriter();
+      final drafts = _FakeDrafts();
+      await _pump(tester, writer, drafts: drafts);
+
+      await tester.enterText(_titleField, 'Mine');
+      await tester.enterText(_textField, 'typed');
+      await tester.pump(_delay);
+      await tester.pump();
+      await tester.pump(wait);
+
+      expect(drafts.drafts[null]?.topicLabel, 'Kuchnia');
+      expect(drafts.drafts[null]?.aliases, ['ciasto']);
+    });
+
+    testWidgets('a restored proposal goes out with the save', (tester) async {
+      final writer = _FakeWriter();
+      final drafts = _FakeDrafts()
+        ..drafts[null] = const PinDraft(
+          title: 'Mine',
+          text: 'kept',
+          titleTyped: true,
+          topicLabel: 'Kuchnia',
+          aliases: ['ciasto'],
+        );
+      await _pump(tester, writer, drafts: drafts);
+
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+
+      expect(writer.created.single.topicLabel, 'Kuchnia');
+      expect(writer.created.single.aliases, ['ciasto']);
+    });
+
+    testWidgets('the fields wait for the draft', (tester) async {
+      final hold = Completer<void>();
+      final drafts = _FakeDrafts()
+        ..drafts['old-id'] = typed
+        ..loadHold = hold;
+      await _pump(tester, _FakeWriter(), drafts: drafts, pin: _pin);
+
+      expect(tester.widget<TextField>(_textField).readOnly, isTrue);
+      expect(tester.widget<TextField>(_titleField).readOnly, isTrue);
+      expect(_saveEnabled(tester), isFalse);
+
+      hold.complete();
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<TextField>(_textField).readOnly, isFalse);
+      expect(_text(tester), 'kept');
+    });
+
+    testWidgets('an edit opened and left writes nothing', (tester) async {
+      final drafts = _FakeDrafts();
+      await _pump(tester, _FakeWriter(), drafts: drafts, pin: _pin);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(drafts.writes, 0);
+    });
+
+    testWidgets('spaces after the title are no change', (tester) async {
+      final writer = _FakeWriter();
+      final drafts = _FakeDrafts();
+      await _pump(tester, writer, drafts: drafts, pin: _pin);
+
+      await tester.enterText(_titleField, 'Tarta ');
+      await tester.pump();
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+
+      expect(writer.edits, isEmpty);
+      expect(drafts.drafts, isEmpty);
+    });
+
+    testWidgets('Back writes before the page is gone', (tester) async {
+      final drafts = _FakeDrafts();
+      await _pump(tester, _FakeWriter(), drafts: drafts);
+
+      await tester.enterText(_textField, 'typed');
+      await tester.binding.handlePopRoute();
+
+      expect(drafts.drafts[null]?.text, 'typed');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a stale edit stays stale after an offline retry',
+        (tester) async {
+      final writer = _FakeWriter()
+        ..saveError = PinRefusedException('pin_changed', 'wczytaj ponownie');
+      final drafts = _FakeDrafts();
+      await _pump(tester, writer, drafts: drafts, pin: _pin);
+
+      await tester.enterText(_textField, 'new text');
+      await tester.pump();
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+      writer.saveError = Exception('offline');
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(drafts.drafts, isEmpty);
+    });
+
+    testWidgets('a pin that is gone offers the text and drops the draft',
+        (tester) async {
+      final writer = _FakeWriter()..saveError = PinNotFoundException();
+      final drafts = _FakeDrafts();
+      await _pump(tester, writer, drafts: drafts, pin: _pin);
+
+      await tester.enterText(_textField, 'new text');
+      await tester.pump();
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Copy text'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(drafts.drafts, isEmpty);
+    });
+
+    testWidgets('text brought to a title-only draft starts the text',
+        (tester) async {
+      final drafts = _FakeDrafts()
+        ..drafts[null] = const PinDraft(
+          title: 'Mine',
+          text: '',
+          titleTyped: true,
+        );
+      await _pump(
+        tester,
+        _FakeWriter(),
+        drafts: drafts,
+        initialText: 'shared',
+      );
+
+      expect(_text(tester), 'shared');
     });
 
     testWidgets('Discard on a new pin empties the form', (tester) async {

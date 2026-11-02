@@ -4,12 +4,16 @@ class PinDraft {
     required this.title,
     required this.text,
     required this.titleTyped,
+    this.topicLabel,
+    this.aliases = const [],
   });
 
   factory PinDraft.fromMap(Map<String, dynamic> map) => PinDraft(
         title: map['title'] as String,
         text: map['text'] as String,
         titleTyped: map['title_typed'] as bool,
+        topicLabel: map['topic_label'] as String?,
+        aliases: (map['aliases'] as List<dynamic>).cast<String>(),
       );
 
   final String title;
@@ -18,10 +22,16 @@ class PinDraft {
   /// False when [title] is the server's proposal, which a new one may replace.
   final bool titleTyped;
 
+  /// The server's proposal for [text], sent with a new pin.
+  final String? topicLabel;
+  final List<String> aliases;
+
   Map<String, dynamic> toMap() => {
         'title': title,
         'text': text,
         'title_typed': titleTyped,
+        'topic_label': topicLabel,
+        'aliases': aliases,
       };
 }
 

@@ -6,7 +6,13 @@ import 'package:voice_agent/features/pins/domain/pin_draft_store.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  const draft = PinDraft(title: 'Tarta', text: 'ciasto', titleTyped: true);
+  const draft = PinDraft(
+    title: 'Tarta',
+    text: 'ciasto',
+    titleTyped: true,
+    topicLabel: 'Kuchnia',
+    aliases: ['ciasto'],
+  );
 
   group('PrefsPinDraftStore', () {
     test('no draft reads as null', () async {
@@ -21,6 +27,8 @@ void main() {
       expect(loaded?.title, 'Tarta');
       expect(loaded?.text, 'ciasto');
       expect(loaded?.titleTyped, isTrue);
+      expect(loaded?.topicLabel, 'Kuchnia');
+      expect(loaded?.aliases, ['ciasto']);
     });
 
     test('the new pin and each edited pin have their own draft', () async {
