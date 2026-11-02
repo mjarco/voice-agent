@@ -59,23 +59,34 @@ class Place {
 
   Place copyWith({
     String? name,
-    double? latitude,
-    double? longitude,
-    double? accuracyM,
     List<String>? tags,
     List<String>? storeTypes,
     DateTime? updatedAt,
   }) => Place(
     id: id,
     name: name ?? this.name,
-    latitude: latitude ?? this.latitude,
-    longitude: longitude ?? this.longitude,
-    accuracyM: accuracyM ?? this.accuracyM,
+    latitude: latitude,
+    longitude: longitude,
+    accuracyM: accuracyM,
     radiusM: radiusM,
     tags: tags ?? this.tags,
     storeTypes: storeTypes ?? this.storeTypes,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+  );
+
+  /// Takes the whole position, so an old accuracy never outlives its reading.
+  Place movedTo(PlaceReading reading) => Place(
+    id: id,
+    name: name,
+    latitude: reading.latitude,
+    longitude: reading.longitude,
+    accuracyM: reading.accuracyM,
+    radiusM: radiusM,
+    tags: tags,
+    storeTypes: storeTypes,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
   );
 }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:voice_agent/features/places/domain/place.dart';
 import 'package:voice_agent/features/places/domain/places_ports.dart';
 
@@ -59,11 +61,17 @@ class FakePlacesStore implements PlacesLocalStore {
 
   PlacesSnapshot snapshot;
 
+  /// When set, a save waits for it, as a slow disk would.
+  Completer<void>? gate;
+
   @override
   Future<PlacesSnapshot> load() async => snapshot;
 
   @override
-  Future<void> save(PlacesSnapshot snapshot) async => this.snapshot = snapshot;
+  Future<void> save(PlacesSnapshot snapshot) async {
+    await gate?.future;
+    this.snapshot = snapshot;
+  }
 }
 
 class FakeReadingPort implements PlaceReadingPort {
@@ -71,9 +79,17 @@ class FakeReadingPort implements PlaceReadingPort {
 
   PlaceReadingResult result;
   int settings = 0;
+  int reads = 0;
+
+  /// When set, a reading waits for it, as a fix does.
+  Completer<void>? gate;
 
   @override
-  Future<PlaceReadingResult> read() async => result;
+  Future<PlaceReadingResult> read() async {
+    reads++;
+    await gate?.future;
+    return result;
+  }
 
   @override
   Future<void> openSettings() async => settings++;

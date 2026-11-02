@@ -35,10 +35,16 @@ class _PlacesScreenState extends ConsumerState<PlacesScreen> {
 
   PlaceReadingResult? _reading;
   bool _readingNow = false;
+  bool _saving = false;
+
+  /// You may have moved while the app was away, so a reading from before must
+  /// not be saved as "here".
+  late final AppLifecycleListener _lifecycle;
 
   @override
   void initState() {
     super.initState();
+    _lifecycle = AppLifecycleListener(onResume: () => unawaited(_read()));
     _name.addListener(() => setState(() {}));
     unawaited(_read());
     unawaited(ref.read(placesNotifierProvider.notifier).sync());
@@ -46,12 +52,14 @@ class _PlacesScreenState extends ConsumerState<PlacesScreen> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _name.dispose();
     _otherTags.dispose();
     super.dispose();
   }
 
   Future<void> _read() async {
+    if (_readingNow) return;
     setState(() => _readingNow = true);
     final result = await ref.read(placeReadingPortProvider).read();
     if (!mounted) return;
@@ -62,23 +70,28 @@ class _PlacesScreenState extends ConsumerState<PlacesScreen> {
   }
 
   Future<void> _save(PlaceReading reading) async {
+    setState(() => _saving = true);
     final now = DateTime.now().toUtc();
-    await ref
-        .read(placesNotifierProvider.notifier)
-        .save(
-          Place(
-            id: const Uuid().v4(),
-            name: _name.text.trim(),
-            latitude: reading.latitude,
-            longitude: reading.longitude,
-            accuracyM: reading.accuracyM,
-            radiusM: Place.defaultRadiusM,
-            tags: _parseTags(_otherTags.text, _tags),
-            storeTypes: _types.toList(),
-            createdAt: now,
-            updatedAt: now,
-          ),
-        );
+    try {
+      await ref
+          .read(placesNotifierProvider.notifier)
+          .save(
+            Place(
+              id: const Uuid().v4(),
+              name: _name.text.trim(),
+              latitude: reading.latitude,
+              longitude: reading.longitude,
+              accuracyM: reading.accuracyM,
+              radiusM: Place.defaultRadiusM,
+              tags: _parseTags(_otherTags.text, _tags),
+              storeTypes: _types.toList(),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
     if (!mounted) return;
     setState(() {
       _name.clear();
@@ -93,7 +106,11 @@ class _PlacesScreenState extends ConsumerState<PlacesScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(placesNotifierProvider);
     final reading = _reading?.reading;
-    final canSave = reading != null && _name.text.trim().isNotEmpty;
+    final canSave =
+        reading != null &&
+        !_readingNow &&
+        !_saving &&
+        _name.text.trim().isNotEmpty;
     return Scaffold(
       appBar: AppBar(title: const Text('Miejsca')),
       body: RefreshIndicator(
@@ -420,18 +437,14 @@ class _PlaceEditorState extends ConsumerState<_PlaceEditor> {
     final name = _name.text.trim();
     if (name.isEmpty) return;
     final moved = _movedTo;
+    final edited = widget.place.copyWith(
+      name: name,
+      tags: _parseTags(_tags.text, const {}),
+      storeTypes: _types.toList(),
+    );
     await ref
         .read(placesNotifierProvider.notifier)
-        .save(
-          widget.place.copyWith(
-            name: name,
-            tags: _parseTags(_tags.text, const {}),
-            storeTypes: _types.toList(),
-            latitude: moved?.latitude,
-            longitude: moved?.longitude,
-            accuracyM: moved?.accuracyM,
-          ),
-        );
+        .save(moved == null ? edited : edited.movedTo(moved));
     if (mounted) Navigator.of(context).pop();
   }
 
