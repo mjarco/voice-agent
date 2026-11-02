@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/features/pins/data/api_pins_repository.dart';
+import 'package:voice_agent/features/pins/data/prefs_pin_draft_store.dart';
+import 'package:voice_agent/features/pins/domain/pin_draft_store.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 import 'package:voice_agent/features/pins/domain/pins_state.dart';
 import 'package:voice_agent/features/pins/presentation/pin_detail_notifier.dart';
@@ -10,6 +12,10 @@ final pinsRepositoryProvider = Provider<PinsRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
   return ApiPinsRepository(apiClient);
 });
+
+final pinDraftStoreProvider = Provider<PinDraftStore>(
+  (ref) => PrefsPinDraftStore(),
+);
 
 final pinsNotifierProvider =
     StateNotifierProvider<PinsNotifier, PinsListState>((ref) {

@@ -6,8 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
+import 'package:voice_agent/features/pins/domain/pin_draft_store.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 import 'package:voice_agent/features/pins/presentation/pin_form_screen.dart';
+import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 
 class _FakeWriter implements PinWriter {
   /// Answers by text; a text with no entry gets 'Proposed'.
@@ -74,6 +76,29 @@ class _FakeWriter implements PinWriter {
       throw UnimplementedError();
 }
 
+class _FakeDrafts implements PinDraftStore {
+  final Map<String?, PinDraft> drafts = {};
+  int writes = 0;
+  bool loadFails = false;
+
+  @override
+  Future<PinDraft?> load(String? recordId) async {
+    if (loadFails) throw Exception('broken');
+    return drafts[recordId];
+  }
+
+  @override
+  Future<void> save(String? recordId, PinDraft draft) async {
+    writes++;
+    drafts[recordId] = draft;
+  }
+
+  @override
+  Future<void> remove(String? recordId) async {
+    drafts.remove(recordId);
+  }
+}
+
 final _pin = PinDetail(
   recordId: 'old-id',
   pinName: 'Tarta',
@@ -101,6 +126,7 @@ Future<void> _pump(
   _FakeWriter writer, {
   PinDetail? pin,
   String? initialText,
+  _FakeDrafts? drafts,
 }) async {
   final router = GoRouter(
     initialLocation: '/start',
@@ -118,7 +144,10 @@ Future<void> _pump(
   );
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [pinWriterProvider.overrideWithValue(writer)],
+      overrides: [
+        pinWriterProvider.overrideWithValue(writer),
+        pinDraftStoreProvider.overrideWithValue(drafts ?? _FakeDrafts()),
+      ],
       child: MaterialApp.router(routerConfig: router),
     ),
   );
@@ -465,6 +494,236 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Copy text'), findsNothing);
+    });
+  });
+
+  group('draft', () {
+    const typed = PinDraft(title: 'Mine', text: 'kept', titleTyped: true);
+    const proposed = PinDraft(title: 'Old', text: 'kept', titleTyped: false);
+    final banner = find.byKey(const Key('pin-form-draft'));
+    final discard = find.byKey(const Key('pin-form-draft-discard'));
+    const wait = PinFormScreen.draftDelay;
+
+    testWidgets('is written only after the fields stop changing',
+        (tester) async {
+      final drafts = _FakeDrafts();
+      await _pump(tester, _FakeWriter(), drafts: drafts);
+
+      await tester.enterText(_textField, 'first');
+      await tester.pump(wait - const Duration(milliseconds: 100));
+      await tester.enterText(_textField, 'second');
+      await tester.pump(wait - const Duration(milliseconds: 100));
+      expect(drafts.writes, 0);
+
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(drafts.writes, 1);
+      expect(drafts.drafts[null]?.text, 'second');
+    });
+
+    testWidgets('Back keeps what was typed for the next form', (tester) async {
+      final drafts = _FakeDrafts();
+      await _pump(tester, _FakeWriter(), drafts: drafts);
+
+      await tester.enterText(_titleField, 'Mine');
+      await tester.enterText(_textField, 'typed');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(drafts.drafts[null]?.title, 'Mine');
+      expect(drafts.drafts[null]?.text, 'typed');
+      expect(drafts.drafts[null]?.titleTyped, isTrue);
+    });
+
+    testWidgets('going to the background writes at once', (tester) async {
+      final drafts = _FakeDrafts();
+      await _pump(tester, _FakeWriter(), drafts: drafts);
+
+      await tester.enterText(_textField, 'typed');
+      final binding = tester.binding;
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump(Duration.zero);
+      final text = drafts.drafts[null]?.text;
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+
+      expect(text, 'typed');
+    });
+
+    testWidgets('a typed draft comes back without a proposal', (tester) async {
+      final writer = _FakeWriter();
+      final drafts = _FakeDrafts()..drafts[null] = typed;
+      await _pump(tester, writer, drafts: drafts);
+
+      expect(banner, findsOneWidget);
+      expect(_title(tester), 'Mine');
+      expect(_text(tester), 'kept');
+      expect(writer.suggested, isEmpty);
+    });
+
+    testWidgets('a proposed title is asked for again', (tester) async {
+      final writer = _FakeWriter();
+      final drafts = _FakeDrafts()..drafts[null] = proposed;
+      await _pump(tester, writer, drafts: drafts);
+
+      expect(writer.suggested, ['kept']);
+      expect(_title(tester), 'Proposed');
+    });
+
+    testWidgets('no draft shows no banner', (tester) async {
+      await _pump(tester, _FakeWriter());
+
+      expect(banner, findsNothing);
+    });
+
+    testWidgets('a broken draft leaves the form working', (tester) async {
+      final drafts = _FakeDrafts()..loadFails = true;
+      await _pump(tester, _FakeWriter(), drafts: drafts, pin: _pin);
+
+      await tester.enterText(_textField, 'new text');
+      await tester.pump();
+
+      expect(_text(tester), 'new text');
+      expect(_saveEnabled(tester), isTrue);
+    });
+
+    testWidgets('an edit has its own draft', (tester) async {
+      final drafts = _FakeDrafts()..drafts[null] = typed;
+      await _pump(tester, _FakeWriter(), drafts: drafts, pin: _pin);
+
+      expect(banner, findsNothing);
+      expect(_text(tester), 'old text');
+
+      await tester.enterText(_textField, 'edited');
+      await tester.pump(wait);
+
+      expect(drafts.drafts['old-id']?.text, 'edited');
+      expect(drafts.drafts[null]?.text, 'kept');
+    });
+
+    testWidgets('an edit back to the pin leaves no draft', (tester) async {
+      final drafts = _FakeDrafts();
+      await _pump(tester, _FakeWriter(), drafts: drafts, pin: _pin);
+
+      await tester.enterText(_textField, 'edited');
+      await tester.pump(wait);
+      await tester.enterText(_textField, 'old text');
+      await tester.pump(wait);
+
+      expect(drafts.drafts, isEmpty);
+    });
+
+    testWidgets('emptied fields leave no draft', (tester) async {
+      final drafts = _FakeDrafts()..drafts[null] = typed;
+      await _pump(tester, _FakeWriter(), drafts: drafts);
+
+      await tester.enterText(_titleField, '');
+      await tester.enterText(_textField, '');
+      await tester.pump(wait);
+
+      expect(drafts.drafts, isEmpty);
+    });
+
+    testWidgets('a save removes the draft and writes none after it',
+        (tester) async {
+      final drafts = _FakeDrafts();
+      await _pump(tester, _FakeWriter(), drafts: drafts);
+
+      await tester.enterText(_titleField, 'Mine');
+      await tester.enterText(_textField, 'typed');
+      await tester.pump(wait);
+      expect(drafts.drafts, isNotEmpty);
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+
+      expect(find.text('popped new-id'), findsOneWidget);
+      expect(drafts.drafts, isEmpty);
+    });
+
+    testWidgets('a failed save keeps the draft', (tester) async {
+      final writer = _FakeWriter()..saveError = Exception('offline');
+      final drafts = _FakeDrafts()..drafts[null] = typed;
+      await _pump(tester, writer, drafts: drafts);
+
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+
+      expect(drafts.drafts[null]?.text, 'kept');
+    });
+
+    testWidgets('Discard on a new pin empties the form', (tester) async {
+      final writer = _FakeWriter();
+      final drafts = _FakeDrafts()..drafts[null] = typed;
+      await _pump(tester, writer, drafts: drafts);
+
+      await tester.tap(discard);
+      await tester.pumpAndSettle();
+
+      expect(banner, findsNothing);
+      expect(_title(tester), '');
+      expect(_text(tester), '');
+      expect(drafts.drafts, isEmpty);
+    });
+
+    testWidgets('after Discard a new title may be proposed', (tester) async {
+      final writer = _FakeWriter();
+      final drafts = _FakeDrafts()..drafts[null] = typed;
+      await _pump(tester, writer, drafts: drafts);
+
+      await tester.tap(discard);
+      await tester.pumpAndSettle();
+      await tester.enterText(_textField, 'fresh');
+      await tester.pump(_delay);
+      await tester.pump();
+
+      expect(_title(tester), 'Proposed');
+    });
+
+    testWidgets('Discard on an edit returns to the pin', (tester) async {
+      final drafts = _FakeDrafts()..drafts['old-id'] = typed;
+      await _pump(tester, _FakeWriter(), drafts: drafts, pin: _pin);
+
+      expect(_text(tester), 'kept');
+      await tester.tap(discard);
+      await tester.pumpAndSettle();
+
+      expect(_title(tester), 'Tarta');
+      expect(_text(tester), 'old text');
+      expect(drafts.drafts, isEmpty);
+    });
+
+    testWidgets('text brought to the form joins the draft', (tester) async {
+      final drafts = _FakeDrafts()..drafts[null] = typed;
+      await _pump(
+        tester,
+        _FakeWriter(),
+        drafts: drafts,
+        initialText: 'shared',
+      );
+
+      expect(_text(tester), 'kept\n\nshared');
+      expect(_title(tester), 'Mine');
+    });
+
+    testWidgets('leaving a stale edit removes its draft', (tester) async {
+      final writer = _FakeWriter()
+        ..saveError = PinRefusedException('pin_changed', 'wczytaj ponownie');
+      final drafts = _FakeDrafts();
+      await _pump(tester, writer, drafts: drafts, pin: _pin);
+
+      await tester.enterText(_textField, 'new text');
+      await tester.pump(wait);
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+      expect(drafts.drafts['old-id']?.text, 'new text');
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(drafts.drafts, isEmpty);
     });
   });
 }
