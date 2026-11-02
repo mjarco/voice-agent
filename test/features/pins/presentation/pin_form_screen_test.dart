@@ -855,6 +855,20 @@ void main() {
       expect(_title(tester), 'Mine');
     });
 
+    testWidgets('a form with nothing new writes nothing on leaving',
+        (tester) async {
+      final drafts = _FakeDrafts();
+      await _pump(tester, _FakeWriter(), drafts: drafts, pin: _pin);
+
+      await tester.enterText(_textField, 'edited');
+      await tester.pump(wait);
+      expect(drafts.writes, 1);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(drafts.writes, 1);
+    });
+
     testWidgets('text brought to the form is kept without any typing',
         (tester) async {
       final writer = _FakeWriter()..suggestError = Exception('offline');

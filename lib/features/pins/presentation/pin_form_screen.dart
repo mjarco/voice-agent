@@ -63,6 +63,10 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
   bool _draftChecked = false;
   bool _draftRestored = false;
 
+  /// The fields changed since the last write. A clean form writes nothing, so
+  /// a form on its way out cannot overwrite the draft of the one replacing it.
+  bool _draftDirty = false;
+
   /// Set after a save: no draft may be written behind it.
   bool _draftDone = false;
 
@@ -147,6 +151,7 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
 
   void _discardDraft() {
     _draftTimer?.cancel();
+    _draftDirty = false;
     _proposalTimer?.cancel();
     _proposalRound++;
     _removeDraft();
@@ -164,13 +169,15 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
   }
 
   void _scheduleDraftWrite() {
+    _draftDirty = true;
     _draftTimer?.cancel();
     _draftTimer = Timer(PinFormScreen.draftDelay, _writeDraft);
   }
 
   void _writeDraft() {
     _draftTimer?.cancel();
-    if (!_draftChecked || _draftDone) return;
+    if (!_draftChecked || _draftDone || !_draftDirty) return;
+    _draftDirty = false;
     final title = _title.text;
     final text = _text.text;
     final pin = widget.pin;
@@ -238,7 +245,8 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
         _aliases = proposal.aliases;
         if (!_titleTyped) _title.text = proposal.name;
       });
-      _scheduleDraftWrite();
+      // A late answer must not write over the draft of a form replacing this one.
+      if (ModalRoute.of(context)?.isCurrent ?? true) _scheduleDraftWrite();
     } catch (_) {
       if (!mounted || round != _proposalRound) return;
       setState(() {

@@ -60,7 +60,7 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 **Why:** criterion 1 of the readiness; the warm channel of ADR-PLATFORM-008.
 
-**Expected:** "New pin" with the text, over Agenda. After Save you are on Agenda, and the pin is on the Pins screen.
+**Expected:** "New pin" with the text, over Agenda. After Save you are on Agenda, and the pin is at the top of the Pins screen, also when Pins was opened earlier in this run.
 
 **On failure:** app comes up with no form: `onNewIntent` in `MainActivity.kt`, `sharedTextStreamProvider` in `app.dart`.
 
@@ -83,13 +83,13 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 **Status:** pending
 
 **Do:**
-1. Share a text. On the form, rotate the phone.
-2. Go Back to the Pins screen, Home, then open Voice Agent from recents.
+1. Remove Voice Agent from recents, then share a text from Chrome. On the form, rotate the phone.
+2. Back until the form is gone, then Home. Run `adb shell am kill com.voiceagent.voice_agent`, and open Voice Agent from recents.
 3. Share the same text again and Back without saving; repeat once.
 
-**Why:** a redelivered intent must not open the form again, and a repeated share must not be swallowed.
+**Why:** a redelivered intent must not open the form again, and a repeated share must not be swallowed. Step 2 needs the process gone, or the guard never runs.
 
-**Expected:** step 1 keeps one form. Step 2 opens no form. In step 3 the form opens both times.
+**Expected:** step 1 keeps one form. Step 2 opens no form, though the app starts again. In step 3 the form opens both times.
 
 **On failure:** `savedInstanceState` in `MainActivity.kt`, `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY` in `ShareBridge.kt`; the `SharedText` wrapper for a swallowed repeat.
 
@@ -143,10 +143,11 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 **Do:**
 1. Open the app, leave it on Routines, Home, tap the icon.
 2. With the app in the background, tap a routine or agenda notification.
+3. Open a screen that shows a system permission dialog, Home, tap the icon.
 
 **Why:** `launchMode` changes every way into the activity.
 
-**Expected:** step 1 returns to Routines, not to a fresh start. Step 2 opens the notification's screen in the same app.
+**Expected:** step 1 returns to Routines, not to a fresh start. Step 2 opens the notification's screen in the same app. In step 3 the dialog is gone: `singleTask` closes what stands above the app, and this is accepted.
 
 **On failure:** `launchMode` in `AndroidManifest.xml`.
 

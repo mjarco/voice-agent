@@ -106,8 +106,13 @@ class _StubPinWriter implements PinWriter {
 }
 
 class _StubPinsRepository implements PinsRepository {
+  int fetches = 0;
+
   @override
-  Future<List<PinSummary>> fetchPins(PinView view) async => [];
+  Future<List<PinSummary>> fetchPins(PinView view) async {
+    fetches++;
+    return [];
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
@@ -221,6 +226,7 @@ void main() {
       WidgetTester tester, {
       String? cold,
       _MemoryDrafts? drafts,
+      _StubPinsRepository? pins,
     }) async {
       final warm = StreamController<SharedText>();
       addTearDown(warm.close);
@@ -229,7 +235,9 @@ void main() {
           overrides: [
             ..._testOverrides,
             pinWriterProvider.overrideWithValue(_StubPinWriter()),
-            pinsRepositoryProvider.overrideWithValue(_StubPinsRepository()),
+            pinsRepositoryProvider.overrideWithValue(
+              pins ?? _StubPinsRepository(),
+            ),
             pinDraftStoreProvider.overrideWithValue(drafts ?? _MemoryDrafts()),
             pendingSharedTextProvider.overrideWith((ref) => cold),
             sharedTextStreamProvider.overrideWith((ref) => warm.stream),
@@ -303,6 +311,52 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(form, findsOneWidget);
+    });
+
+    testWidgets('leaving a shared form reads a loaded list again',
+        (tester) async {
+      final pins = _StubPinsRepository();
+      final warm = await pump(tester, pins: pins);
+      ProviderScope.containerOf(tester.element(find.byType(App)))
+          .read(pinsNotifierProvider);
+      await tester.pump();
+      final before = pins.fetches;
+
+      warm.add(SharedText('shared'));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(pins.fetches, before + 1);
+    });
+
+    testWidgets('leaving a replaced form reads a loaded list again',
+        (tester) async {
+      final pins = _StubPinsRepository();
+      final warm = await pump(tester, cold: 'first', pins: pins);
+      ProviderScope.containerOf(tester.element(find.byType(App)))
+          .read(pinsNotifierProvider);
+      await tester.pump();
+
+      warm.add(SharedText('second'));
+      await tester.pumpAndSettle();
+      final before = pins.fetches;
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(pins.fetches, before + 1);
+    });
+
+    testWidgets('a list never opened is not read', (tester) async {
+      final pins = _StubPinsRepository();
+      final warm = await pump(tester, pins: pins);
+
+      warm.add(SharedText('shared'));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(pins.fetches, lessThanOrEqualTo(1));
     });
 
     testWidgets('a share replaces a new-pin form and joins its draft',

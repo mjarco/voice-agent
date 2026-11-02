@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
+import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/features/places/presentation/places_sync.dart';
 
 class App extends ConsumerStatefulWidget {
@@ -54,10 +55,16 @@ class _AppState extends ConsumerState<App> {
   /// A new-pin form on top is replaced, so two forms never write one draft.
   void _openSharedText(String text) {
     if (text.trim().isEmpty) return;
-    if (_router.state.fullPath == '/pins/new') {
-      _router.pushReplacement('/pins/new', extra: text);
-    } else {
-      _router.push('/pins/new', extra: text);
+    final closed = _router.state.fullPath == '/pins/new'
+        ? _router.pushReplacement<Object?>('/pins/new', extra: text)
+        : _router.push<Object?>('/pins/new', extra: text);
+    closed.then((_) => _refreshPins());
+  }
+
+  /// The list loads once, and a form opened from here has no list to return to.
+  void _refreshPins() {
+    if (mounted && ref.exists(pinsNotifierProvider)) {
+      ref.read(pinsNotifierProvider.notifier).refresh();
     }
   }
 
