@@ -42,7 +42,23 @@ class _AppState extends ConsumerState<App> {
         _router.go(pending);
         ref.read(pendingDeepLinkProvider.notifier).state = null;
       }
+      final sharedText = ref.read(pendingSharedTextProvider);
+      if (sharedText != null) {
+        _openSharedText(sharedText);
+        ref.read(pendingSharedTextProvider.notifier).state = null;
+      }
     });
+  }
+
+  /// Pushes, as `go` would drop the shell and the hands-free session under it.
+  /// A new-pin form on top is replaced, so two forms never write one draft.
+  void _openSharedText(String text) {
+    if (text.trim().isEmpty) return;
+    if (_router.state.fullPath == '/pins/new') {
+      _router.pushReplacement('/pins/new', extra: text);
+    } else {
+      _router.push('/pins/new', extra: text);
+    }
   }
 
   @override
@@ -53,6 +69,10 @@ class _AppState extends ConsumerState<App> {
       next.whenData((payload) {
         if (payload.isNotEmpty) _router.go(payload);
       });
+    });
+
+    ref.listen<AsyncValue<SharedText>>(sharedTextStreamProvider, (prev, next) {
+      next.whenData((shared) => _openSharedText(shared.text));
     });
 
     ref.watch(locationLogSyncProvider);

@@ -113,6 +113,7 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
       // A draft that cannot be read must not block the form.
     }
     if (!mounted) return;
+    final brought = widget.initialText?.trim().isNotEmpty ?? false;
     setState(() {
       _draftChecked = true;
       if (draft == null) return;
@@ -124,6 +125,8 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
       _text.text = _joined(draft.text, widget.initialText);
     });
     if (!_titleTyped) _proposeNow();
+    // Text brought from elsewhere has no other copy.
+    if (brought) _scheduleDraftWrite();
   }
 
   /// Text brought to the form joins the draft instead of replacing it.

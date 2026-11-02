@@ -855,6 +855,17 @@ void main() {
       expect(_title(tester), 'Mine');
     });
 
+    testWidgets('text brought to the form is kept without any typing',
+        (tester) async {
+      final writer = _FakeWriter()..suggestError = Exception('offline');
+      final drafts = _FakeDrafts();
+      await _pump(tester, writer, drafts: drafts, initialText: 'shared');
+
+      await tester.pump(wait);
+
+      expect(drafts.drafts[null]?.text, 'shared');
+    });
+
     testWidgets('leaving a stale edit removes its draft', (tester) async {
       final writer = _FakeWriter()
         ..saveError = PinRefusedException('pin_changed', 'wczytaj ponownie');

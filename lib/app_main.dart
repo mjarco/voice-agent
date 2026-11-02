@@ -29,6 +29,7 @@ import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/core/network/shopping_proposals_port.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
+import 'package:voice_agent/core/share/shared_text_channel.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/session_control/toaster.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
@@ -55,6 +56,9 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
   // observe the launch tap. `getNotificationAppLaunchDetails` queries
   // the platform channel directly and does not require plugin initialize.
   final cold = await LocalNotificationService.readColdStartPayload();
+
+  final sharedTexts = SharedTextChannel();
+  final coldSharedText = await sharedTexts.takeInitialText();
 
   FlutterForegroundTaskService.initForegroundTask();
 
@@ -131,6 +135,8 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
         pendingDeepLinkProvider.overrideWith((ref) => cold),
         notificationTapStreamProvider
             .overrideWith((ref) => tapStream),
+        pendingSharedTextProvider.overrideWith((ref) => coldSharedText),
+        sharedTextStreamProvider.overrideWith((ref) => sharedTexts.texts),
 
         // Pre-existing overrides (unchanged from before P040).
         toasterProvider.overrideWithValue(Toaster(scaffoldMessengerKey)),
