@@ -1,7 +1,7 @@
 # Manual test: voice-agent#387 — the Android share menu
 
 **Issue:** [voice-agent#387](https://github.com/mjarco/voice-agent/issues/387)
-**Overall status:** **pending** — no case yet executed on a physical device.
+**Overall status:** **passed** — T1–T3 by the owner, T4–T7 and T8 step 1 over wireless adb; T8 steps 2 and 3 skipped on the owner's word.
 **Why now:** the share intent, `launchMode` and task behaviour exist only on a device; `flutter test` covers the Dart routing, not these.
 **Time budget:** ~15 min, Android only.
 **What we are testing:** selected text from the browser reaches a saved pin with the app closed and running, it arrives once, and `singleTask` keeps one app instance without breaking the other ways in.
@@ -14,21 +14,21 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 | # | Case | Status |
 |---|---|---|
-| S1 | Install on device | pending |
-| T1 | App closed: selected text reaches a saved pin | pending |
-| T2 | App running: selected text reaches a saved pin | pending |
-| T3 | A page without a selection gives its link | pending |
-| T4 | A share arrives once | pending |
-| T5 | A share joins a form with a draft | pending |
-| T6 | One app instance | pending |
-| T7 | Hands-free survives a share | pending |
-| T8 | Icon and notification still open the app | pending |
+| S1 | Install on device | passed |
+| T1 | App closed: selected text reaches a saved pin | passed |
+| T2 | App running: selected text reaches a saved pin | passed |
+| T3 | A page without a selection gives its link | passed |
+| T4 | A share arrives once | passed |
+| T5 | A share joins a form with a draft | passed |
+| T6 | One app instance | passed |
+| T7 | Hands-free survives a share | passed |
+| T8 | Icon and notification still open the app | passed, steps 2–3 skipped |
 
 ## Setup
 
 ### S1 — Install on device
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17) — `1.15.0+30` from `87283b8`
 
 `make install-android` from the worktree of the branch: stable flavor, on the Pixel, against production.
 
@@ -36,7 +36,7 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 ### T1 — App closed: selected text reaches a saved pin
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17) — run by the owner, from Chrome
 
 **Do:**
 1. Remove Voice Agent from recents.
@@ -51,7 +51,7 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 ### T2 — App running: selected text reaches a saved pin
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17) — run by the owner, from Chrome
 
 **Do:**
 1. Open Voice Agent on the Agenda tab, then go to Chrome without closing it.
@@ -66,7 +66,7 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 ### T3 — A page without a selection gives its link
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17) — run by the owner, from Chrome
 
 **Do:**
 1. In Chrome, open a page and tap Share in the menu, with nothing selected.
@@ -80,7 +80,7 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 ### T4 — A share arrives once
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17) — step 1 keeps one form; rotation does not recreate the activity (`configChanges` covers `orientation`), so step 2 is the case that reaches the guard. Shares sent by `am start`, same `SEND` intent, without Chrome's chooser
 
 **Do:**
 1. Remove Voice Agent from recents, then share a text from Chrome. On the form, rotate the phone.
@@ -95,7 +95,7 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 ### T5 — A share joins a form with a draft
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17) — share sent by `am start` with Chrome in front
 
 **Do:**
 1. Pins, "+", type a text, then go to Chrome without leaving the form.
@@ -109,7 +109,7 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 ### T6 — One app instance
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17) — one `MainActivity`, one task, one recents card; `launchMode=2` in the APK manifest
 
 **Do:**
 1. With the app running, share from Chrome.
@@ -123,7 +123,7 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 ### T7 — Hands-free survives a share
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17) — share sent by `am start` with Chrome in front; the session kept listening, and the pin was saved
 
 **Do:**
 1. Start a hands-free session on Record.
@@ -138,7 +138,7 @@ As in [`p040-agenda-notifications.md`](p040-agenda-notifications.md#status-legen
 
 ### T8 — Icon and notification still open the app
 
-**Status:** pending
+**Status:** step 1 passed (2026-11-02, Pixel 11 Pro, Android 17; launcher intent via `monkey`, same process and screen). Steps 2 and 3 skipped (the owner's word, 2026-11-02): a notification tap and the permission dialog stayed unverified on a device.
 
 **Do:**
 1. Open the app, leave it on Routines, Home, tap the icon.
