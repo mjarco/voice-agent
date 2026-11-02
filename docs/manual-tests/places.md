@@ -1,6 +1,6 @@
 # Manual test: places
 
-**Design:** [ADR-NET-006](../decisions/ADR-NET-006-places-local-copy-and-queue.md), personal-agent ADR-API-111.
+**Design:** [ADR-NET-006](../decisions/ADR-NET-006-places-local-copy-and-queue.md), personal-agent ADR-API-112.
 **Overall status:** **pending**.
 **Why now:** the permission dialog, a real position and a lost network exist only on a device.
 **Time budget:** ~30 min, Pixel, stable flavor.

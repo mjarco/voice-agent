@@ -6,7 +6,7 @@ Status: Accepted
 
 A place is named standing in it, often deep in a store with a poor link, and the
 list must show it at once (workspace roadmap `2026-11-places`, goal 1). The same
-place can be corrected in the web UI. personal-agent's ADR-API-111 gives a
+place can be corrected in the web UI. personal-agent's ADR-API-112 gives a
 phone-made id, a repeatable `PUT` and a newest-change-wins rule.
 
 ## Decision
@@ -31,6 +31,6 @@ phone-made id, a repeatable `PUT` and a newest-change-wins rule.
 - A place saved with the app then left closed waits for the next opening.
 - An unreadable copy is rebuilt from PA; only what was still waiting is lost.
 - The web UI's delete has no tombstone: a place edited offline comes back, and
-  the owner deletes it again (ADR-API-111).
+  the owner deletes it again (ADR-API-112).
 - Goal 2 of the roadmap needs Kotlin to read places for geofences; it will add
   its own path to this data, and this ADR does not settle it.
