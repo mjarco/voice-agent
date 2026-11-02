@@ -97,9 +97,18 @@ class _PinDetailScreenState extends ConsumerState<PinDetailScreen> {
     if (!mounted) return;
     if (saved != null) {
       setState(() => _recordId = saved.recordId);
-    } else {
-      ref.read(pinDetailNotifierProvider(_recordId).notifier).refresh();
+      return;
     }
+    await ref.read(pinDetailNotifierProvider(_recordId).notifier).refresh();
+    _leaveIfGone();
+  }
+
+  /// An earlier version answers 404 for good (ADR-CORE-111), so only the list,
+  /// which reloads on return, can lead to the pin now.
+  void _leaveIfGone() {
+    if (!mounted) return;
+    final state = ref.read(pinDetailNotifierProvider(_recordId));
+    if (state is PinDetailError && state.gone) context.pop();
   }
 
   Future<void> _confirmUnpin() async {
@@ -133,6 +142,7 @@ class _PinDetailScreenState extends ConsumerState<PinDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(notifier.lastActionError ?? 'Unpin failed')),
       );
+      _leaveIfGone();
     }
   }
 }

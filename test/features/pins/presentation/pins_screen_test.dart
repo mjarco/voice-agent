@@ -132,6 +132,20 @@ void main() {
       });
     }
 
+    testWidgets('"+" leaves the last row\'s menu reachable', (tester) async {
+      final repo = _StubRepository(
+        pins: [for (var i = 0; i < 30; i++) _pin('p$i')],
+      );
+      await _pump(tester, repo);
+
+      await tester.drag(find.byType(ListView), const Offset(0, -5000));
+      await tester.pumpAndSettle();
+      final menu = tester.getRect(find.byKey(const Key('pin-menu-p29')));
+      final add = tester.getRect(find.byKey(const Key('pins-add')));
+
+      expect(menu.overlaps(add), isFalse);
+    });
+
     testWidgets('"+" opens the form and the list reloads on return',
         (tester) async {
       final repo = _StubRepository(pins: [_pin('a')]);

@@ -19,7 +19,10 @@ class PinDetailNotifier extends StateNotifier<PinDetailState> {
       final pin = await _repository.fetchPin(_recordId);
       state = PinDetailLoaded(pin: pin);
     } catch (e) {
-      state = PinDetailError(message: e.toString());
+      state = PinDetailError(
+        message: e.toString(),
+        gone: e is PinNotFoundException,
+      );
     }
   }
 

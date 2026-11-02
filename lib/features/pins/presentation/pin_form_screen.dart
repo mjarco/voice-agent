@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/pin.dart';
@@ -79,6 +80,8 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen> {
     if (_isEdit) return;
     _proposalTimer?.cancel();
     final round = ++_proposalRound;
+    _topicLabel = null;
+    _aliases = const [];
     if (text.trim().isEmpty) {
       setState(() => _proposing = false);
       return;
@@ -153,9 +156,23 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       final reason = e is PinsException ? e.message : e.toString();
+      // A stale edit cannot be saved from here, and leaving the form drops the
+      // text, so the text is offered for copying.
+      final stale = e is PinRefusedException && e.isStale;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Not saved: $reason')));
+        ..showSnackBar(
+          SnackBar(
+            content: Text('Not saved: $reason'),
+            action: stale
+                ? SnackBarAction(
+                    label: 'Copy text',
+                    onPressed: () =>
+                        Clipboard.setData(ClipboardData(text: text)),
+                  )
+                : null,
+          ),
+        );
     }
   }
 
@@ -169,61 +186,65 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEdit ? 'Edit pin' : 'New pin'),
-        actions: [
-          TextButton(
-            key: const Key('pin-form-save'),
-            onPressed: _canSave ? _save : null,
-            child: _saving
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Save'),
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              key: const Key('pin-form-title'),
-              controller: _title,
-              enabled: !_saving,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                labelText: 'Title',
-                helperText: _titleHelper(),
-                border: const OutlineInputBorder(),
-              ),
-              onChanged: (value) =>
-                  setState(() => _titleTyped = value.isNotEmpty),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: TextField(
-                key: const Key('pin-form-text'),
-                controller: _text,
-                enabled: !_saving,
-                autofocus: !_isEdit && _text.text.isEmpty,
-                expands: true,
-                maxLines: null,
-                minLines: null,
-                textAlignVertical: TextAlignVertical.top,
-                keyboardType: TextInputType.multiline,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Text',
-                  alignLabelWithHint: true,
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: _onTextChanged,
-              ),
+    // Back during a save would lose the new record_id the caller must follow.
+    return PopScope(
+      canPop: !_saving,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_isEdit ? 'Edit pin' : 'New pin'),
+          actions: [
+            TextButton(
+              key: const Key('pin-form-save'),
+              onPressed: _canSave ? _save : null,
+              child: _saving
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save'),
             ),
           ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              TextField(
+                key: const Key('pin-form-title'),
+                controller: _title,
+                enabled: !_saving,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  labelText: 'Title',
+                  helperText: _titleHelper(),
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (value) =>
+                    setState(() => _titleTyped = value.isNotEmpty),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  key: const Key('pin-form-text'),
+                  controller: _text,
+                  enabled: !_saving,
+                  autofocus: !_isEdit && _text.text.isEmpty,
+                  expands: true,
+                  maxLines: null,
+                  minLines: null,
+                  textAlignVertical: TextAlignVertical.top,
+                  keyboardType: TextInputType.multiline,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Text',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: _onTextChanged,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

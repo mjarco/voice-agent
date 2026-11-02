@@ -19,6 +19,7 @@ class _FakeWriter implements PinWriter {
   );
   Exception? suggestError;
   Exception? saveError;
+  Completer<void>? saveHold;
 
   final List<String> suggested = [];
   final List<PinTextCreateRequest> created = [];
@@ -42,6 +43,7 @@ class _FakeWriter implements PinWriter {
   @override
   Future<PinCreateResult> createTextPin(PinTextCreateRequest request) async {
     created.add(request);
+    await saveHold?.future;
     if (saveError != null) throw saveError!;
     return PinCreateResult(
       pin: _saved('new-id', request.name, request.text),
@@ -271,6 +273,113 @@ void main() {
       expect(_saveEnabled(tester), isTrue);
     });
 
+    testWidgets('a changed text drops the old topic and aliases',
+        (tester) async {
+      final writer = _FakeWriter();
+      await _pump(tester, writer);
+
+      await tester.enterText(_textField, 'recipe');
+      await tester.pump(_delay);
+      await tester.pump();
+      await tester.enterText(_textField, 'something else');
+      await tester.pump();
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+
+      final saved = writer.created.single;
+      expect(saved.topicLabel, isNull);
+      expect(saved.aliases, isEmpty);
+    });
+
+    testWidgets('a failed proposal drops the old topic and aliases',
+        (tester) async {
+      final writer = _FakeWriter();
+      await _pump(tester, writer);
+
+      await tester.enterText(_textField, 'recipe');
+      await tester.pump(_delay);
+      await tester.pump();
+      writer.suggestError = PinsGeneralException('offline');
+      await tester.enterText(_textField, 'something else');
+      await tester.pump(_delay);
+      await tester.pump();
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+
+      expect(writer.created.single.topicLabel, isNull);
+      expect(writer.created.single.aliases, isEmpty);
+    });
+
+    testWidgets('a failure for an older text says nothing', (tester) async {
+      final writer = _FakeWriter();
+      final older = Completer<PinSuggestion>();
+      writer.held['first'] = older;
+      await _pump(tester, writer);
+
+      await tester.enterText(_textField, 'first');
+      await tester.pump(_delay);
+      await tester.enterText(_textField, 'second');
+      await tester.pump(_delay);
+      await tester.pump();
+      older.completeError(PinsGeneralException('offline'));
+      await tester.pump();
+      await tester.enterText(_titleField, '');
+      await tester.pump();
+
+      expect(find.text('No proposal, type a title'), findsNothing);
+    });
+
+    testWidgets('Save cancels a waiting proposal', (tester) async {
+      final writer = _FakeWriter()..saveHold = Completer<void>();
+      await _pump(tester, writer);
+
+      await tester.enterText(_titleField, 'Mine');
+      await tester.enterText(_textField, 'text');
+      await tester.pump();
+      await tester.tap(_save);
+      await tester.pump(_delay * 2);
+
+      expect(writer.suggested, isEmpty);
+      writer.saveHold!.complete();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('leaving the form cancels a waiting proposal', (tester) async {
+      final writer = _FakeWriter();
+      await _pump(tester, writer);
+
+      await tester.enterText(_textField, 'text');
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.pump(_delay * 2);
+
+      expect(find.text('popped null'), findsOneWidget);
+      expect(writer.suggested, isEmpty);
+    });
+
+    testWidgets('during a save, Back waits and Save is off', (tester) async {
+      final writer = _FakeWriter()..saveHold = Completer<void>();
+      await _pump(tester, writer);
+
+      await tester.enterText(_textField, 'text');
+      await tester.pump(_delay);
+      await tester.pump();
+      await tester.tap(_save);
+      await tester.pump();
+
+      expect(_saveEnabled(tester), isFalse);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.byType(PinFormScreen), findsOneWidget);
+
+      writer.saveHold!.complete();
+      await tester.pumpAndSettle();
+
+      expect(writer.created, hasLength(1));
+      expect(find.text('popped new-id'), findsOneWidget);
+    });
+
     testWidgets('save is off without a text or a title', (tester) async {
       final writer = _FakeWriter();
       await _pump(tester, writer);
@@ -342,6 +451,20 @@ void main() {
 
       expect(find.text('Not saved: wczytaj ponownie'), findsOneWidget);
       expect(_text(tester), 'new text');
+      expect(find.text('Copy text'), findsOneWidget);
+    });
+
+    testWidgets('other refusals offer no copy', (tester) async {
+      final writer = _FakeWriter()
+        ..saveError = PinRefusedException('name_taken', 'wybierz inny tytuł');
+      await _pump(tester, writer, pin: _pin);
+
+      await tester.enterText(_titleField, 'Taken');
+      await tester.pump();
+      await tester.tap(_save);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Copy text'), findsNothing);
     });
   });
 }

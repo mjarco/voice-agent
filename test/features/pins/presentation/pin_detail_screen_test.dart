@@ -151,6 +151,50 @@ void main() {
       expect(repo.fetchCount, fetchesBefore + 1);
     });
 
+    testWidgets('a pin that is gone after a closed form leads to the list',
+        (tester) async {
+      final repo = _StubRepository();
+      await _pump(tester, repo);
+
+      await tester.tap(find.byKey(const Key('pin-detail-edit')));
+      await tester.pumpAndSettle();
+      repo.fetchError = PinNotFoundException();
+      await tester.tap(find.text('Cancel form'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pins list'), findsOneWidget);
+    });
+
+    testWidgets('a failed read after a closed form stays on the pin',
+        (tester) async {
+      final repo = _StubRepository();
+      await _pump(tester, repo);
+
+      await tester.tap(find.byKey(const Key('pin-detail-edit')));
+      await tester.pumpAndSettle();
+      repo.fetchError = PinsGeneralException('offline');
+      await tester.tap(find.text('Cancel form'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('pin-detail-retry-button')), findsOneWidget);
+    });
+
+    testWidgets('a stale unpin leaves for the list and says why',
+        (tester) async {
+      final repo = _StubRepository()
+        ..unpinError = PinRefusedException('pin_changed', 'wczytaj ponownie');
+      await _pump(tester, repo);
+      repo.fetchError = PinNotFoundException();
+
+      await tester.tap(find.byKey(const Key('pin-detail-unpin')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-detail-unpin-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pins list'), findsOneWidget);
+      expect(find.text('wczytaj ponownie'), findsOneWidget);
+    });
+
     testWidgets('renders the pin name and markdown body', (tester) async {
       await _pump(tester, _StubRepository());
 
