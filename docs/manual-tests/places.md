@@ -1,7 +1,7 @@
 # Manual test: places
 
 **Design:** [ADR-NET-006](../decisions/ADR-NET-006-places-local-copy-and-queue.md), personal-agent ADR-API-112.
-**Overall status:** **pending**.
+**Overall status:** **in-progress**.
 **Why now:** the permission dialog, a real position and a lost network exist only on a device.
 **Time budget:** ~30 min, Pixel, stable flavor.
 **What we are testing:** that a place is named in two taps, reaches personal-agent once with a poor link, can be corrected on both sides, and is never saved with a position from before.
@@ -14,12 +14,12 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 | # | Case | Status |
 |---|---|---|
-| S1 | Personal-agent with places runs on production | pending |
-| S2 | The stable build is on the Pixel | pending |
+| S1 | Personal-agent with places runs on production | passed (2026-11-02, Pixel 11 Pro, Android 17) |
+| S2 | The stable build is on the Pixel | passed (2026-11-02, Pixel 11 Pro, Android 17) |
 | T1 | The screen opens from Shopping and from Record | pending |
 | T2 | With the log off, the screen shows a position and its accuracy | pending |
 | T3 | With permission refused, it says so and opens the settings | pending |
-| T4 | A name, a tap: the place is in PA and in the web UI | pending |
+| T4 | A name, a tap: the place is in PA and in the web UI | passed (2026-11-02, Pixel 11 Pro, Android 17) |
 | T5 | With no network: saved, marked as waiting, sent once after the network returns | pending |
 | T6 | With no network and the app closed: sent on the next opening | pending |
 | T7 | Rename, move here, store types and delete on the phone reach the web UI | pending |
@@ -33,13 +33,13 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### S1. Personal-agent with places runs on production
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17), by T4: a place from the phone reached the web UI
 
 The shipped build has no cleartext door to a dev personal-agent, so this plan runs against production, after its deploy (the same order as the location log). Check with `curl -H "Authorization: Bearer $API_TOKEN" https://agent.jarco.casa/api/v1/places`: `200` and a `places` list.
 
 ### S2. The stable build is on the Pixel
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17), `dumpsys`: 1.12.0, versionCode 27
 
 Copy `.env.mobile` into the worktree, then `make install-android`. Settings shows 1.12.0. Note the location log's mode beforehand: the cases must leave it as it was.
 
@@ -82,7 +82,7 @@ Copy `.env.mobile` into the worktree, then `make install-android`. Settings show
 
 ### T4. A name, a tap: the place is in PA and in the web UI
 
-**Status:** pending
+**Status:** passed (2026-11-02, Pixel 11 Pro, Android 17), run by the owner, with a typed tag, seen in the web UI
 **Do:**
 1. Type a name, choose a suggested tag.
 2. Tap Zapisz tutaj.
