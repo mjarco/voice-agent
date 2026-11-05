@@ -15,7 +15,9 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
     private val mainThread = Handler(Looper.getMainLooper())
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        LocationPipeline.executor.execute {
+        // Registering waits on Play services, so it never runs on the pipeline's thread.
+        val executor = if (call.method == "setAlertsEnabled") GeofenceRegistry.executor else LocationPipeline.executor
+        executor.execute {
             try {
                 val reply = handle(call)
                 mainThread.post { if (reply === NOT_IMPLEMENTED) result.notImplemented() else result.success(reply) }
@@ -27,6 +29,7 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
 
     private fun handle(call: MethodCall): Any? {
         val config = LocationConfig(context)
+        val geofences = GeofenceConfig(context)
         when (call.method) {
             "getState" -> return mapOf(
                 "enabled" to config.enabled,
@@ -37,6 +40,9 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 "lastSentAtMs" to config.lastSentAtMs,
                 "queueLength" to LocationStore.get(context).count(),
                 "lastError" to config.lastError,
+                "alertsEnabled" to geofences.alertsEnabled,
+                "geofenceCount" to geofences.registeredCount,
+                "geofencesAtMs" to geofences.registeredAtMs,
             )
             "setCredentials" -> {
                 config.apiUrl = call.argument<String>("apiUrl")
@@ -48,6 +54,15 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                     config.enabled = enabled
                     LocationPipeline.recordStatus(context, if (enabled) "start" else "stop", "switch in Settings")
                     LocationPipeline.reconcile(context, "switch")
+                }
+            }
+            // "Alerty w sklepach": the geofences of places, apart from the log's switch.
+            "setAlertsEnabled" -> {
+                val enabled = call.argument<Boolean>("enabled") == true
+                if (enabled != geofences.alertsEnabled) {
+                    geofences.alertsEnabled = enabled
+                    // On the registry's thread (see above), so the reply comes once registered.
+                    GeofenceRegistry.reconcileNow(context, GeofenceRegistry.REASON_SWITCH)
                 }
             }
             "setMode" -> {
@@ -66,7 +81,15 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-            "reconcile" -> LocationPipeline.reconcile(context, "app_start")
+            // A return to the app: "always" may have been granted on the settings page.
+            "appResumed" -> GeofenceRegistry.permissionMayHaveChanged(context)
+            "reconcile" -> {
+                try {
+                    LocationPipeline.reconcile(context, "app_start")
+                } finally {
+                    GeofenceRegistry.reconcileLater(context, "app_start")
+                }
+            }
             else -> return NOT_IMPLEMENTED
         }
         return null

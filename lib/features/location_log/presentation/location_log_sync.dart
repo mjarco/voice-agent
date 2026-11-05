@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
@@ -38,4 +39,23 @@ final locationLogSyncProvider = Provider<void>((ref) {
       // The next app start, reboot or Settings change tries again.
     }
   }();
+});
+
+/// On each return to the app, lets the native side see whether the location
+/// permission changed, as when "always" was granted on the system's settings
+/// page, and register the geofences again (ADR-PLATFORM-010). A failure here
+/// must never reach the rest of the app.
+final locationLogResumeProvider = Provider<void>((ref) {
+  if (!ref.watch(locationLogAvailableProvider)) return;
+  final port = ref.watch(locationLogPortProvider);
+  final lifecycle = AppLifecycleListener(
+    onResume: () async {
+      try {
+        await port.appResumed();
+      } catch (_) {
+        // The next start or change of places registers them anyway.
+      }
+    },
+  );
+  ref.onDispose(lifecycle.dispose);
 });

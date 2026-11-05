@@ -4,7 +4,6 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import java.util.UUID
 import org.json.JSONObject
 
 /** One row of the stream, as sent to personal-agent. */
@@ -38,7 +37,8 @@ class LocationStore private constructor(context: Context) :
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
 
     fun enqueue(payload: JSONObject) {
-        val id = UUID.randomUUID().toString()
+        // UUIDv7, so a report's row id is its event id (04, §7).
+        val id = Uuid7.next()
         payload.put("id", id)
         val values = ContentValues().apply {
             put("id", id)

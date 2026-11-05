@@ -24,6 +24,9 @@ void main() {
           'lastReadingAtMs': 1000,
           'lastSentAtMs': 0,
           'lastError': 'HTTP 500',
+          'alertsEnabled': true,
+          'geofenceCount': 12,
+          'geofencesAtMs': 2000,
         };
       }
       return null;
@@ -42,6 +45,9 @@ void main() {
     expect(state.lastReadingAt, isNotNull);
     expect(state.lastSentAt, isNull);
     expect(state.lastError, 'HTTP 500');
+    expect(state.alertsEnabled, isTrue);
+    expect(state.geofenceCount, 12);
+    expect(state.geofencesAt, DateTime.fromMillisecondsSinceEpoch(2000));
   });
 
   test('commands carry their arguments', () async {
@@ -51,6 +57,8 @@ void main() {
     await port.setMode(LocationLogMode.background);
     await port.setForegroundInterval(60);
     await port.reconcile();
+    await port.setAlertsEnabled(true);
+    await port.appResumed();
 
     expect(calls.map((c) => c.method), [
       'setCredentials',
@@ -58,10 +66,13 @@ void main() {
       'setMode',
       'setForegroundInterval',
       'reconcile',
+      'setAlertsEnabled',
+      'appResumed',
     ]);
     expect(calls[0].arguments, {'apiUrl': 'https://x/api/v1', 'token': 't'});
     expect(calls[2].arguments, {'mode': 'background'});
     expect(calls[3].arguments, {'seconds': 60});
+    expect(calls[5].arguments, {'enabled': true});
   });
 
   test('an unknown state falls back to the safest reading', () {
@@ -69,5 +80,8 @@ void main() {
     expect(state.enabled, isFalse);
     expect(state.mode, LocationLogMode.background);
     expect(state.permission, LocationLogPermission.none);
+    expect(state.alertsEnabled, isFalse);
+    expect(state.geofenceCount, 0);
+    expect(state.geofencesAt, isNull);
   });
 }

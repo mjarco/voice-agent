@@ -11,6 +11,7 @@ class _FakePort implements LocationLogPort {
 
   LocationLogState state;
   final calls = <String>[];
+  Object? alertsFailure;
 
   @override
   Future<LocationLogState> getState() async => state;
@@ -20,6 +21,12 @@ class _FakePort implements LocationLogPort {
   Future<void> setEnabled(bool enabled) async =>
       calls.add('setEnabled:$enabled');
   @override
+  Future<void> setAlertsEnabled(bool enabled) async {
+    calls.add('setAlertsEnabled:$enabled');
+    if (alertsFailure != null) throw alertsFailure!;
+  }
+
+  @override
   Future<void> setMode(LocationLogMode mode) async =>
       calls.add('setMode:${mode.wire}');
   @override
@@ -27,6 +34,8 @@ class _FakePort implements LocationLogPort {
       calls.add('interval:$seconds');
   @override
   Future<void> reconcile() async {}
+  @override
+  Future<void> appResumed() async {}
   @override
   Future<void> openAppSettings() async => calls.add('openAppSettings');
   @override
@@ -39,6 +48,9 @@ LocationLogState _state({
   LocationLogPermission permission = LocationLogPermission.always,
   int queue = 0,
   String? lastError,
+  bool alerts = false,
+  int geofences = 0,
+  DateTime? geofencesAt,
 }) => LocationLogState(
   enabled: enabled,
   mode: mode,
@@ -46,7 +58,13 @@ LocationLogState _state({
   permission: permission,
   queueLength: queue,
   lastError: lastError,
+  alertsEnabled: alerts,
+  geofenceCount: geofences,
+  geofencesAt: geofencesAt,
 );
+
+bool _switchValue(WidgetTester tester, String key) =>
+    tester.widget<SwitchListTile>(find.byKey(Key(key))).value;
 
 Future<void> _pump(WidgetTester tester, _FakePort port) async {
   await tester.pumpWidget(
@@ -116,4 +134,80 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  group('Alerty w sklepach', () {
+    testWidgets('is off by default and apart from the log switch', (
+      tester,
+    ) async {
+      await _pump(tester, _FakePort(_state(enabled: true)));
+      expect(find.text('Alerty w sklepach'), findsOneWidget);
+      expect(_switchValue(tester, 'location-log-switch'), isTrue);
+      expect(_switchValue(tester, 'arrival-alerts-switch'), isFalse);
+      expect(find.textContaining('obszary: 0'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('turning it on asks for permissions, then switches', (
+      tester,
+    ) async {
+      final port = _FakePort(_state(permission: LocationLogPermission.none));
+      await _pump(tester, port);
+      await tester.tap(find.byKey(const Key('arrival-alerts-switch')));
+      await tester.pump();
+      expect(port.calls, ['requestPermissions', 'setAlertsEnabled:true']);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('with location always it still runs the flow, which asks '
+        'for notifications', (tester) async {
+      final port = _FakePort(_state());
+      await _pump(tester, port);
+      await tester.tap(find.byKey(const Key('arrival-alerts-switch')));
+      await tester.pump();
+      expect(port.calls, ['requestPermissions', 'setAlertsEnabled:true']);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('turning it off asks for nothing', (tester) async {
+      final port = _FakePort(_state(alerts: true, geofences: 3));
+      await _pump(tester, port);
+      expect(find.textContaining('obszary: 3'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('arrival-alerts-switch')));
+      await tester.pump();
+      expect(port.calls, ['setAlertsEnabled:false']);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('shows the count and when they were registered', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _FakePort(
+          _state(
+            alerts: true,
+            geofences: 14,
+            geofencesAt: DateTime(2026, 11, 5, 9, 7, 3),
+          ),
+        ),
+      );
+      expect(find.textContaining('obszary: 14'), findsOneWidget);
+      expect(
+        find.textContaining('Zarejestrowane: 5.11 09:07:03'),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a failure to switch shows the error', (tester) async {
+      final port = _FakePort(_state())..alertsFailure = Exception('boom');
+      await _pump(tester, port);
+      await tester.tap(find.byKey(const Key('arrival-alerts-switch')));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('location-log-error')), findsOneWidget);
+      expect(find.textContaining('boom'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
 }

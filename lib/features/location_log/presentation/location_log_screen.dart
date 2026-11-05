@@ -60,6 +60,15 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
     _reload();
   }
 
+  /// Turning alerts on runs the log's permission flow: while-in-use,
+  /// notifications, then "all the time" on the settings page. Without
+  /// "always" the native side writes `geofences_failed`, and the status line
+  /// below offers "Nadaj".
+  Future<void> _setAlertsEnabled(bool enabled) => _run(() async {
+    if (enabled) await _port.requestPermissions();
+    await _port.setAlertsEnabled(enabled);
+  });
+
   Future<void> _setEnabled(bool enabled, LocationLogState state) =>
       _run(() async {
         if (enabled && state.permission == LocationLogPermission.none) {
@@ -135,6 +144,18 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
             ),
           ),
         const Divider(),
+        SwitchListTile(
+          key: const Key('arrival-alerts-switch'),
+          title: const Text('Alerty w sklepach'),
+          subtitle: Text(
+            'Na razie tylko zapis wejść i wyjść w dzienniku · '
+            'obszary: ${state.geofenceCount}'
+            '${state.geofencesAt == null ? '' : '\nZarejestrowane: ${_time(state.geofencesAt)}'}',
+          ),
+          value: state.alertsEnabled,
+          onChanged: _setAlertsEnabled,
+        ),
+        const Divider(),
         ListTile(
           key: const Key('location-log-status'),
           title: Text(_permissionLine(state.permission)),
@@ -179,17 +200,16 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
         LocationLogPermission.none => 'Brak uprawnienia',
       };
 
-  String _statusLine(LocationLogState state) {
-    String time(DateTime? t) {
-      if (t == null) return 'jeszcze nie';
-      final hh = t.hour.toString().padLeft(2, '0');
-      final mm = t.minute.toString().padLeft(2, '0');
-      final ss = t.second.toString().padLeft(2, '0');
-      return '${t.day}.${t.month.toString().padLeft(2, '0')} $hh:$mm:$ss';
-    }
+  String _statusLine(LocationLogState state) =>
+      'Ostatni odczyt: ${_time(state.lastReadingAt)}\n'
+      'Ostatnia wysyłka: ${_time(state.lastSentAt)}\n'
+      'W kolejce: ${state.queueLength}';
+}
 
-    return 'Ostatni odczyt: ${time(state.lastReadingAt)}\n'
-        'Ostatnia wysyłka: ${time(state.lastSentAt)}\n'
-        'W kolejce: ${state.queueLength}';
-  }
+String _time(DateTime? t) {
+  if (t == null) return 'jeszcze nie';
+  final hh = t.hour.toString().padLeft(2, '0');
+  final mm = t.minute.toString().padLeft(2, '0');
+  final ss = t.second.toString().padLeft(2, '0');
+  return '${t.day}.${t.month.toString().padLeft(2, '0')} $hh:$mm:$ss';
 }

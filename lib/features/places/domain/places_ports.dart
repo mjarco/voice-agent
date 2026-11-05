@@ -46,3 +46,10 @@ abstract class PlaceReadingPort {
   Future<PlaceReadingResult> read();
   Future<void> openSettings();
 }
+
+/// Hands the places to the phone's geofences (ADR-PLATFORM-010). Until task 4
+/// the arrival list watches every place; from task 4 geofences come from the
+/// triggers and this goes.
+abstract class PlaceGeofencesPort {
+  Future<void> setPlaces(List<Place> places);
+}

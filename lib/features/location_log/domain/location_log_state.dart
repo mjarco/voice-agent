@@ -9,6 +9,9 @@ class LocationLogState {
     this.lastReadingAt,
     this.lastSentAt,
     this.lastError,
+    this.alertsEnabled = false,
+    this.geofenceCount = 0,
+    this.geofencesAt,
   });
 
   factory LocationLogState.fromMap(Map<Object?, Object?> map) {
@@ -23,6 +26,9 @@ class LocationLogState {
       lastReadingAt: time(map['lastReadingAtMs']),
       lastSentAt: time(map['lastSentAtMs']),
       lastError: map['lastError'] as String?,
+      alertsEnabled: map['alertsEnabled'] == true,
+      geofenceCount: map['geofenceCount'] as int? ?? 0,
+      geofencesAt: time(map['geofencesAtMs']),
     );
   }
 
@@ -34,6 +40,15 @@ class LocationLogState {
   final DateTime? lastReadingAt;
   final DateTime? lastSentAt;
   final String? lastError;
+
+  /// The "Alerty w sklepach" switch, off by default.
+  final bool alertsEnabled;
+
+  /// Geofences registered now; 0 when off or when the last try failed.
+  final int geofenceCount;
+
+  /// When they were last registered.
+  final DateTime? geofencesAt;
 }
 
 enum LocationLogMode {

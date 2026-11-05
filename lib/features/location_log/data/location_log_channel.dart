@@ -25,6 +25,10 @@ class LocationLogChannel implements LocationLogPort {
       _channel.invokeMethod('setEnabled', {'enabled': enabled});
 
   @override
+  Future<void> setAlertsEnabled(bool enabled) =>
+      _channel.invokeMethod('setAlertsEnabled', {'enabled': enabled});
+
+  @override
   Future<void> setMode(LocationLogMode mode) =>
       _channel.invokeMethod('setMode', {'mode': mode.wire});
 
@@ -34,6 +38,9 @@ class LocationLogChannel implements LocationLogPort {
 
   @override
   Future<void> reconcile() => _channel.invokeMethod('reconcile');
+
+  @override
+  Future<void> appResumed() => _channel.invokeMethod('appResumed');
 
   @override
   Future<void> openAppSettings() => _channel.invokeMethod('openAppSettings');

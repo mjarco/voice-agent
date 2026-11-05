@@ -6,9 +6,18 @@ abstract class LocationLogPort {
   Future<LocationLogState> getState();
   Future<void> setCredentials({String? apiUrl, String? token});
   Future<void> setEnabled(bool enabled);
+
+  /// "Alerty w sklepach": the geofences of places (ADR-PLATFORM-010), apart
+  /// from the log's own switch.
+  Future<void> setAlertsEnabled(bool enabled);
+
   Future<void> setMode(LocationLogMode mode);
   Future<void> setForegroundInterval(int seconds);
   Future<void> reconcile();
+
+  /// The app came back to the foreground: the native side registers the
+  /// geofences again if the location permission changed meanwhile.
+  Future<void> appResumed();
   Future<void> openAppSettings();
   Future<void> requestPermissions();
 }

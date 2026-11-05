@@ -5,4 +5,5 @@
     <exclude domain="database" path="location_log.db-wal"/>
     <exclude domain="database" path="location_log.db-shm"/>
     <exclude domain="sharedpref" path="location_log.xml"/>
+    <exclude domain="sharedpref" path="geofences.xml"/>
 </full-backup-content>
