@@ -9,11 +9,13 @@ import 'fakes.dart';
 
 class _FakeGeofencesPort implements PlaceGeofencesPort {
   final sent = <List<String>>[];
+  final names = <Map<String, String>>[];
   Object? failure;
 
   @override
   Future<void> setPlaces(List<Place> places) async {
     sent.add([for (final p in places) p.id]);
+    names.add({for (final p in places) p.id: p.name});
     if (failure != null) throw failure!;
   }
 }
@@ -80,9 +82,13 @@ void main() {
       await pumpEventQueue();
       expect(port.sent.last, ['c', 'a', 'b']);
 
+      // A rename is sent: the rows carry the place's name.
+      final beforeRename = port.sent.length;
       await notifier.save(place('a', name: 'Castorama'));
       await pumpEventQueue();
+      expect(port.sent, hasLength(beforeRename + 1));
       expect(port.sent.last, containsAll(['a', 'b', 'c']));
+      expect(port.names.last['a'], 'Castorama');
       final count = port.sent.length;
 
       await notifier.sync();
@@ -90,6 +96,35 @@ void main() {
       expect(port.sent, hasLength(count));
     },
   );
+
+  test('a change of tags alone sends nothing', () async {
+    final c = container();
+    c.read(placeGeofencesSyncProvider);
+    await pumpEventQueue();
+    final notifier = c.read(placesNotifierProvider.notifier);
+    final a = place('a', at: DateTime.utc(2026, 11, 2));
+    repository.server.addAll({'a': a, 'b': place('b', at: DateTime.utc(2026, 11, 1))});
+    await notifier.sync();
+    await pumpEventQueue();
+    expect(port.sent, hasLength(1));
+
+    await notifier.save(
+          Place(
+            id: a.id,
+            name: a.name,
+            latitude: a.latitude,
+            longitude: a.longitude,
+            accuracyM: a.accuracyM,
+            radiusM: a.radiusM,
+            tags: const ['dom'],
+            storeTypes: a.storeTypes,
+            createdAt: a.createdAt,
+            updatedAt: DateTime.utc(2026, 11, 3),
+          ),
+        );
+    await pumpEventQueue();
+    expect(port.sent, hasLength(1));
+  });
 
   test('leaves out places waiting to be deleted', () async {
     store = FakePlacesStore(

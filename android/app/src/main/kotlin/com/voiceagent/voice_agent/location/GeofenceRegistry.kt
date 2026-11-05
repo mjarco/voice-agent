@@ -38,10 +38,21 @@ import org.json.JSONObject
  * on Play services, so a reading or a broadcast is never held behind it.
  */
 object GeofenceRegistry {
-    enum class Outcome { OFF, REGISTERED, FAILED }
+    /** NO_PERMISSION is not retried by the job: a return to the app registers. */
+    enum class Outcome { OFF, REGISTERED, UNCHANGED, FAILED, NO_PERMISSION }
 
     const val REASON_RETRY = "retry"
     const val REASON_SWITCH = "switch"
+
+    /**
+     * Reasons after which Play services still holds what was registered, as
+     * long as the intent survived (a force stop cancels it). For these only new
+     * or changed geofences are added: adding one again replaces it and resets
+     * its state, so with initial trigger 0 a visit in progress would lose its
+     * enter and dwell. Every other reason (boot, update, retry, the switch, a
+     * permission change) adds them all.
+     */
+    private val KEEPING_REASONS = setOf("app_start", "places_changed")
 
     /** Registrations run here, one at a time. */
     val executor = Executors.newSingleThreadExecutor()
@@ -73,9 +84,7 @@ object GeofenceRegistry {
 
     /** What the set would register as, so an unchanged hand-over registers nothing. */
     fun hashOf(places: List<GeofencePlace>): String {
-        val text = places.take(MAX_GEOFENCES)
-            .sortedBy { it.id }
-            .joinToString("\n") { "${it.id}|${it.latitude}|${it.longitude}|${radiusOf(it)}" }
+        val text = places.take(MAX_GEOFENCES).map { keyOf(it) }.sorted().joinToString("\n")
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
         return digest.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
     }
@@ -102,9 +111,22 @@ object GeofenceRegistry {
     fun reconcileNow(context: Context, reason: String): Outcome = try {
         reconcile(context, reason)
     } catch (failure: Exception) {
-        LocationPipeline.note(context, failure)
+        // A row, not the log's last error, which the screen shows as a send error.
+        try {
+            record(
+                context,
+                "geofences_failed",
+                JSONObject().put("code", CODE_UNKNOWN).put("reason", reason).put("error", messageOf(failure)),
+            )
+        } catch (_: Exception) {
+            // Nothing is left to tell it to; the process must still live.
+        }
         Outcome.FAILED
     }
+
+    /** What a geofence is made of; a place whose key changed is added again. */
+    private fun keyOf(place: GeofencePlace): String =
+        "${place.id}|${place.latitude}|${place.longitude}|${radiusOf(place)}"
 
     /**
      * The permission changed since the last registration, as when "always" was
@@ -127,6 +149,15 @@ object GeofenceRegistry {
         config.lastPermission = LocationPipeline.permission(context)
         val all = config.places
         val chosen = all.take(MAX_GEOFENCES)
+        val ids = chosen.map { it.id }.toSet()
+        val held = config.registeredIds
+        val heldKeys = config.registeredKeys
+        val intact = reason in KEEPING_REASONS && config.registeredHash != null && !config.degraded &&
+            pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE) != null
+        val toAdd = if (intact) chosen.filter { keyOf(it) !in heldKeys } else chosen
+        val gone = held - ids
+        // Nothing to do leaves a visit in progress alone, and writes no row.
+        if (intact && toAdd.isEmpty() && gone.isEmpty()) return Outcome.UNCHANGED
         if (all.size > chosen.size) {
             record(
                 context,
@@ -134,8 +165,6 @@ object GeofenceRegistry {
                 JSONObject().put("count", chosen.size).put("left_out", all.size - chosen.size).put("reason", reason),
             )
         }
-        val ids = chosen.map { it.id }.toSet()
-        val held = config.registeredIds
         val client = LocationServices.getGeofencingClient(context)
         try {
             if (config.registeredHash == null && held.isNotEmpty()) {
@@ -143,13 +172,12 @@ object GeofenceRegistry {
                 // unknown, so start from nothing rather than leave a stale one.
                 pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE)
                     ?.let { await(client.removeGeofences(it)) }
-            } else {
-                val gone = held - ids
-                if (gone.isNotEmpty()) await(client.removeGeofences(gone.toList()))
+            } else if (gone.isNotEmpty()) {
+                await(client.removeGeofences(gone.toList()))
             }
-            if (chosen.isNotEmpty()) {
+            if (toAdd.isNotEmpty()) {
                 if (!fineGranted(context)) throw SecurityException("no fine location")
-                await(add(context, chosen))
+                await(add(context, toAdd))
             }
         } catch (failure: Exception) {
             val code = codeOf(failure)
@@ -162,11 +190,16 @@ object GeofenceRegistry {
             )
             // A missing permission is not waited out: a return to the app with
             // the permission changed registers again.
-            if (code != CODE_NO_PERMISSION) scheduleRetry(context)
+            if (code == CODE_NO_PERMISSION) return Outcome.NO_PERMISSION
+            scheduleRetry(context)
             return Outcome.FAILED
         }
-        config.registered(ids, hashOf(chosen), System.currentTimeMillis())
-        record(context, "geofences_registered", JSONObject().put("count", chosen.size).put("reason", reason))
+        config.registered(ids, chosen.map { keyOf(it) }.toSet(), hashOf(chosen), System.currentTimeMillis())
+        record(
+            context,
+            "geofences_registered",
+            JSONObject().put("count", chosen.size).put("added", toAdd.size).put("reason", reason),
+        )
         if (config.degraded) {
             config.degraded = false
             record(context, "app.location_restored", JSONObject().put("cause", "geofence_not_available"))
@@ -178,30 +211,38 @@ object GeofenceRegistry {
 
     /**
      * The system dropped every geofence: location went off. Runs on the
-     * pipeline's thread, from the receiver, and writes there directly.
+     * registry's thread, after any registration in progress, so that one cannot
+     * overwrite this state or cancel the retry scheduled here; [done] runs after.
      */
-    fun lost(context: Context) {
-        val config = GeofenceConfig(context)
-        config.clearRegistration()
-        if (!config.degraded) {
-            config.degraded = true
-            LocationPipeline.recordStatus(
-                context,
-                "app.location_degraded",
-                JSONObject().put("cause", "geofence_not_available"),
-            )
+    fun lostLater(context: Context, done: () -> Unit) {
+        executor.execute {
+            try {
+                val config = GeofenceConfig(context)
+                // Uncertain, not cleared: the next registration removes them all first.
+                config.uncertain(config.registeredIds)
+                if (!config.degraded) {
+                    config.degraded = true
+                    record(context, "app.location_degraded", JSONObject().put("cause", "geofence_not_available"))
+                }
+                scheduleRetry(context)
+            } catch (_: Exception) {
+                // The retry job or the next app start registers again.
+            } finally {
+                done()
+            }
         }
-        scheduleRetry(context)
     }
 
     /**
      * A unique one-time job with backoff and no network constraint: it only
-     * registers and posts nothing (ADR-NET-002 and ADR-NET-005 stand).
+     * registers and posts nothing (ADR-NET-002 and ADR-NET-005 stand). The
+     * backoff is linear, a minute more each time, so after a night with location
+     * off the next try is about half an hour away, not WorkManager's 5 h cap.
      */
     fun scheduleRetry(context: Context) {
         val request = OneTimeWorkRequestBuilder<GeofenceRegisterWorker>()
             .setInitialDelay(30, TimeUnit.SECONDS)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 60, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(RETRY_WORK, ExistingWorkPolicy.KEEP, request)
     }
@@ -240,9 +281,9 @@ object GeofenceRegistry {
                 .setNotificationResponsiveness(0)
                 .build()
         }
-        // Initial trigger 0: re-registering at every app start while standing in
-        // a place must not log a false enter each time. A reboot inside a place
-        // therefore logs no enter there; the exit still comes.
+        // Initial trigger 0: registering while standing in a place must not log
+        // a false enter. A reboot inside a place therefore logs no enter there;
+        // the exit still comes.
         val request = GeofencingRequest.Builder()
             .setInitialTrigger(0)
             .addGeofences(geofences)

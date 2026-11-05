@@ -87,9 +87,18 @@ class GeofenceConfig(context: Context) {
         get() = prefs.getString("last_permission", null)
         set(value) = prefs.edit().putString("last_permission", value).apply()
 
-    fun registered(ids: Set<String>, hash: String, atMs: Long) {
+    /** What each registered geofence was made of, to add only the changed ones. */
+    val registeredKeys: Set<String>
+        get() = if (registeredHash == null) {
+            emptySet()
+        } else {
+            prefs.getStringSet("registered_keys", null)?.toSet() ?: emptySet()
+        }
+
+    fun registered(ids: Set<String>, keys: Set<String>, hash: String, atMs: Long) {
         prefs.edit()
             .putStringSet("registered_ids", ids)
+            .putStringSet("registered_keys", keys)
             .putString("registered_hash", hash)
             .putLong("registered_at", atMs)
             .apply()
@@ -99,6 +108,7 @@ class GeofenceConfig(context: Context) {
     fun uncertain(ids: Set<String>) {
         prefs.edit()
             .putStringSet("registered_ids", ids)
+            .remove("registered_keys")
             .remove("registered_hash")
             .remove("registered_at")
             .apply()
@@ -107,6 +117,7 @@ class GeofenceConfig(context: Context) {
     fun clearRegistration() {
         prefs.edit()
             .remove("registered_ids")
+            .remove("registered_keys")
             .remove("registered_hash")
             .remove("registered_at")
             .apply()

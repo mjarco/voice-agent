@@ -135,9 +135,10 @@ The screen (Settings → Dziennik lokalizacji) shows "obszary: N", "Zarejestrowa
 1. `adb reboot`; unlock; wait 2 minutes without opening the app; read the queue.
 2. `adb install -r` the same APK; read the queue.
 3. `am force-stop`, confirm no pid, open the app; read the queue.
+4. Close the app from recents (no force stop), open it again; read the queue.
 
-**Why:** ADR-PLATFORM-010 item 4: geofences are lost at each of these.
-**Expected:** a `geofences_registered` row for each, with `"reason"` `reboot`, `app_updated`, and `app_start` (and `restart_after_stop` if the system sends the boot broadcast after the stop); "obszary: 3" and the time moves each time.
+**Why:** ADR-PLATFORM-010 item 4: geofences are lost at each of these. Step 4 is item 3: an app start that finds the registration standing adds nothing, so a visit in progress keeps its state.
+**Expected:** a `geofences_registered` row for each, with `"reason"` `reboot`, `app_updated`, and `app_start` (and `restart_after_stop` if the system sends the boot broadcast after the stop); "obszary: 3" and the time moves each time. After step 4 no new row, and the time stays.
 **On failure:** `LocationBootReceiver` (one receiver for both pipelines).
 
 ### T7. Location off, then on: degraded, then the retry job registers

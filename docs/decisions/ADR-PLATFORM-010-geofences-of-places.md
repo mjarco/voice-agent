@@ -28,17 +28,23 @@ under 500 characters. The owner settled the plan's open points on 2026-11-05
 2. **One geofence per place**: request id = place id; enter, dwell and exit; loitering delay
    60 s, the same value as `dwell_s` in the triggers; radius `max(radius_m, 150)`; no expiry;
    at most 100, the first 100 in Dart's order, with a `geofences_capped` row past that.
-3. **Initial trigger 0.** Registration is repeated at every app start; with an initial enter,
-   each start while standing at home would log a false `place.entered` and spoil the delay
-   reading. The cost: a reboot inside a place logs no enter there; the exit still comes.
+3. **Initial trigger 0, and no needless re-adding.** With an initial enter, every registration
+   while standing at home would log a false `place.entered`. Adding a geofence again replaces it
+   and resets its state, so a visit in progress would lose its enter and dwell. So at app start
+   and when places change, while the last registration stands (its hash is known, location was
+   not lost, and the intent survived, which a force stop cancels), only new or changed geofences
+   are added and gone ones removed; with nothing to do nothing is called and no row written. The
+   cost: a reboot inside a place logs no enter there; the exit still comes.
 4. **Registration is repeatable**, as the pipeline's subscription is: at boot and at the
    BOOT_COMPLETED after a force stop (the same `LocationBootReceiver`, so a boot is counted
    once), at `MY_PACKAGE_REPLACED`, at app start, when the set of places changes (by hash),
    when the switch changes, and on a return to the app when the location permission changed
-   (as when "always" is granted on the settings page). A failure other than a missing
+   (as when "always" is granted on the settings page). All but the app start and a change of
+   places add every geofence again (item 3). A failure other than a missing
    permission, and the `GEOFENCE_NOT_AVAILABLE` event that comes when location goes off,
-   schedule a unique `androidx.work` job, `geofence-register`, with exponential backoff and no
-   network constraint. A missing permission is not retried: the return to the app with the
+   schedule a unique `androidx.work` job, `geofence-register`, with linear backoff (a minute more
+   each time, so a night with location off does not push the next try hours away) and no
+   network constraint. A missing permission is not retried, by the job either: the return to the app with the
    permission granted registers. After a failure the ids that may still be held are kept, and
    the next registration first removes every geofence of the app, so none is left stale.
    Registration waits for Play services on its own thread, one at a time; the pipeline's

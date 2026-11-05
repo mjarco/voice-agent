@@ -25,9 +25,12 @@ class PlaceGeofencesBridge(context: Context) : MethodChannel.MethodCallHandler {
             try {
                 val places = parse(call.arguments)
                 val config = GeofenceConfig(context)
+                val before = GeofenceRegistry.hashOf(config.places)
                 config.places = places
-                // Registers only if the set changed; a new name needs no new geofence.
-                if (config.alertsEnabled && GeofenceRegistry.hashOf(places) != config.registeredHash) {
+                // Registers only if the places' geofences changed; a new name needs
+                // none. A failed registration is taken up by the retry job, the app
+                // start or a permission change, not by every hand-over.
+                if (config.alertsEnabled && GeofenceRegistry.hashOf(places) != before) {
                     GeofenceRegistry.reconcileNow(context, "places_changed")
                 }
                 mainThread.post { result.success(null) }

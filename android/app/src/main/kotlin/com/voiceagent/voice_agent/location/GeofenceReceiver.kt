@@ -27,7 +27,10 @@ class GeofenceReceiver : BroadcastReceiver() {
             if (!config.alertsEnabled) return@write
             if (event.hasError()) {
                 if (event.errorCode == GeofenceStatusCodes.GEOFENCE_NOT_AVAILABLE) {
-                    GeofenceRegistry.lost(appContext)
+                    // The wake-up lasts until the registry's thread has taken it.
+                    sending = true
+                    GeofenceRegistry.lostLater(appContext) { pending.finish() }
+                    return@write
                 } else {
                     LocationPipeline.recordStatus(
                         appContext,
