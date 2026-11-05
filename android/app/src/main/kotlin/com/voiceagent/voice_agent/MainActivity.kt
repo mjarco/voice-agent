@@ -3,6 +3,7 @@ package com.voiceagent.voice_agent
 import android.content.Intent
 import android.os.Bundle
 import com.voiceagent.voice_agent.location.LocationBridge
+import com.voiceagent.voice_agent.location.PlaceGeofencesBridge
 import com.voiceagent.voice_agent.location.PlaceReadingBridge
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -40,6 +41,9 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(messenger, "com.voiceagent/place_reading")
             .setMethodCallHandler(PlaceReadingBridge(this))
+
+        MethodChannel(messenger, "com.voiceagent/place_geofences")
+            .setMethodCallHandler(PlaceGeofencesBridge(this))
 
         val shareChannel = MethodChannel(messenger, "com.voiceagent/share")
         val share = ShareBridge(shareChannel)

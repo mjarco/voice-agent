@@ -101,3 +101,4 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-PLATFORM-002](ADR-PLATFORM-002-cancel-on-background.md) | Cancel-on-background policy for recording | Accepted |
 | [ADR-PLATFORM-003](ADR-PLATFORM-003-permission-via-record-package.md) | Microphone permission via record package | Accepted |
 | [ADR-PLATFORM-009](ADR-PLATFORM-009-native-location-pipeline.md) | The location log runs natively, apart from Flutter | Accepted |
+| [ADR-PLATFORM-010](ADR-PLATFORM-010-geofences-of-places.md) | Geofences of places run natively beside the location log | Accepted |

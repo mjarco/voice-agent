@@ -6,6 +6,7 @@ import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
+import 'package:voice_agent/features/places/presentation/place_geofences_sync.dart';
 import 'package:voice_agent/features/places/presentation/places_sync.dart';
 
 class App extends ConsumerStatefulWidget {
@@ -83,7 +84,9 @@ class _AppState extends ConsumerState<App> {
     });
 
     ref.watch(locationLogSyncProvider);
+    ref.watch(locationLogResumeProvider);
     ref.watch(placesSyncProvider);
+    ref.watch(placeGeofencesSyncProvider);
 
     final isDev = appFlavor == 'dev';
     return MaterialApp.router(

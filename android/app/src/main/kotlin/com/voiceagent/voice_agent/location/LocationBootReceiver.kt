@@ -5,7 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 
-/** A subscription is assumed lost after a reboot or an update, so take it out again. */
+/**
+ * A subscription and the geofences are assumed lost after a reboot or an
+ * update, so both are taken out again. One receiver, so a boot is counted once.
+ */
 class LocationBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val appContext = context.applicationContext
@@ -15,7 +18,12 @@ class LocationBootReceiver : BroadcastReceiver() {
             else -> return
         }
         val pending = goAsync()
-        LocationPipeline.write(appContext, done = { pending.finish() }) {
+        // Geofences follow their own switch, whatever the log did, and register
+        // on their own thread; the wake-up lasts until both are done.
+        LocationPipeline.write(
+            appContext,
+            done = { GeofenceRegistry.reconcileLater(appContext, reason) { pending.finish() } },
+        ) {
             if (LocationConfig(appContext).enabled) LocationPipeline.recordStatus(appContext, reason)
             LocationPipeline.reconcile(appContext, reason)
         }
