@@ -148,7 +148,7 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
           key: const Key('arrival-alerts-switch'),
           title: const Text('Alerty w sklepach'),
           subtitle: Text(
-            'Na razie tylko zapis w dzienniku · '
+            'Powiadomienie przy wejściu do sklepu z listą · '
             'wyzwalacze: ${state.triggerCount}'
             '${state.triggersCheckedAt == null ? '' : ', sprawdzone ${_time(state.triggersCheckedAt)}'}'
             ' · obszary: ${state.geofenceCount}'

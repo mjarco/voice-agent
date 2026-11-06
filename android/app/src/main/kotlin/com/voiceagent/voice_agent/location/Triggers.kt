@@ -18,6 +18,8 @@ data class Trigger(
     val dwellS: Int,
     val title: String,
     val expiresAtMs: Long,
+    /** Shown as it comes (04, section 3); may be empty. */
+    val body: String = "",
 )
 
 /** A trigger the phone cannot run, reported once per id and version. */
@@ -133,7 +135,7 @@ object Triggers {
     /**
      * Whether this transition is the one the trigger fires on: the dwell when
      * `dwell_s` > 0, the enter when it is 0, and never once expired. Once per
-     * visit is not judged here (task 5).
+     * visit is judged by [Visits].
      */
     fun wouldFire(trigger: Trigger, transition: String, nowMs: Long): Boolean {
         if (expired(trigger, nowMs)) return false
@@ -152,6 +154,8 @@ object Triggers {
         if (id.isEmpty()) return reject("missing id")
         if (id.length > MAX_ID_LENGTH) return reject("id too long")
         if (version.isEmpty()) return reject("missing version")
+        // Every report carries it; a long one would push caused_by out of the row's 500 characters.
+        if (version.length > MAX_ID_LENGTH) return reject("version too long")
 
         val condition = raw.optJSONObject("when") ?: return reject("missing when")
         val kinds = condition.keys().asSequence().toList().sorted()
@@ -174,6 +178,7 @@ object Triggers {
         if ((0 until surfaces.length()).none { surfaces.opt(it) == "phone" }) return reject("no phone surface")
 
         val place = string(enter, "place") ?: return reject("missing place")
+        if (place.length > MAX_ID_LENGTH) return reject("place too long")
         val lat = number(enter, "lat") ?: return reject("missing lat")
         val lon = number(enter, "lon") ?: return reject("missing lon")
         if (lat !in -90.0..90.0 || lon !in -180.0..180.0) return reject("coordinates out of range")
@@ -181,6 +186,7 @@ object Triggers {
         val dwell = nonNegativeInt(enter, "dwell_s") ?: return reject("missing dwell_s")
         if (dwell > MAX_DWELL_S) return reject("dwell_s too long")
         val title = string(show, "title") ?: return reject("missing show.title")
+        val body = string(show, "body") ?: ""
         val expires = (string(raw, "expires_at") ?: "").let { text ->
             try {
                 OffsetDateTime.parse(text).toInstant().toEpochMilli()
@@ -188,7 +194,7 @@ object Triggers {
                 return reject("missing expires_at")
             }
         }
-        return Read.Ok(Trigger(id, version, place, lat, lon, radius, dwell, title, expires))
+        return Read.Ok(Trigger(id, version, place, lat, lon, radius, dwell, title, expires, body))
     }
 
     /**

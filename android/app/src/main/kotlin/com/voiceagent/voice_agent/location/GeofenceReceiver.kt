@@ -13,8 +13,8 @@ import org.json.JSONObject
  * The system wakes this at a trigger's enter, dwell or exit (ADR-PLATFORM-010,
  * ADR-NET-007). Each becomes a status row of the location log, named by the
  * event types of 03: `place.entered` for enter and dwell, `place.left` for exit.
- * An enter or dwell row says whether the trigger would fire; nothing is shown
- * until task 5, which also judges once per visit.
+ * [Visits] judges once per visit, and a firing transition posts the alert
+ * (ADR-NOTIF-003).
  */
 class GeofenceReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -58,35 +58,49 @@ class GeofenceReceiver : BroadcastReceiver() {
             Geofence.GEOFENCE_TRANSITION_EXIT -> "place.left" to "exit"
             else -> return
         }
-        val triggers = config.triggers.associateBy { it.id }
+        val set = config.triggerSet
+        val triggers = set.triggers.associateBy { it.id }
         val fix = event.triggeringLocation
         val nowMs = receivedAt.toEpochMilli()
+        // Withdrawn triggers' visits go first, so they cannot hold an alert back later.
+        var visits = Visits.prune(config.visits, triggers.keys)
         for (geofence in event.triggeringGeofences.orEmpty()) {
             val trigger = triggers[geofence.requestId]
-            val detail = JSONObject()
-            if (trigger == null) {
+            val step = Visits.step(visits, geofence.requestId, trigger, transition, nowMs, set.maxVisitS)
+            if (trigger != null && step.endedAtMs != null) {
+                // The exit was missed: the visit ended by max_visit_s, dated at its end (04, section 5).
+                val endedAt = Instant.ofEpochMilli(step.endedAtMs)
+                LocationPipeline.recordStatus(context, "place.left", placeDetail(trigger, "max_visit"), endedAt)
+            }
+            val detail = if (trigger == null) {
                 // A geofence of a set already replaced: only the trigger's id is known.
-                detail.put("trigger", geofence.requestId).put("transition", transition)
+                JSONObject().put("trigger", geofence.requestId).put("transition", transition)
             } else {
-                detail.put("place", trigger.place)
-                    .put("transition", transition)
-                    .put("trigger", trigger.id)
-                    .put("v", trigger.version)
-                    // The trigger carries no place name; its title starts with it.
-                    .put("name", trigger.title.takeCodePoints(MAX_NAME))
-                    .put("radius_m", Triggers.radiusOf(trigger))
-                if (status == "place.entered") {
-                    detail.put("would_fire", Triggers.wouldFire(trigger, transition, nowMs))
-                    if (Triggers.expired(trigger, nowMs)) detail.put("expired", true)
+                placeDetail(trigger, transition).apply {
+                    if (status == "place.entered" && Triggers.expired(trigger, nowMs)) put("expired", true)
                 }
             }
             if (fix != null) {
                 detail.put("fix_at", Instant.ofEpochMilli(fix.time).toString())
                 if (fix.hasAccuracy()) detail.put("accuracy_m", Math.round(fix.accuracy))
             }
-            LocationPipeline.recordStatus(context, status, detail, receivedAt)
+            val rowId = LocationPipeline.recordStatus(context, status, detail, receivedAt)
+            visits = step.visits
+            // Saved before the alert: a restart right after must not post it again.
+            config.visits = visits
+            if (step.fire && trigger != null) ArrivalNotifier.fire(context, trigger, rowId, receivedAt)
         }
+        config.visits = visits
     }
+
+    private fun placeDetail(trigger: Trigger, transition: String): JSONObject = JSONObject()
+        .put("place", trigger.place)
+        .put("transition", transition)
+        .put("trigger", trigger.id)
+        .put("v", trigger.version)
+        // The trigger carries no place name; its title starts with it.
+        .put("name", trigger.title.takeCodePoints(MAX_NAME))
+        .put("radius_m", Triggers.radiusOf(trigger))
 
     /** Cuts at a code point, so an emoji is never split in half. */
     private fun String.takeCodePoints(n: Int): String =

@@ -1,6 +1,6 @@
 # ADR-NOTIF-001: Local notifications via diff-based reconciliation with reserved ID partitioning
 
-Status: Proposed. Routine-reminder id formula (item 5) superseded by [ADR-NOTIF-002](./ADR-NOTIF-002-routine-reminder-key.md).
+Status: Proposed. Routine-reminder id formula (item 5) superseded by [ADR-NOTIF-002](./ADR-NOTIF-002-routine-reminder-key.md). Rules 2 and 5 amended by [ADR-NOTIF-003](./ADR-NOTIF-003-arrival-alerts-posted-natively.md): arrival alerts are posted natively, in their own channel and ids `1_000_000–1_999_999`.
 Proposed in: P040
 
 ## Context

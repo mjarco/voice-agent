@@ -28,8 +28,8 @@ import org.json.JSONObject
 
 /**
  * Geofences of the armed triggers (ADR-PLATFORM-010, ADR-NET-007): one per
- * trigger, registered beside the location log. They write rows; nothing is
- * shown until task 5.
+ * trigger, registered beside the location log. They write rows, and a firing
+ * transition posts an alert (ADR-NOTIF-003).
  *
  * Registration is safe to repeat, as the pipeline's subscription is: geofences
  * are lost at a reboot, an update, a force stop and when location goes off, so
@@ -189,6 +189,7 @@ object GeofenceRegistry {
             return Outcome.FAILED
         }
         config.registered(ids, chosen.map { keyOf(it) }.toSet(), hashOf(chosen), System.currentTimeMillis())
+        forgetVisits(context, toAdd.map { it.id }.toSet() + gone)
         record(
             context,
             "geofences_registered",
@@ -201,6 +202,22 @@ object GeofenceRegistry {
         // A pending retry has nothing left to do; the job itself ends by its result.
         if (reason != REASON_RETRY) WorkManager.getInstance(context).cancelUniqueWork(RETRY_WORK)
         return Outcome.REGISTERED
+    }
+
+    /**
+     * A geofence removed, or added afresh, will never report the exit of a
+     * visit in progress, so that visit is forgotten (ADR-NOTIF-003, item 4).
+     * Added again with initial trigger 0 while you stand inside, it reports no
+     * enter or dwell either, so this cannot fire twice. Visits live on the
+     * pipeline's thread, so the change is queued there.
+     */
+    private fun forgetVisits(context: Context, ids: Set<String>) {
+        if (ids.isEmpty()) return
+        LocationPipeline.write(context) {
+            val config = GeofenceConfig(context)
+            val visits = config.visits
+            if (visits.keys.any { it in ids }) config.visits = visits - ids
+        }
     }
 
     /**

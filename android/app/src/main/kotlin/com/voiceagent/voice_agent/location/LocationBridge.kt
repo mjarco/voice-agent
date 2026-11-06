@@ -67,10 +67,14 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                         TriggerPuller.cancel(context)
                         // The next switch on pulls afresh (ADR-NET-007).
                         geofences.clearTriggers()
+                        // Visits live on the pipeline's thread (ADR-NOTIF-003): queued
+                        // there, after any broadcast already being written.
+                        LocationPipeline.write(context) { geofences.clearVisits() }
                     }
                     // On the registry's thread (see above), so the reply comes once registered.
                     GeofenceRegistry.reconcileNow(context, GeofenceRegistry.REASON_SWITCH)
                     if (enabled) {
+                        ArrivalNotifier.ensureChannel(context)
                         TriggerPuller.schedule(context)
                         TriggerPuller.pullLater(context, TriggerPuller.REASON_SWITCH)
                     }

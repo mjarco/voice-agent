@@ -93,6 +93,11 @@
         <receiver
             android:name=".location.GeofenceReceiver"
             android:exported="false" />
+        <!-- An arrival alert swiped away (ADR-NOTIF-003): only its own delete
+             intent reaches this. -->
+        <receiver
+            android:name=".location.ArrivalDismissReceiver"
+            android:exported="false" />
         <receiver
             android:name=".location.LocationBootReceiver"
             android:exported="false">

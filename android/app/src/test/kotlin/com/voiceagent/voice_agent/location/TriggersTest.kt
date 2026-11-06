@@ -64,7 +64,18 @@ class TriggersTest {
         assertEquals(150, t.radiusM)
         assertEquals(60, t.dwellS)
         assertEquals("Castorama: 3 rzeczy", t.title)
+        assertEquals("przewód 3-żyłowy, peszel 10 m, …", t.body)
         assertEquals(OffsetDateTime.parse("2026-11-08T00:00:00+01:00").toInstant().toEpochMilli(), t.expiresAtMs)
+    }
+
+    @Test
+    fun aMissingBodyShowsTheTitleAlone() {
+        for (body in listOf<Any>(JSONObject.NULL, "", 7)) {
+            val read = Triggers.parse(set(trigger { getJSONObject("show").put("body", body) }))
+            assertEquals("", read.triggers.single().body)
+        }
+        val read = Triggers.parse(set(trigger { getJSONObject("show").remove("body") }))
+        assertEquals("", read.triggers.single().body)
     }
 
     @Test
@@ -140,6 +151,15 @@ class TriggersTest {
         assertEquals(
             "dwell_s too long",
             rejectedWhy(trigger { getJSONObject("when").getJSONObject("enter").put("dwell_s", 3_000_000) }),
+        )
+    }
+
+    @Test
+    fun aVersionOrPlaceTooLongForAReportIsRejected() {
+        assertEquals("version too long", rejectedWhy(trigger(version = "v".repeat(101))))
+        assertEquals(
+            "place too long",
+            rejectedWhy(trigger { getJSONObject("when").getJSONObject("enter").put("place", "p".repeat(101)) }),
         )
     }
 

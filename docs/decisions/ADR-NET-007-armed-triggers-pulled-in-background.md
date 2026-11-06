@@ -1,6 +1,6 @@
 # ADR-NET-007: Armed triggers are pulled in the background, and geofences come from them
 
-Status: Accepted
+Status: Accepted. Item 6 (`would_fire`) superseded by [ADR-NOTIF-003](./ADR-NOTIF-003-arrival-alerts-posted-natively.md).
 
 ## Context
 

@@ -148,6 +148,11 @@ void main() {
       expect(_switchValue(tester, 'location-log-switch'), isTrue);
       expect(_switchValue(tester, 'arrival-alerts-switch'), isFalse);
       expect(find.textContaining('wyzwalacze: 0 · obszary: 0'), findsOneWidget);
+      expect(
+        find.textContaining('Powiadomienie przy wejściu do sklepu z listą'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Na razie tylko zapis'), findsNothing);
       expect(find.textContaining('sprawdzone'), findsNothing);
       await tester.pumpWidget(const SizedBox());
     });

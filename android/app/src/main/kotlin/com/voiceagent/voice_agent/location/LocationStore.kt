@@ -36,15 +36,19 @@ class LocationStore private constructor(context: Context) :
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
 
-    fun enqueue(payload: JSONObject) {
-        // UUIDv7, so a report's row id is its event id (04, §7).
-        val id = Uuid7.next()
+    /**
+     * Returns the row's id: UUIDv7, so a report's row id is its event id, and
+     * a later report can name it in `caused_by` (04, §7). An id made ahead can
+     * be passed, when it must be known before the row is written.
+     */
+    fun enqueue(payload: JSONObject, id: String = Uuid7.next()): String {
         payload.put("id", id)
         val values = ContentValues().apply {
             put("id", id)
             put("payload", payload.toString())
         }
         writableDatabase.insertOrThrow("location_queue", null, values)
+        return id
     }
 
     fun oldest(limit: Int): List<LogEntry> {

@@ -1,11 +1,11 @@
 # Manual test: the arrival list
 
-**Design:** [ADR-PLATFORM-010](../decisions/ADR-PLATFORM-010-geofences-of-places.md), [ADR-NET-007](../decisions/ADR-NET-007-armed-triggers-pulled-in-background.md), [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); workspace epic `2026-11-places/01-arrival-list` and its trigger contract `compilations/notification-triggers/reviewed/04-trigger-contract.md`; PR #395 (task 3), PR #396 (task 4).
+**Design:** [ADR-PLATFORM-010](../decisions/ADR-PLATFORM-010-geofences-of-places.md), [ADR-NET-007](../decisions/ADR-NET-007-armed-triggers-pulled-in-background.md), [ADR-NOTIF-003](../decisions/ADR-NOTIF-003-arrival-alerts-posted-natively.md), [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); workspace epic `2026-11-places/01-arrival-list` and its trigger contract `compilations/notification-triggers/reviewed/04-trigger-contract.md`; PR #395 (task 3), PR #396 (task 4), PR #397 (task 5).
 **Overall status:** **pending**.
 **Why now:** geofences, the "always" permission, boot, update, force stop and location turned off exist only on a device.
 **When:** once, at the end of the epic, with the cases of tasks 4–6; nothing goes on the Pixel before then (owner's decision of 2026-11-05).
 **Time budget:** ~45 min for task 3's cases (agent, dev flavor over USB adb), then real arrivals (owner, stable on production).
-**What we are testing:** task 3: registration survives everything the location log's subscription survives, and enter, dwell and exit become status rows of the log. Task 4: the phone pulls the armed triggers, each trigger gets a geofence (a store with nothing to buy gets none), and an enter or dwell row says whether the trigger would fire. Nothing is shown. Tasks 5–6 add their cases below.
+**What we are testing:** task 3: registration survives everything the location log's subscription survives, and enter, dwell and exit become status rows of the log. Task 4: the phone pulls the armed triggers, each trigger gets a geofence (a store with nothing to buy gets none), and an enter or dwell row says whether the trigger would fire. Task 5: the firing transition posts a notification at most once per visit, and its reports come back as rows (`trigger.fired`, `.shown`, `.ignored`). Task 6 adds its cases below.
 
 ## Status legend
 
@@ -33,6 +33,12 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T13 | A change in the list reaches the phone | pending |
 | T14 | Turning it off clears the set and stops the hourly pull | pending |
 | T15 | Offline: one `triggers_failed`, the set stands | pending |
+| T16 | One notification per visit, with its reports | pending |
+| T17 | No second one after a restart mid-visit | pending |
+| T18 | A new list mid-visit gives none | pending |
+| T19 | A swipe writes `trigger.ignored` | pending |
+| T20 | Notifications off: `"shown":false` | pending |
+| T21 | An expired trigger stays silent | pending |
 
 ---
 
@@ -177,7 +183,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 4. Remove the test provider; read the queue.
 
 **Why:** S1.1 of the epic: each enter, dwell and exit becomes a status row with the phone's time and 03's event type.
-**Expected:** `place.entered` with `"transition":"enter"` and `"would_fire":false`, then `"dwell"` about 60 s later with `"would_fire":true`, then `place.left` with `"exit"`; detail has `place` (`place:<id>`), `trigger`, `v`, `name` (the trigger's title), `radius_m`, `fix_at`, `accuracy_m`; `recorded_at` after `fix_at`. Use a place with something to buy: the third has no geofence. If Play services' geofencing ignores the test provider, record "skipped (mock ignored)": T11 covers it.
+**Expected:** `place.entered` with `"transition":"enter"`, then `"dwell"` about 60 s later, followed by `trigger.fired` and `trigger.shown` (T16), then `place.left` with `"exit"`; detail has `place` (`place:<id>`), `trigger`, `v`, `name` (the trigger's title), `radius_m`, `fix_at`, `accuracy_m`; `recorded_at` after `fix_at`. Use a place with something to buy: the third has no geofence. If Play services' geofencing ignores the test provider, record "skipped (mock ignored)": T11 covers it.
 **On failure:** `GeofenceReceiver.record`; whether the fused provider took the mock (`adb shell dumpsys location`).
 
 ### T10. A hands-free session runs alongside
@@ -240,10 +246,71 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 **Expected:** one `triggers_failed` row for both tries; "wyzwalacze: 2" and "obszary: 2" stay; after the network returns, `triggers_pulled` `{"changed":false,…}`.
 **On failure:** `triggers_failing` in `geofences.xml`.
 
+### T16. One notification per visit, with its reports
+
+**Status:** pending
+**Do:**
+1. As T9, steps 1–2, at a place with something to buy; watch the screen.
+2. Stay 3 more minutes; then move away as T9, step 3; read the queue.
+
+**Why:** task 5 of the epic and 04, sections 5 and 7: the trigger's transition fires once per visit, and each step is a row naming its cause (ADR-NOTIF-003).
+**Expected:** about 60 s in, one heads-up notification with sound in the channel "Alerty w sklepach", the trigger's title and body as PA wrote them. The queue: `place.entered` (`dwell`) with id A; `trigger.fired` `{"trigger":…,"v":…,"surface":"phone","caused_by":[A],"shown":true}` with id B; `trigger.shown` `{"caused_by":[B]}`. No second notification and no second `trigger.fired` before the exit. `geofences.xml` holds `visits` with the trigger's id and `"fired":true`, gone after the exit. A tap opens the app's start screen and writes no row (task 6).
+**On failure:** `Visits.step`; `ArrivalNotifier.blocked`; the channel in Settings → Apps → Notifications.
+
+### T17. No second one after a restart mid-visit
+
+**Status:** pending
+**Do:** in T16's visit, after the notification: `am force-stop`, confirm no pid, open the app; then reboot the phone; keep the mock location 3 more minutes each time.
+
+**Why:** the visit state is on disk, so a restart of the app or the phone does not fire twice (04, section 5).
+**Expected:** no new notification and no `trigger.fired`. After the force stop and after the reboot the geofence is added afresh, so its visit leaves `visits` in `geofences.xml`, and no `place.entered` follows while you stay (initial trigger 0); the exit still writes `place.left`. This case is what makes forgetting a re-added geofence's visit safe (ADR-NOTIF-003, item 4).
+**On failure:** a `place.entered` right after the registration means Play services reported a geofence added while inside: forgetting the visit at `GeofenceRegistry.forgetVisits` then fires twice.
+
+### T18. A new list mid-visit gives none
+
+**Status:** pending
+**Do:** in a visit that has fired, add an item to that store's list in the test PA; return to the app after 5 minutes (a pull) and stay 3 more minutes.
+
+**Why:** once per visit is keyed by the trigger's id, not its version (04, section 5).
+**Expected:** `triggers_pulled` `{"changed":true}`, no `geofences_registered` with `"added"` > 0 for that trigger (its key is unchanged), no new `trigger.fired`.
+**On failure:** `Triggers.geofenceKey` (an added geofence resets its enter); `Visits.step`.
+
+A withdrawn trigger's visit is forgotten with its geofence: tick off the last item while inside, leave, add an item, come back within 6 h, and the dwell fires (`GeofenceRegistry.forgetVisits`). Run it with T18 when time allows.
+
+### T19. A swipe writes `trigger.ignored`
+
+**Status:** pending
+**Do:** in a new visit (exit, then enter again), swipe the notification away; read the queue.
+
+**Why:** 04, section 7: you swiped it away, reported against the shown row.
+**Expected:** `trigger.ignored` `{"trigger":…,"v":…,"caused_by":[<the trigger.shown id>]}`. A tap instead of a swipe writes nothing.
+**On failure:** `ArrivalDismissReceiver` in the manifest; the delete intent's extras.
+
+### T20. Notifications off: `"shown":false`
+
+**Status:** pending
+**Do:**
+1. Turn off the channel "Alerty w sklepach" in system settings (it exists once the switch is on); make a new visit.
+2. Turn the channel on; `adb shell pm revoke <package> android.permission.POST_NOTIFICATIONS`; make a new visit.
+3. Grant it again.
+
+**Why:** owner's decision with Gate 2 of task 5 (point 4): the log shows that the alert would have come, and why it did not.
+**Expected:** 1: `trigger.fired` with `"shown":false,"why":"channel_off"`, no `trigger.shown`, no notification. 2: the same with `"why":"notifications_off"`. A second dwell in the same visit writes no second `trigger.fired`.
+**On failure:** `ArrivalNotifier.blocked`.
+
+### T21. An expired trigger stays silent
+
+**Status:** pending
+**Do:** with the phone's clock moved past the trigger's `expires_at` (or a test PA that compiled it 3 days ago), make a visit.
+
+**Why:** expired triggers never fire, by the phone's clock (04, section 3).
+**Expected:** `place.entered` with `"expired":true`, no `trigger.fired`, no notification.
+**On failure:** `Triggers.expired`; the stored set's `expires_at`.
+
 A rejected trigger (`trigger.rejected`) cannot be made by personal-agent today, which compiles only what goal 2 builds; the JVM tests in `android/app/src/test/` cover it.
 
 ---
 
 ## When this plan is done
 
-Task 3: T1–T8 and T10 are must-pass. T9 is conditional on Play services taking a test provider; if it does not, T11 alone proves the rows. T11 is read with the epic's ten visits. The plan runs at the epic's end, so it is not a gate of task 3's merge. Task 4: T12, T14 and T15 are must-pass, with T2, T5 and T9 as they read since task 4; T13 is must-pass with its delay noted, since Doze may hold the job. Tasks 5–6 add their cases and their own must-pass list.
+Task 3: T1–T8 and T10 are must-pass. T9 is conditional on Play services taking a test provider; if it does not, T11 alone proves the rows. T11 is read with the epic's ten visits. The plan runs at the epic's end, so it is not a gate of task 3's merge. Task 4: T12, T14 and T15 are must-pass, with T2, T5 and T9 as they read since task 4; T13 is must-pass with its delay noted, since Doze may hold the job. Task 5: T16, T17, T19, T20 and T21 are must-pass, conditional on the mock location as T9 is (T11's real visits then prove T16 and T19); T18 is must-pass. Task 6 adds its cases and its own must-pass list.
