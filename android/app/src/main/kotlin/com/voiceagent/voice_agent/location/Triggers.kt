@@ -20,7 +20,7 @@ data class Trigger(
     val expiresAtMs: Long,
     /** Shown as it comes (04, section 3); may be empty. */
     val body: String = "",
-    /** The route a tap opens (04, section 6); Dart checks it. Empty: the app as it is. */
+    /** The route a tap opens (04, section 6); Dart checks it. Empty: the start screen. */
     val open: String = "",
 )
 

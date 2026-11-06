@@ -11,11 +11,15 @@ import 'package:voice_agent/features/shopping/presentation/shopping_notifier.dar
 import 'package:voice_agent/features/shopping/presentation/shopping_providers.dart';
 
 class ShoppingScreen extends ConsumerStatefulWidget {
-  const ShoppingScreen({super.key, this.placeTypes = const []});
+  const ShoppingScreen({super.key, this.placeTypes = const [], this.tap});
 
   /// The store types of a place, from `/shopping?store=…`, the route a tap
   /// on an arrival alert opens: selected together.
   final List<String> placeTypes;
+
+  /// New with every tap that opened this route, so a second tap to the same
+  /// place selects it again after the chips were changed by hand.
+  final Object? tap;
 
   @override
   ConsumerState<ShoppingScreen> createState() => _ShoppingScreenState();
@@ -35,11 +39,15 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     _selectPlace();
   }
 
-  /// The screen lives on in its branch, so a later tap brings new types here.
+  /// The screen lives on in its branch, so a later tap comes here: new types,
+  /// or the same ones from a new tap.
   @override
   void didUpdateWidget(ShoppingScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!listEquals(oldWidget.placeTypes, widget.placeTypes)) _selectPlace();
+    if (!listEquals(oldWidget.placeTypes, widget.placeTypes) ||
+        !identical(oldWidget.tap, widget.tap)) {
+      _selectPlace();
+    }
   }
 
   /// After the frame: a provider is not changed while widgets build.

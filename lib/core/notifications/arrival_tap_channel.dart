@@ -37,7 +37,7 @@ class ArrivalTapChannel {
 
   Future<void> _onCall(MethodCall call) async {
     if (call.method != 'tapped') return;
-    final route = arrivalRoute(call.arguments as String?);
+    final route = arrivalRoute(call.arguments as String? ?? '');
     if (route != null) _routes.add(route);
   }
 }
@@ -45,19 +45,25 @@ class ArrivalTapChannel {
 /// A store type id as personal-agent writes them (`diy`, `home_garden`).
 final _storeTypeId = RegExp(r'^[a-z][a-z0-9_]{0,39}$');
 
+/// The start screen, which a route a trigger may not open gives instead.
+const arrivalStartRoute = '/record';
+
 /// The routes a trigger may open (04, section 6): only `/shopping`, with an
 /// optional `store=` list of type ids. Ids of another shape are dropped; with
-/// none left it is plain `/shopping`. Anything else is null: the app opens as
-/// it is. The catalogue's own check is Shopping's, which has the catalogue.
+/// none left it is plain `/shopping`. Any other route, or none, opens the
+/// start screen. Null only when there was no tap. The catalogue's own check
+/// is Shopping's, which has the catalogue.
 String? arrivalRoute(String? open) {
-  if (open == null || open.isEmpty) return null;
+  if (open == null) return null;
   final Uri uri;
   try {
     uri = Uri.parse(open);
   } on FormatException {
-    return null;
+    return arrivalStartRoute;
   }
-  if (uri.hasScheme || uri.hasAuthority || uri.path != '/shopping') return null;
+  if (uri.hasScheme || uri.hasAuthority || uri.path != '/shopping') {
+    return arrivalStartRoute;
+  }
   final store = uri.queryParameters['store'];
   final types = <String>[
     for (final t in (store ?? '').split(','))

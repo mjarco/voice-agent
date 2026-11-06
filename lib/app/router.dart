@@ -45,6 +45,7 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
               // `?store=diy,garden`: a tap on an arrival alert, already
               // checked by arrivalRoute (ADR-NOTIF-003).
               builder: (context, state) => ShoppingScreen(
+                tap: state.extra,
                 placeTypes: [
                   for (final t
                       in (state.uri.queryParameters['store'] ?? '').split(','))

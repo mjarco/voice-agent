@@ -40,7 +40,7 @@ class _AppState extends ConsumerState<App> {
       _coldStartConsumed = true;
       final pending = ref.read(pendingDeepLinkProvider);
       if (pending != null && pending.isNotEmpty) {
-        _router.go(pending);
+        _router.go(pending, extra: DeepLinkTap());
         ref.read(pendingDeepLinkProvider.notifier).state = null;
       }
       final sharedText = ref.read(pendingSharedTextProvider);
@@ -74,7 +74,7 @@ class _AppState extends ConsumerState<App> {
     // for the lifetime of the app.
     ref.listen<AsyncValue<String>>(notificationTapStreamProvider, (prev, next) {
       next.whenData((payload) {
-        if (payload.isNotEmpty) _router.go(payload);
+        if (payload.isNotEmpty) _router.go(payload, extra: DeepLinkTap());
       });
     });
 

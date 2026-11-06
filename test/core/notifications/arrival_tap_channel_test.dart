@@ -21,9 +21,8 @@ void main() {
       expect(arrivalRoute('/shopping'), '/shopping');
     });
 
-    test('opens nothing for any other route or junk', () {
+    test('any other route, junk or none opens the start screen', () {
       for (final open in [
-        null,
         '',
         '/agenda',
         '/settings/advanced',
@@ -33,8 +32,13 @@ void main() {
         'shopping?store=diy',
         '%%%',
       ]) {
-        expect(arrivalRoute(open), isNull, reason: '$open');
+        expect(arrivalRoute(open), arrivalStartRoute, reason: open);
       }
+      expect(arrivalStartRoute, '/record');
+    });
+
+    test('no tap is null', () {
+      expect(arrivalRoute(null), isNull);
     });
   });
 
@@ -69,8 +73,15 @@ void main() {
           '/shopping?store=diy');
     });
 
-    test('a launch route it may not open gives nothing', () async {
+    test('a launch route it may not open gives the start screen', () async {
       answer((_) async => '/settings');
+
+      expect(await ArrivalTapChannel(channel: channel).takeInitialRoute(),
+          arrivalStartRoute);
+    });
+
+    test('a launch with no tap gives nothing', () async {
+      answer((_) async => null);
 
       expect(await ArrivalTapChannel(channel: channel).takeInitialRoute(),
           isNull);
@@ -82,10 +93,12 @@ void main() {
       final taps = ArrivalTapChannel(channel: channel);
       expect(await taps.takeInitialRoute(), isNull);
 
-      await fromNative('tapped', '/agenda');
+      final routes = taps.routes.take(3).toList();
       await fromNative('tapped', '/shopping?store=grocery');
+      await fromNative('tapped', '/agenda');
+      await fromNative('tapped', null);
 
-      expect(await taps.routes.first, '/shopping?store=grocery');
+      expect(await routes, ['/shopping?store=grocery', '/record', '/record']);
     });
 
     test('no handler on the platform gives nothing', () async {

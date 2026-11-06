@@ -318,9 +318,10 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 1. Make a visit as T16 at a place with two store types (in the test PA, e.g. `diy` and `garden`, an item under each).
 2. Before the alert comes, `am force-stop` the app and confirm no pid.
 3. Tap the alert; read the screen and the queue.
+4. A new visit; this time leave the app in Recents and kill only its process (`adb shell am kill <package>`, confirm no pid), then tap the alert. Android recreates the activity and delivers the tap through `onNewIntent`.
 
 **Why:** 04, section 6 (the route), amended so that `open` names every store type of the place; ADR-PLATFORM-008's cold path; `trigger.tapped` of 04, section 7.
-**Expected:** the app starts on Shopping, To buy, with both type chips selected and "All" not; both items show, nothing under other types. The queue: `trigger.tapped` `{"trigger":…,"v":…,"caused_by":[<the trigger.shown id>]}`. The alert is gone from the shade.
+**Expected:** the app starts on Shopping, To buy, with both type chips selected and "All" not; both items show, nothing under other types. The queue: `trigger.tapped` `{"trigger":…,"v":…,"caused_by":[<the trigger.shown id>]}`. The alert is gone from the shade. Step 4 gives the same, with one `trigger.tapped`.
 **On failure:** `ArrivalTapBridge.accept` (the intent's action and extras); `ArrivalTapChannel.takeInitialRoute` and `arrivalRoute`; `last_shown` in `geofences.xml`.
 
 ### T23. A tap with the app running, and over a hands-free session
@@ -329,9 +330,10 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 **Do:**
 1. A new visit, the app open on Record. Tap the alert.
 2. A new visit with a hands-free session listening. Tap the alert, then return to Record.
+3. On a later visit, after changing the chips by hand (e.g. "All"), tap the alert again.
 
 **Why:** ADR-PLATFORM-008's warm path: `onNewIntent` reaches the running app (singleTask), and `go` keeps the shell.
-**Expected:** 1: Shopping opens with the place's chips; `trigger.tapped` once. 2: the same, and the session is still listening when you return to Record.
+**Expected:** 1: Shopping opens with the place's chips; `trigger.tapped` once. 2: the same, and the session is still listening when you return to Record. 3: the place's chips are selected again (each tap is a new navigation, `DeepLinkTap`).
 **On failure:** `MainActivity.onNewIntent`; `App`'s listener on `notificationTapStreamProvider`; `ShoppingScreen.didUpdateWidget` when Shopping was already open.
 
 ### T24. Recents and a second tap do not count again
@@ -339,8 +341,8 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 **Status:** pending
 **Do:** after T22, leave the app with Back, open it again from Recents; then fire `adb shell am start -n <package>/.MainActivity -a com.voiceagent.voice_agent.ARRIVAL_TAPPED --es trigger <id> --es v <v> --es shown <the same shown id> --es open /settings`.
 
-**Why:** one tap counts once: a redelivered or repeated intent writes no row, and a route a trigger may not open opens nothing (04, section 6).
-**Expected:** Recents opens the app as it was, with no new `trigger.tapped`. The `am start` writes no row, and the app stays where it was (`/settings` is not opened).
+**Why:** one tap counts once: a redelivered or repeated intent writes no row, and a route a trigger may not open opens the start screen (04, section 6).
+**Expected:** Recents opens the app as it was, with no new `trigger.tapped`. The `am start` writes no row and opens the start screen (Record), not `/settings` (04, section 6: anything else opens the start screen).
 **On failure:** `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY` in `ArrivalTapBridge.accept`; `Visits.takeShown`; `arrivalRoute`.
 
 ### T25. A tap after the switch is off

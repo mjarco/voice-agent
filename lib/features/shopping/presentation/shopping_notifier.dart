@@ -64,7 +64,7 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
       if (types.isNotEmpty) {
         items = [
           for (final item in items)
-            if (item.storeTypes.any(types.contains)) item,
+            if (_underAny(item, types)) item,
         ];
       }
       if (placeTypes.isNotEmpty) _placeTypes = types;
@@ -183,13 +183,19 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
 
   bool _shown(ShoppingItem item) {
     if (_view != ShoppingView.toBuy) return false;
-    if (_placeTypes.isNotEmpty) {
-      return item.storeTypes.any(_placeTypes.contains);
-    }
+    if (_placeTypes.isNotEmpty) return _underAny(item, _placeTypes);
     final filter = _filter;
     if (filter == null || item.storeTypes.contains(filter)) return true;
     return filter == 'other' && item.storeTypes.isEmpty;
   }
+
+  /// Under any of [types], as personal-agent counts a place's items: `other`
+  /// holds the items with no type.
+  static bool _underAny(ShoppingItem item, List<String> types) => types.any(
+        (t) =>
+            item.storeTypes.contains(t) ||
+            (t == 'other' && item.storeTypes.isEmpty),
+      );
 
   Future<bool> setTypes(String id, List<String> storeTypes) =>
       _act(() => _repository.setTypes(id, storeTypes));
@@ -203,7 +209,9 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
     final current = state;
     if (current is! ShoppingLoaded) return null;
     final item = current.items.where((i) => i.id == id).firstOrNull;
-    return item?.storeTypes.where(_placeTypes.contains).firstOrNull;
+    if (item == null) return null;
+    if (item.storeTypes.isEmpty && _placeTypes.contains('other')) return 'other';
+    return item.storeTypes.where(_placeTypes.contains).firstOrNull;
   }
 
   Future<bool> remove(String id) => _act(() => _repository.remove(id));

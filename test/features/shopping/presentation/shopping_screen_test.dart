@@ -339,6 +339,38 @@ void main() {
       expect(find.text('gwoździe'), findsNothing);
     });
 
+    testWidgets('a second tap to the same place selects it again',
+        (tester) async {
+      final repo = FakeShoppingRepository();
+      Widget screen(Object tap) => ProviderScope(
+            overrides: [
+              shoppingRepositoryProvider.overrideWithValue(repo),
+              shoppingNotifierProvider.overrideWith(
+                (ref) => ShoppingNotifier(
+                  repo,
+                  FakeShoppingProposals(),
+                  rereadDelay: Duration.zero,
+                ),
+              ),
+            ],
+            child: MaterialApp(
+              home: ShoppingScreen(placeTypes: const ['electrical'], tap: tap),
+            ),
+          );
+      await tester.pumpWidget(screen(Object()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('shopping-filter-all')));
+      await tester.pumpAndSettle();
+      expect(selected(tester, 'shopping-filter-all'), isTrue);
+
+      // The same route from a new tap: a new token, same types.
+      await tester.pumpWidget(screen(Object()));
+      await tester.pumpAndSettle();
+
+      expect(selected(tester, 'shopping-filter-electrical'), isTrue);
+      expect(selected(tester, 'shopping-filter-all'), isFalse);
+    });
+
     testWidgets('a chip tap goes back to choosing one', (tester) async {
       await _pump(
         tester,

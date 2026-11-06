@@ -373,6 +373,33 @@ void main() {
       expect(state.items.map((i) => i.id), ['c', 'd']);
     });
 
+    test('a place tagged other counts items with no type, as PA does',
+        () async {
+      repository.catalogue = const ShoppingCatalogue(
+        storeTypes: [
+          StoreType(id: 'diy', label: 'Budowlany', count: 1),
+          StoreType(id: 'other', label: 'Inne', count: 1),
+        ],
+        total: 2,
+      );
+      repository.toBuy = [
+        sampleItem(id: 'a', text: 'peszel', storeTypes: ['diy']),
+        sampleItem(id: 'u', text: 'coś', storeTypes: []),
+        sampleItem(id: 'c', text: 'mleko', storeTypes: ['grocery']),
+      ];
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+
+      await notifier.selectPlace(['diy', 'other']);
+
+      expect(
+        (notifier.state as ShoppingLoaded).items.map((i) => i.id),
+        ['a', 'u'],
+      );
+      expect(await notifier.markBought('u'), isTrue);
+      expect(repository.lastBoughtStoreType, 'other');
+    });
+
     test('an added item under another type is said to be not shown',
         () async {
       final notifier = await create();
