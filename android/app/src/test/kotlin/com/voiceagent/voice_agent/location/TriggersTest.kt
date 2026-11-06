@@ -119,6 +119,41 @@ class TriggersTest {
     }
 
     @Test
+    fun aNullIsNotAString() {
+        assertEquals("missing show.title", rejectedWhy(trigger { getJSONObject("show").put("title", JSONObject.NULL) }))
+        assertEquals("missing id", rejectedWhy(trigger { put("id", JSONObject.NULL) }))
+        assertEquals("missing place", rejectedWhy(trigger { getJSONObject("when").getJSONObject("enter").put("place", 7) }))
+    }
+
+    @Test
+    fun noSurfacesIsMissingNotPhone() {
+        assertEquals("missing show.surfaces", rejectedWhy(trigger { getJSONObject("show").remove("surfaces") }))
+    }
+
+    @Test
+    fun whatPlayServicesWouldRefuseIsRejectedAlone() {
+        val longId = "arrival-list:" + "x".repeat(100)
+        val read = Triggers.parse(set(trigger(), trigger(longId)))
+        assertEquals(listOf("arrival-list:7"), read.triggers.map { it.id })
+        assertEquals("id too long", read.rejected.single().why)
+        assertTrue(read.rejected.single().id.length <= Triggers.MAX_ID_LENGTH)
+        assertEquals(
+            "dwell_s too long",
+            rejectedWhy(trigger { getJSONObject("when").getJSONObject("enter").put("dwell_s", 3_000_000) }),
+        )
+    }
+
+    @Test
+    fun aBodyNestedTooDeepIsRefusedNotFatal() {
+        val deep = "[".repeat(200_000) + "]".repeat(200_000)
+        try {
+            Triggers.parseEnvelope("{\"data\":{\"contract\":1,\"x\":$deep,\"triggers\":[]}}")
+        } catch (_: TriggerSetException) {
+            // Refused; the old set stays.
+        }
+    }
+
+    @Test
     fun oneBadTriggerLeavesTheOthers() {
         val read = Triggers.parse(set(trigger(), trigger("arrival-list:8") { put("once", "ever") }))
         assertEquals(listOf("arrival-list:7"), read.triggers.map { it.id })

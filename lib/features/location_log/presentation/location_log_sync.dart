@@ -43,8 +43,9 @@ final locationLogSyncProvider = Provider<void>((ref) {
 
 /// On each return to the app, lets the native side see whether the location
 /// permission changed, as when "always" was granted on the system's settings
-/// page, and register the geofences again (ADR-PLATFORM-010). A failure here
-/// must never reach the rest of the app.
+/// page, and register the geofences again (ADR-PLATFORM-010), and pull the
+/// triggers if due (ADR-NET-007). A failure here must never reach the rest of
+/// the app.
 final locationLogResumeProvider = Provider<void>((ref) {
   if (!ref.watch(locationLogAvailableProvider)) return;
   final port = ref.watch(locationLogPortProvider);
@@ -53,7 +54,7 @@ final locationLogResumeProvider = Provider<void>((ref) {
       try {
         await port.appResumed();
       } catch (_) {
-        // The next start or change of places registers them anyway.
+        // The next start, or the hourly pull, catches up anyway.
       }
     },
   );

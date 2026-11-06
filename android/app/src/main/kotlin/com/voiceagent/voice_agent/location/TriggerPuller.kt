@@ -8,7 +8,6 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
@@ -25,8 +24,6 @@ import org.json.JSONObject
  * offline, and the triggers' expiry bounds how old it may be.
  */
 object TriggerPuller {
-    enum class Outcome { OFF, CHANGED, UNCHANGED, FAILED }
-
     const val REASON_JOB = "hourly"
     const val REASON_APP_START = "app_start"
     const val REASON_SWITCH = "switch"
@@ -38,7 +35,6 @@ object TriggerPuller {
     private const val WORK = "triggers-pull"
     private const val TIMEOUT_MS = 6_000
     private const val RETURN_MIN_INTERVAL_MS = 5 * 60_000L
-    private const val WAIT_REGISTRY_S = 60L
 
     /** The status of a reply that is not personal-agent's set. */
     private const val CODE_BAD_BODY = -3
@@ -49,9 +45,9 @@ object TriggerPuller {
         thread.execute { pullNow(context.applicationContext, reason) }
     }
 
-    /** For the hourly job. */
-    fun pullAndWait(context: Context, reason: String): Future<Outcome> =
-        thread.submit(Callable { pullNow(context.applicationContext, reason) })
+    /** For the hourly job: waits for the request, not for the registration after it. */
+    fun pullAndWait(context: Context, reason: String): Future<*> =
+        thread.submit { pullNow(context.applicationContext, reason) }
 
     /** A return to the app pulls, unless one was tried in the last 5 minutes. */
     fun appResumed(context: Context) {
@@ -73,71 +69,88 @@ object TriggerPuller {
         WorkManager.getInstance(context).cancelUniqueWork(WORK)
     }
 
-    /** Never throws: an exception must not reach a thread's top and end the process. */
-    private fun pullNow(context: Context, reason: String): Outcome = try {
-        pull(context, reason)
-    } catch (failure: Exception) {
-        failed(context, CODE_NETWORK, messageOf(failure), reason)
+    /** What a pull brought; settled on the registry's thread. */
+    private sealed class Pulled {
+        object Unchanged : Pulled()
+        class NewSet(val json: String, val etag: String?, val set: TriggerSet) : Pulled()
+        class Failed(val code: Int, val error: String) : Pulled()
     }
 
-    private fun pull(context: Context, reason: String): Outcome {
-        val config = GeofenceConfig(context)
-        if (!config.alertsEnabled) return Outcome.OFF
-        config.triggersTriedAtMs = System.currentTimeMillis()
+    /**
+     * The request runs here; what it brought is settled on the registry's
+     * thread, after any registration in progress, so the switch going off
+     * meanwhile wins and nothing is written with it off. Never throws: an
+     * exception must not reach a thread's top and end the process.
+     */
+    private fun pullNow(context: Context, reason: String) {
+        val pulled = try {
+            val config = GeofenceConfig(context)
+            if (!config.alertsEnabled) return
+            config.triggersTriedAtMs = System.currentTimeMillis()
+            request(context, config)
+        } catch (failure: Exception) {
+            Pulled.Failed(CODE_NETWORK, messageOf(failure))
+        }
+        try {
+            GeofenceRegistry.executor.execute { settle(context, pulled, reason) }
+        } catch (_: Exception) {
+            // The next pull tries again.
+        }
+    }
+
+    private fun request(context: Context, config: GeofenceConfig): Pulled {
         val log = LocationConfig(context)
         val base = log.apiUrl
-        if (base.isNullOrBlank()) return failed(context, CODE_NO_URL, "no server URL", reason)
-
+        if (base.isNullOrBlank()) return Pulled.Failed(CODE_NO_URL, "no server URL")
         val reply = get(base.trimEnd('/') + PATH, log.token, config.triggersEtag)
-        val changed = when (reply.code) {
-            HttpURLConnection.HTTP_NOT_MODIFIED -> {
-                config.triggersChecked(System.currentTimeMillis())
-                false
-            }
-            HttpURLConnection.HTTP_OK -> {
-                val set = try {
-                    Triggers.parseEnvelope(reply.body)
-                } catch (failure: TriggerSetException) {
-                    return failed(context, CODE_BAD_BODY, failure.message ?: "bad set", reason)
-                }
+        return when (reply.code) {
+            HttpURLConnection.HTTP_NOT_MODIFIED -> Pulled.Unchanged
+            HttpURLConnection.HTTP_OK -> try {
+                val set = Triggers.parseEnvelope(reply.body)
                 // The inner set is what is stored, so a set read from disk parses alike.
-                val json = JSONObject(reply.body).getJSONObject("data").toString()
-                val adopted = GeofenceRegistry.adoptAndWait(context, json, reply.etag, set, reason)
-                    .get(WAIT_REGISTRY_S, TimeUnit.SECONDS)
-                // The switch went off while the pull ran: nothing was kept.
-                if (!config.alertsEnabled) return Outcome.OFF
-                adopted
+                Pulled.NewSet(JSONObject(reply.body).getJSONObject("data").toString(), reply.etag, set)
+            } catch (failure: TriggerSetException) {
+                Pulled.Failed(CODE_BAD_BODY, failure.message ?: "bad set")
             }
-            else -> return failed(context, reply.code, "HTTP ${reply.code}", reason)
+            else -> Pulled.Failed(reply.code, "HTTP ${reply.code}")
         }
-        val recovered = config.triggersFailing
-        config.triggersFailing = false
-        if (changed || recovered) {
-            GeofenceRegistry.record(
-                context,
-                "triggers_pulled",
-                JSONObject().put("count", config.triggers.size).put("changed", changed).put("reason", reason),
-            )
-        }
-        return if (changed) Outcome.CHANGED else Outcome.UNCHANGED
     }
 
-    /** One row at the first failure after a success, so a day offline writes one, not 24. */
-    private fun failed(context: Context, code: Int, error: String, reason: String): Outcome {
+    /** On the registry's thread. A failure writes one row until a pull works again. */
+    private fun settle(context: Context, pulled: Pulled, reason: String) {
         try {
             val config = GeofenceConfig(context)
-            if (!config.triggersFailing) {
-                config.triggersFailing = true
+            if (!config.alertsEnabled) return
+            val changed = when (pulled) {
+                is Pulled.Failed -> {
+                    if (!config.triggersFailing) {
+                        config.triggersFailing = true
+                        GeofenceRegistry.record(
+                            context,
+                            "triggers_failed",
+                            JSONObject().put("code", pulled.code).put("error", pulled.error.take(200)).put("reason", reason),
+                        )
+                    }
+                    return
+                }
+                is Pulled.Unchanged -> {
+                    config.triggersChecked(System.currentTimeMillis())
+                    false
+                }
+                is Pulled.NewSet -> GeofenceRegistry.adopt(context, pulled.json, pulled.etag, pulled.set)
+            }
+            val recovered = config.triggersFailing
+            config.triggersFailing = false
+            if (changed || recovered) {
                 GeofenceRegistry.record(
                     context,
-                    "triggers_failed",
-                    JSONObject().put("code", code).put("error", error.take(200)).put("reason", reason),
+                    "triggers_pulled",
+                    JSONObject().put("count", config.triggers.size).put("changed", changed).put("reason", reason),
                 )
             }
         } catch (_: Exception) {
             // Nothing is left to tell it to; the process must still live.
         }
-        return Outcome.FAILED
     }
 
     private class Reply(val code: Int, val body: String, val etag: String?)

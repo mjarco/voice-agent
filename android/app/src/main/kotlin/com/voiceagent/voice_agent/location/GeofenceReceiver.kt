@@ -65,8 +65,8 @@ class GeofenceReceiver : BroadcastReceiver() {
             val trigger = triggers[geofence.requestId]
             val detail = JSONObject()
             if (trigger == null) {
-                // A geofence of a set already replaced: only its id is known.
-                detail.put("place", geofence.requestId).put("transition", transition)
+                // A geofence of a set already replaced: only the trigger's id is known.
+                detail.put("trigger", geofence.requestId).put("transition", transition)
             } else {
                 detail.put("place", trigger.place)
                     .put("transition", transition)

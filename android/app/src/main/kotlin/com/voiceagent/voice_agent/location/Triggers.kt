@@ -45,6 +45,12 @@ object Triggers {
     /** The smallest radius Android's geofencing is reliable at (04, section 4). */
     const val MIN_RADIUS_M = 150
 
+    /** Play services refuses a longer request id, and with it the whole batch. */
+    const val MAX_ID_LENGTH = 100
+
+    /** A dwell longer than a day is no arrival; it also keeps `dwell_s * 1000` in an Int. */
+    const val MAX_DWELL_S = 86_400
+
     /** 04, section 5: a visit with no exit ends after 6 hours. */
     const val DEFAULT_MAX_VISIT_S = 21_600
 
@@ -54,6 +60,9 @@ object Triggers {
             JSONObject(body)
         } catch (failure: Exception) {
             throw TriggerSetException("not JSON")
+        } catch (_: StackOverflowError) {
+            // org.json parses recursively; an Error would end the process.
+            throw TriggerSetException("nested too deep")
         }
         val data = envelope.optJSONObject("data") ?: throw TriggerSetException("no data")
         return parse(data)
@@ -93,6 +102,8 @@ object Triggers {
     fun contentOf(json: String): String = try {
         canonical(JSONObject(json).apply { remove("compiled_at") })
     } catch (_: Exception) {
+        json
+    } catch (_: StackOverflowError) {
         json
     }
 
@@ -135,10 +146,11 @@ object Triggers {
     }
 
     private fun read(raw: JSONObject): Read {
-        val id = raw.optString("id", "")
-        val version = raw.optString("version", "")
-        fun reject(why: String) = Read.Rejected(Rejection(id, version, why))
+        val id = string(raw, "id") ?: ""
+        val version = string(raw, "version") ?: ""
+        fun reject(why: String) = Read.Rejected(Rejection(id.take(MAX_ID_LENGTH), version.take(MAX_ID_LENGTH), why))
         if (id.isEmpty()) return reject("missing id")
+        if (id.length > MAX_ID_LENGTH) return reject("id too long")
         if (version.isEmpty()) return reject("missing version")
 
         val condition = raw.optJSONObject("when") ?: return reject("missing when")
@@ -154,23 +166,22 @@ object Triggers {
                 if (names.isNotEmpty()) return reject("guard ${names[0]}")
             }
         }
-        val once = raw.optString("once", "")
-        if (once != "per_visit") return reject("once ${once.ifEmpty { "missing" }}")
+        val once = string(raw, "once") ?: ""
+        if (once != "per_visit") return reject("once ${once.ifEmpty { "missing" }.take(40)}")
 
-        val surfaces = raw.optJSONObject("show")?.optJSONArray("surfaces")
-        if (surfaces != null && (0 until surfaces.length()).none { surfaces.opt(it) == "phone" }) {
-            return reject("no phone surface")
-        }
+        val show = raw.optJSONObject("show") ?: return reject("missing show")
+        val surfaces = show.opt("surfaces") as? JSONArray ?: return reject("missing show.surfaces")
+        if ((0 until surfaces.length()).none { surfaces.opt(it) == "phone" }) return reject("no phone surface")
 
-        val place = enter.optString("place", "").ifEmpty { return reject("missing place") }
+        val place = string(enter, "place") ?: return reject("missing place")
         val lat = number(enter, "lat") ?: return reject("missing lat")
         val lon = number(enter, "lon") ?: return reject("missing lon")
         if (lat !in -90.0..90.0 || lon !in -180.0..180.0) return reject("coordinates out of range")
         val radius = positiveInt(enter, "radius_m") ?: return reject("missing radius_m")
         val dwell = nonNegativeInt(enter, "dwell_s") ?: return reject("missing dwell_s")
-        val title = raw.optJSONObject("show")?.optString("title", "")?.ifEmpty { null }
-            ?: return reject("missing show.title")
-        val expires = raw.optString("expires_at", "").let { text ->
+        if (dwell > MAX_DWELL_S) return reject("dwell_s too long")
+        val title = string(show, "title") ?: return reject("missing show.title")
+        val expires = (string(raw, "expires_at") ?: "").let { text ->
             try {
                 OffsetDateTime.parse(text).toInstant().toEpochMilli()
             } catch (_: Exception) {
@@ -179,6 +190,13 @@ object Triggers {
         }
         return Read.Ok(Trigger(id, version, place, lat, lon, radius, dwell, title, expires))
     }
+
+    /**
+     * A non-empty string, or null. Not `optString`: Android's returns the text
+     * "null" for a JSON null, the JVM's the fallback, so the tests would not
+     * model the phone.
+     */
+    private fun string(o: JSONObject, name: String): String? = (o.opt(name) as? String)?.ifEmpty { null }
 
     private fun number(o: JSONObject, name: String): Double? =
         (o.opt(name) as? Number)?.toDouble()?.takeIf { it.isFinite() }

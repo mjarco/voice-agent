@@ -204,23 +204,19 @@ object GeofenceRegistry {
     }
 
     /**
-     * A pulled set (ADR-NET-007), on the registry's thread so it never races
-     * the switch or a registration. Returns whether the set changed. A switch
-     * turned off while the pull ran keeps nothing.
+     * A pulled set (ADR-NET-007). Must run on [executor], so it never races the
+     * switch or a registration; the caller has checked the switch is on.
+     * Returns whether the set changed.
      */
-    fun adoptAndWait(context: Context, json: String, etag: String?, set: TriggerSet, reason: String): Future<Boolean> =
-        executor.submit(
-            Callable {
-                val config = GeofenceConfig(context)
-                if (!config.alertsEnabled) return@Callable false
-                // compiled_at changes at every compile; the rest is the set (04, section 2).
-                val changed = config.triggerSetJson?.let { Triggers.contentOf(it) } != Triggers.contentOf(json)
-                config.storeTriggers(json, etag, System.currentTimeMillis())
-                reportRejected(context, config, set)
-                if (changed) reconcileNow(context, REASON_TRIGGERS)
-                changed
-            },
-        )
+    fun adopt(context: Context, json: String, etag: String?, set: TriggerSet): Boolean {
+        val config = GeofenceConfig(context)
+        // compiled_at changes at every compile; the rest is the set (04, section 2).
+        val changed = config.triggerSetJson?.let { Triggers.contentOf(it) } != Triggers.contentOf(json)
+        config.storeTriggers(json, etag, System.currentTimeMillis())
+        reportRejected(context, config, set)
+        if (changed) reconcileNow(context, REASON_TRIGGERS)
+        return changed
+    }
 
     /** One `trigger.rejected` per id and version (04, section 4); the rest are forgotten. */
     private fun reportRejected(context: Context, config: GeofenceConfig, set: TriggerSet) {
