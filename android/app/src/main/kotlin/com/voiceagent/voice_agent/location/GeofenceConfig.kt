@@ -85,9 +85,27 @@ class GeofenceConfig(context: Context) {
             prefs.edit().putString("visits", Visits.toJson(value)).commit()
         }
 
+    /**
+     * The `trigger.shown` id of the alert on screen, per trigger id. A tap
+     * counts only for it, once: a repeated or forged intent writes no row.
+     * Pipeline's thread, as [visits].
+     */
+    var lastShown: Map<String, String>
+        get() = prefs.getString("last_shown", null)?.let { text ->
+            try {
+                val o = JSONObject(text)
+                o.keys().asSequence().mapNotNull { k -> (o.opt(k) as? String)?.let { k to it } }.toMap()
+            } catch (_: Exception) {
+                null
+            }
+        } ?: emptyMap()
+        set(value) {
+            prefs.edit().putString("last_shown", JSONObject(value as Map<*, *>).toString()).commit()
+        }
+
     /** The switch went off: the next switch on starts with no visit. Pipeline's thread. */
     fun clearVisits() {
-        prefs.edit().remove("visits").commit()
+        prefs.edit().remove("visits").remove("last_shown").commit()
     }
 
     /** The switch went off: the next switch on pulls afresh. */

@@ -65,7 +65,16 @@ class TriggersTest {
         assertEquals(60, t.dwellS)
         assertEquals("Castorama: 3 rzeczy", t.title)
         assertEquals("przewód 3-żyłowy, peszel 10 m, …", t.body)
+        assertEquals("/shopping?store=diy,garden", t.open)
         assertEquals(OffsetDateTime.parse("2026-11-08T00:00:00+01:00").toInstant().toEpochMilli(), t.expiresAtMs)
+    }
+
+    @Test
+    fun aMissingOrOverlongRouteOpensNothing() {
+        val missing = Triggers.parse(set(trigger { getJSONObject("show").remove("open") }))
+        assertEquals("", missing.triggers.single().open)
+        val long = Triggers.parse(set(trigger { getJSONObject("show").put("open", "/shopping?store=" + "x".repeat(300)) }))
+        assertEquals("", long.triggers.single().open)
     }
 
     @Test

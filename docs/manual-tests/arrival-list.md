@@ -1,11 +1,11 @@
 # Manual test: the arrival list
 
-**Design:** [ADR-PLATFORM-010](../decisions/ADR-PLATFORM-010-geofences-of-places.md), [ADR-NET-007](../decisions/ADR-NET-007-armed-triggers-pulled-in-background.md), [ADR-NOTIF-003](../decisions/ADR-NOTIF-003-arrival-alerts-posted-natively.md), [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); workspace epic `2026-11-places/01-arrival-list` and its trigger contract `compilations/notification-triggers/reviewed/04-trigger-contract.md`; PR #395 (task 3), PR #396 (task 4), PR #397 (task 5).
+**Design:** [ADR-PLATFORM-010](../decisions/ADR-PLATFORM-010-geofences-of-places.md), [ADR-NET-007](../decisions/ADR-NET-007-armed-triggers-pulled-in-background.md), [ADR-NOTIF-003](../decisions/ADR-NOTIF-003-arrival-alerts-posted-natively.md), [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); workspace epic `2026-11-places/01-arrival-list` and its trigger contract `compilations/notification-triggers/reviewed/04-trigger-contract.md`; PR #395 (task 3), PR #396 (task 4), PR #397 (task 5), PR #399 (task 6); [ADR-PLATFORM-008](../decisions/ADR-PLATFORM-008-two-channel-deep-link.md) for the tap.
 **Overall status:** **pending**.
 **Why now:** geofences, the "always" permission, boot, update, force stop and location turned off exist only on a device.
 **When:** once, at the end of the epic, with the cases of tasks 4–6; nothing goes on the Pixel before then (owner's decision of 2026-11-05).
 **Time budget:** ~45 min for task 3's cases (agent, dev flavor over USB adb), then real arrivals (owner, stable on production).
-**What we are testing:** task 3: registration survives everything the location log's subscription survives, and enter, dwell and exit become status rows of the log. Task 4: the phone pulls the armed triggers, each trigger gets a geofence (a store with nothing to buy gets none), and an enter or dwell row says whether the trigger would fire. Task 5: the firing transition posts a notification at most once per visit, and its reports come back as rows (`trigger.fired`, `.shown`, `.ignored`). Task 6 adds its cases below.
+**What we are testing:** task 3: registration survives everything the location log's subscription survives, and enter, dwell and exit become status rows of the log. Task 4: the phone pulls the armed triggers, each trigger gets a geofence (a store with nothing to buy gets none), and an enter or dwell row says whether the trigger would fire. Task 5: the firing transition posts a notification at most once per visit, and its reports come back as rows (`trigger.fired`, `.shown`, `.ignored`). Task 6: a tap opens Shopping with every store type of the place, cold and warm, and writes `trigger.tapped` once.
 
 ## Status legend
 
@@ -39,6 +39,10 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T19 | A swipe writes `trigger.ignored` | pending |
 | T20 | Notifications off: `"shown":false` | pending |
 | T21 | An expired trigger stays silent | pending |
+| T22 | A tap with the app closed opens the place's list | pending |
+| T23 | A tap with the app running, and over a hands-free session | pending |
+| T24 | Recents and a second tap do not count again | pending |
+| T25 | A tap after the switch is off | pending |
 
 ---
 
@@ -307,10 +311,55 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 **Expected:** `place.entered` with `"expired":true`, no `trigger.fired`, no notification.
 **On failure:** `Triggers.expired`; the stored set's `expires_at`.
 
+### T22. A tap with the app closed opens the place's list
+
+**Status:** pending
+**Do:**
+1. Make a visit as T16 at a place with two store types (in the test PA, e.g. `diy` and `garden`, an item under each).
+2. Before the alert comes, `am force-stop` the app and confirm no pid.
+3. Tap the alert; read the screen and the queue.
+4. A new visit; this time leave the app in Recents and kill only its process (`adb shell am kill <package>`, confirm no pid), then tap the alert. Android recreates the activity and delivers the tap through `onNewIntent`.
+
+**Why:** 04, section 6 (the route), amended so that `open` names every store type of the place; ADR-PLATFORM-008's cold path; `trigger.tapped` of 04, section 7.
+**Expected:** the app starts on Shopping, To buy, with both type chips selected and "All" not; both items show, nothing under other types. The queue: `trigger.tapped` `{"trigger":…,"v":…,"caused_by":[<the trigger.shown id>]}`. The alert is gone from the shade. Step 4 gives the same, with one `trigger.tapped`.
+**On failure:** `ArrivalTapBridge.accept` (the intent's action and extras); `ArrivalTapChannel.takeInitialRoute` and `arrivalRoute`; `last_shown` in `geofences.xml`.
+
+### T23. A tap with the app running, and over a hands-free session
+
+**Status:** pending
+**Do:**
+1. A new visit, the app open on Record. Tap the alert.
+2. A new visit with a hands-free session listening. Tap the alert, then return to Record.
+3. On a later visit, after changing the chips by hand (e.g. "All"), tap the alert again.
+
+**Why:** ADR-PLATFORM-008's warm path: `onNewIntent` reaches the running app (singleTask), and `go` keeps the shell.
+**Expected:** 1: Shopping opens with the place's chips; `trigger.tapped` once. 2: the same, and the session is still listening when you return to Record. 3: the place's chips are selected again (each tap is a new navigation, `DeepLinkTap`).
+**On failure:** `MainActivity.onNewIntent`; `App`'s listener on `notificationTapStreamProvider`; `ShoppingScreen.didUpdateWidget` when Shopping was already open.
+
+### T24. Recents and a second tap do not count again
+
+**Status:** pending
+**Do:** after T22, leave the app with Back, open it again from Recents; then fire `adb shell am start -n <package>/.MainActivity -a com.voiceagent.voice_agent.ARRIVAL_TAPPED --es trigger <id> --es v <v> --es shown <the same shown id> --es open /settings`.
+
+**Why:** one tap counts once: a redelivered or repeated intent writes no row, and a route a trigger may not open opens the start screen (04, section 6).
+**Expected:** Recents opens the app as it was, with no new `trigger.tapped`. The `am start` writes no row and opens the start screen (Record), not `/settings` (04, section 6: anything else opens the start screen).
+**On failure:** `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY` in `ArrivalTapBridge.accept`; `Visits.takeShown`; `arrivalRoute`.
+
+### T25. A tap after the switch is off
+
+**Status:** pending
+**Do:** with an alert in the shade, turn "Alerty w sklepach" off; tap the alert.
+
+**Why:** owner's decision with Gate 2 of task 6 (point 4): the list still opens; with the switch off nothing is written.
+**Expected:** Shopping opens with the place's chips; no `trigger.tapped` row.
+**On failure:** `ArrivalNotifier.tapped` (its switch check).
+
 A rejected trigger (`trigger.rejected`) cannot be made by personal-agent today, which compiles only what goal 2 builds; the JVM tests in `android/app/src/test/` cover it.
 
 ---
 
 ## When this plan is done
 
-Task 3: T1–T8 and T10 are must-pass. T9 is conditional on Play services taking a test provider; if it does not, T11 alone proves the rows. T11 is read with the epic's ten visits. The plan runs at the epic's end, so it is not a gate of task 3's merge. Task 4: T12, T14 and T15 are must-pass, with T2, T5 and T9 as they read since task 4; T13 is must-pass with its delay noted, since Doze may hold the job. Task 5: T16, T17, T19, T20 and T21 are must-pass, conditional on the mock location as T9 is (T11's real visits then prove T16 and T19); T18 is must-pass. Task 6 adds its cases and its own must-pass list.
+Task 3: T1–T8 and T10 are must-pass. T9 is conditional on Play services taking a test provider; if it does not, T11 alone proves the rows. T11 is read with the epic's ten visits. The plan runs at the epic's end, so it is not a gate of task 3's merge. Task 4: T12, T14 and T15 are must-pass, with T2, T5 and T9 as they read since task 4; T13 is must-pass with its delay noted, since Doze may hold the job. Task 5: T16, T17, T19, T20 and T21 are must-pass, conditional on the mock location as T9 is (T11's real visits then prove T16 and T19); T18 is must-pass. Task 6: T22–T25 are must-pass, T22 and T23 with T16's visit (or a real one, T11).
+
+For the whole epic: the plan is done when every must-pass case above is `passed`, run once on the Pixel with the one stable build of the epic's end (agent: dev flavor on a test PA for what it can, `ws-device-check`; owner: real arrivals, T11). Until then the epic's work is "device verification pending".

@@ -93,7 +93,7 @@ and focused on a single decision. See any existing ADR for reference.
 | --- | ----- | ------ |
 | [ADR-NOTIF-001](ADR-NOTIF-001-diff-based-reconciliation-with-id-partitioning.md) | Local notifications via diff-based reconciliation with reserved ID partitioning | Proposed; id formula superseded by NOTIF-002; rules 2 and 5 amended by NOTIF-003 |
 | [ADR-NOTIF-002](ADR-NOTIF-002-routine-reminder-key.md) | Routine reminders keyed by routine and day, within the 32-bit id range | Accepted |
-| [ADR-NOTIF-003](ADR-NOTIF-003-arrival-alerts-posted-natively.md) | Arrival alerts are posted natively, a second writer of notifications | Accepted |
+| [ADR-NOTIF-003](ADR-NOTIF-003-arrival-alerts-posted-natively.md) | Arrival alerts are posted natively, a second writer of notifications | Accepted; item 6 fulfilled by PR #399 |
 
 ### PLATFORM — Mobile Platform & UX
 

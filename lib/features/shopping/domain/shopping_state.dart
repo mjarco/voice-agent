@@ -19,6 +19,7 @@ class ShoppingLoaded extends ShoppingState {
     required this.proposals,
     required this.view,
     this.filter,
+    this.placeTypes = const [],
     this.reading = false,
     this.readError,
   });
@@ -32,6 +33,11 @@ class ShoppingLoaded extends ShoppingState {
 
   /// A store type id; null for all.
   final String? filter;
+
+  /// The store types of a place, from an arrival alert's tap (ADR-NOTIF-003):
+  /// items under any of them, as the alert counted. Empty unless set, and then
+  /// [filter] is null.
+  final List<String> placeTypes;
 
   /// [items] belong to the previous selection and its list is being read, so
   /// they are not shown.
