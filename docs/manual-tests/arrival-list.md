@@ -1,7 +1,7 @@
 # Manual test: the arrival list
 
 **Design:** [ADR-PLATFORM-010](../decisions/ADR-PLATFORM-010-geofences-of-places.md), [ADR-NET-007](../decisions/ADR-NET-007-armed-triggers-pulled-in-background.md), [ADR-NOTIF-003](../decisions/ADR-NOTIF-003-arrival-alerts-posted-natively.md), [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); workspace epic `2026-11-places/01-arrival-list` and its trigger contract `compilations/notification-triggers/reviewed/04-trigger-contract.md`; PR #395 (task 3), PR #396 (task 4), PR #397 (task 5), PR #399 (task 6); [ADR-PLATFORM-008](../decisions/ADR-PLATFORM-008-two-channel-deep-link.md) for the tap.
-**Overall status:** **in-progress**: run by the agent on 2026-11-06 (the run's report, workspace docs `requirements/roadmaps/2026-11-places/epics/01-arrival-list/drafts/06-device-run-report.md`); T4, T6 and T17 failed (defects D1–D3, to be fixed after stable 1.19.0 by the owner's decision); T10, T11 and T23 step 2 wait for the owner on stable; T13 skipped.
+**Overall status:** **in-progress**: run by the agent on 2026-11-06 (the run's report, workspace docs `requirements/roadmaps/2026-11-places/epics/01-arrival-list/drafts/06-device-run-report.md`); T4, T6 and T17 failed (defects D1–D3), then passed on 1.19.2+36 on 2026-11-07 after the fix (ADR-PLATFORM-011; T17's reboot part not run); T10, T11 and T23 step 2 wait for the owner on stable; T13 skipped.
 **Why now:** geofences, the "always" permission, boot, update, force stop and location turned off exist only on a device.
 **When:** once, at the end of the epic, with the cases of tasks 4–6; nothing goes on the Pixel before then (owner's decision of 2026-11-05).
 **Time budget:** ~45 min for task 3's cases (agent, dev flavor over USB adb), then real arrivals (owner, stable on production).
@@ -21,9 +21,9 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T1 | After install the switch is off and nothing is written | passed |
 | T2 | Turning it on asks for permissions and registers every place | passed |
 | T3 | Rows follow "Alerty w sklepach" alone, with the log paused | passed |
-| T4 | Without "always": `geofences_failed`, then registered once granted | failed |
+| T4 | Without "always": `geofences_failed`, then registered once granted | passed |
 | T5 | Adding, deleting and renaming a place | passed |
-| T6 | Reboot, update and force stop each register again | failed |
+| T6 | Reboot, update and force stop each register again | passed |
 | T7 | Location off, then on: degraded, then the retry job registers | passed with a deviation |
 | T8 | Turning it off removes the geofences, and then nothing is written | passed |
 | T9 | Mock transitions: enter, dwell and exit rows | passed |
@@ -34,7 +34,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T14 | Turning it off clears the set and stops the hourly pull | passed |
 | T15 | Offline: one `triggers_failed`, the set stands | passed |
 | T16 | One notification per visit, with its reports | passed |
-| T17 | No second one after a restart mid-visit | failed |
+| T17 | No second one after a restart mid-visit | passed |
 | T18 | A new list mid-visit gives none | passed |
 | T19 | A swipe writes `trigger.ignored` | passed |
 | T20 | Notifications off: `"shown":false` | passed |
@@ -121,15 +121,15 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T4. Without "always": `geofences_failed`, then registered once granted
 
-**Status:** failed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA): step 2 wrote no `geofences_failed` and kept "obszary: 2" (D3 in the run's report, workspace docs `requirements/roadmaps/2026-11-places/epics/01-arrival-list/drafts/06-device-run-report.md`); step 4 passed
+**Status:** passed (2026-11-07, Pixel 11 Pro, Android 17, dev 1.19.2+36, test PA, adb over Wi-Fi): step 2 `geofences_failed` `{"code":1004,"reason":"app_start","error":"no background location"}`, "obszary: 0", "Nadaj"; step 3 no row in 3 minutes; step 4 `permission_changed`, `added` 2, a second after the return. Also with precise location revoked and "all the time" kept: `"error":"no fine location"`, then `permission_changed` once granted. Before the fix: failed (2026-11-06, dev 1.19.0+34): step 2 wrote no `geofences_failed` and kept "obszary: 2" (D3 in the run's report, workspace docs `requirements/roadmaps/2026-11-places/epics/01-arrival-list/drafts/06-device-run-report.md`)
 **Do:**
 1. `adb shell pm revoke com.voiceagent.voice_agent.dev android.permission.ACCESS_BACKGROUND_LOCATION` (it kills the process).
 2. Open the app, read the screen and the queue.
 3. Wait 3 minutes and read the queue again.
 4. Tap "Nadaj", grant "all the time", come back to the app; read the screen and the queue.
 
-**Why:** ADR-PLATFORM-010 item 4: a missing permission is not retried; a return to the app with the permission changed registers.
-**Expected:** after 2: `geofences_failed` `{"code":1004,"reason":"app_start",…}`, "obszary: 0", "Nadaj" shown. After 3: no new row (no retry job for 1004). After 4: `geofences_registered` with `"reason":"permission_changed"` within seconds, and "obszary" back to the number of triggers. "Nadaj" opens App info in system settings; a driver that does not tap there grants with `pm grant`, which takes the same return path.
+**Why:** ADR-PLATFORM-010 item 4: a missing permission is not retried; a return to the app with the permission changed registers. ADR-PLATFORM-011 item 3: without "all the time" a registration does not stand, so the app start reports it.
+**Expected:** after 2: `geofences_failed` `{"code":1004,…}` with `"reason"` `restart_after_stop` (Android 17 sends the boot broadcast after the revoke's kill) or `app_start`, possibly one of each; "obszary: 0", "Nadaj" shown. After 3: no new row (no retry job for 1004). After 4: `geofences_registered` with `"reason":"permission_changed"` within seconds, and "obszary" back to the number of triggers. "Nadaj" opens App info in system settings; a driver that does not tap there grants with `pm grant`, which takes the same return path.
 **On failure:** the code in the row; `locationLogResumeProvider` (did Dart call `appResumed`?) and `GeofenceRegistry.permissionMayHaveChanged` (`last_permission` in `geofences.xml`).
 
 ### T5. Adding, deleting and renaming a place
@@ -146,7 +146,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T6. Reboot, update and force stop each register again
 
-**Status:** failed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA): steps 1–3 passed; step 4 re-registered everything, `restart_after_stop` after a plain kill (D2)
+**Status:** passed: steps 1–3 (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA); step 4 (2026-11-07, Pixel 11 Pro, Android 17, dev 1.19.2+36, test PA, adb over Wi-Fi): three plain kills (`am kill`, no pid, `stopped=false`), no new row and `registered_at` unchanged; on the third, mid-visit, the boot broadcast came (in `dumpsys activity broadcasts history`), so it was `restart_after_stop`. Before the fix step 4 failed (D2)
 **Do:**
 1. `adb reboot`; unlock; wait 2 minutes without opening the app; read the queue.
 2. `adb install -r` the same APK; read the queue.
@@ -154,7 +154,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 4. Close the app from recents (no force stop), open it again; read the queue.
 
 **Why:** ADR-PLATFORM-010 item 4: geofences are lost at each of these. Step 4 is item 3: an app start that finds the registration standing adds nothing, so a visit in progress keeps its state.
-**Expected:** a `geofences_registered` row for each, with `"reason"` `reboot`, `app_updated`, and `app_start` (and `restart_after_stop` if the system sends the boot broadcast after the stop); "obszary" equal to the number of triggers and the time moves each time. After step 4 no new row, and the time stays.
+**Expected:** a `geofences_registered` row for each, with `"reason"` `reboot`, `app_updated`, and `app_start` or `restart_after_stop` (Android 17 sends the boot broadcast at the next start after a stop); "obszary" equal to the number of triggers and the time moves each time. After step 4 no new row, and the time stays: on Android 17 the plain kill brings `restart_after_stop` too, which keeps a standing registration (ADR-PLATFORM-011, item 2).
 **On failure:** `LocationBootReceiver` (one receiver for both pipelines).
 
 ### T7. Location off, then on: degraded, then the retry job registers
@@ -265,12 +265,12 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T17. No second one after a restart mid-visit
 
-**Status:** failed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA): after a force stop mid-visit a second alert ~65 s later, twice (D1); the reboot part is inconclusive, since a reboot drops the test provider
+**Status:** passed (2026-11-07, Pixel 11 Pro, Android 17, dev 1.19.2+36, test PA, adb over Wi-Fi), the reboot part not run (it drops adb over Wi-Fi and the test provider): after a force stop mid-visit both geofences were added again and the visit kept `"fired":true`; Play services reported a dwell 66 s later, which fired nothing; a plain kill mid-visit later added nothing; the exit wrote `place.left` and emptied `visits`; one `trigger.fired` in the whole run. Before the fix: failed (2026-11-06, dev 1.19.0+34): a second alert ~65 s after a force stop, twice (D1)
 **Do:** in T16's visit, after the notification: `am force-stop`, confirm no pid, open the app; then reboot the phone; keep the mock location 3 more minutes each time.
 
 **Why:** the visit state is on disk, so a restart of the app or the phone does not fire twice (04, section 5).
-**Expected:** no new notification and no `trigger.fired`. After the force stop and after the reboot the geofence is added afresh, so its visit leaves `visits` in `geofences.xml`, and no `place.entered` follows while you stay (initial trigger 0); the exit still writes `place.left`. This case is what makes forgetting a re-added geofence's visit safe (ADR-NOTIF-003, item 4).
-**On failure:** a `place.entered` right after the registration means Play services reported a geofence added while inside: forgetting the visit at `GeofenceRegistry.forgetVisits` then fires twice.
+**Expected:** no new notification and no `trigger.fired`. After the force stop and after the reboot the geofence is added afresh, and its visit stays in `visits` in `geofences.xml` (ADR-PLATFORM-011, item 1). Play services may report a `place.entered` dwell about a minute later while you stay (seen on Android 17); it fires nothing. The exit still writes `place.left` and ends the visit.
+**On failure:** a `trigger.fired` after the registration: the visit was forgotten (`RegistrationPlan.of`, `forget`) or `visits` was unreadable.
 
 ### T18. A new list mid-visit gives none
 
@@ -281,7 +281,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 **Expected:** `triggers_pulled` `{"changed":true}`, no `geofences_registered` with `"added"` > 0 for that trigger (its key is unchanged), no new `trigger.fired`.
 **On failure:** `Triggers.geofenceKey` (an added geofence resets its enter); `Visits.step`.
 
-A withdrawn trigger's visit is forgotten with its geofence: tick off the last item while inside, leave, add an item, come back within 6 h, and the dwell fires (`GeofenceRegistry.forgetVisits`). Run it with T18 when time allows.
+A withdrawn trigger's visit is forgotten with its geofence: tick off the last item while inside, leave, add an item, come back within 6 h, and the dwell fires (`RegistrationPlan.of`, `forget`). Run it with T18 when time allows.
 
 ### T19. A swipe writes `trigger.ignored`
 

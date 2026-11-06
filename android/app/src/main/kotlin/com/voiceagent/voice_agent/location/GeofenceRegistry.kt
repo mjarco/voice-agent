@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.work.BackoffPolicy
 import androidx.work.ExistingWorkPolicy
@@ -44,18 +45,7 @@ object GeofenceRegistry {
 
     const val REASON_RETRY = "retry"
     const val REASON_SWITCH = "switch"
-    const val REASON_TRIGGERS = "triggers_changed"
-
-    /**
-     * Reasons after which Play services still holds what was registered, as
-     * long as the intent survived (a force stop cancels it): the app start and
-     * a new trigger set. For these only new
-     * or changed geofences are added: adding one again replaces it and resets
-     * its state, so with initial trigger 0 a visit in progress would lose its
-     * enter and dwell. Every other reason (boot, update, retry, the switch, a
-     * permission change) adds them all.
-     */
-    private val KEEPING_REASONS = setOf("app_start", REASON_TRIGGERS)
+    const val REASON_TRIGGERS = RegistrationPlan.REASON_TRIGGERS
 
     /** Registrations run here, one at a time. */
     val executor = Executors.newSingleThreadExecutor()
@@ -140,18 +130,28 @@ object GeofenceRegistry {
             removeAll(context, config, reason)
             return Outcome.OFF
         }
-        config.lastPermission = LocationPipeline.permission(context)
+        val previousPermission = config.lastPermission
+        val permission = LocationPipeline.permission(context)
+        config.lastPermission = permission
+        val fine = fineGranted(context)
+        val background = backgroundGranted(context)
         val all = config.triggers
         val chosen = all.take(MAX_GEOFENCES)
         val ids = chosen.map { it.id }.toSet()
         val held = config.registeredIds
-        val heldKeys = config.registeredKeys
-        val intact = reason in KEEPING_REASONS && config.registeredHash != null && !config.degraded &&
-            pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE) != null
-        val toAdd = if (intact) chosen.filter { keyOf(it) !in heldKeys } else chosen
-        val gone = held - ids
+        val standing = RegistrationPlan.standing(
+            hashKnown = config.registeredHash != null,
+            degraded = config.degraded,
+            intentAlive = pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE) != null,
+            allowed = fine && background,
+            previousPermission = previousPermission,
+            permission = permission,
+        )
+        val plan = RegistrationPlan.of(reason, standing, chosen, held, config.registeredKeys)
+        val toAdd = plan.toAdd
+        val gone = plan.gone
         // Nothing to do leaves a visit in progress alone, and writes no row.
-        if (intact && toAdd.isEmpty() && gone.isEmpty()) return Outcome.UNCHANGED
+        if (plan.intact && toAdd.isEmpty() && gone.isEmpty()) return Outcome.UNCHANGED
         if (all.size > chosen.size) {
             record(
                 context,
@@ -161,6 +161,18 @@ object GeofenceRegistry {
         }
         val client = LocationServices.getGeofencingClient(context)
         try {
+            if (toAdd.isNotEmpty() && !(fine && background)) {
+                // Held geofences would never report: take them all out, then say
+                // why. Without "all the time" Play services may accept geofences
+                // and stay silent, so the missing permission is said here.
+                try {
+                    pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE)
+                        ?.let { await(client.removeGeofences(it)) }
+                } catch (_: Exception) {
+                    // Kept as uncertain below: the next registration removes them first.
+                }
+                throw SecurityException(if (!fine) "no fine location" else "no background location")
+            }
             if (config.registeredHash == null && held.isNotEmpty()) {
                 // The last attempt failed half-way: what Play services holds is
                 // unknown, so start from nothing rather than leave a stale one.
@@ -169,10 +181,7 @@ object GeofenceRegistry {
             } else if (gone.isNotEmpty()) {
                 await(client.removeGeofences(gone.toList()))
             }
-            if (toAdd.isNotEmpty()) {
-                if (!fineGranted(context)) throw SecurityException("no fine location")
-                await(add(context, toAdd))
-            }
+            if (toAdd.isNotEmpty()) await(add(context, toAdd))
         } catch (failure: Exception) {
             val code = codeOf(failure)
             // Every id that may still be held is kept, so the next try removes it.
@@ -189,7 +198,7 @@ object GeofenceRegistry {
             return Outcome.FAILED
         }
         config.registered(ids, chosen.map { keyOf(it) }.toSet(), hashOf(chosen), System.currentTimeMillis())
-        forgetVisits(context, toAdd.map { it.id }.toSet() + gone)
+        forgetVisits(context, plan.forget)
         record(
             context,
             "geofences_registered",
@@ -205,11 +214,11 @@ object GeofenceRegistry {
     }
 
     /**
-     * A geofence removed, or added afresh, will never report the exit of a
-     * visit in progress, so that visit is forgotten (ADR-NOTIF-003, item 4).
-     * Added again with initial trigger 0 while you stand inside, it reports no
-     * enter or dwell either, so this cannot fire twice. Visits live on the
-     * pipeline's thread, so the change is queued there.
+     * A geofence removed with its trigger will never report the exit of a visit
+     * in progress, so that visit is forgotten (ADR-PLATFORM-011). One added
+     * again keeps its visit: Play services may report a dwell while you stand
+     * inside, and the visit's once holds it. Visits live on the pipeline's
+     * thread, so the change is queued there.
      */
     private fun forgetVisits(context: Context, ids: Set<String>) {
         if (ids.isEmpty()) return
@@ -333,6 +342,12 @@ object GeofenceRegistry {
         val intent = pendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)!!
         return LocationServices.getGeofencingClient(context).addGeofences(request, intent)
     }
+
+    /** "All the time"; before Android 10 it came with the fine permission. */
+    private fun backgroundGranted(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun fineGranted(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==

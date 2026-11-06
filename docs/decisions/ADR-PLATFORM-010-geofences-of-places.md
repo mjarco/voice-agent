@@ -1,6 +1,6 @@
 # ADR-PLATFORM-010: Geofences of places run natively beside the location log
 
-Status: Accepted; items 1 and 2 (places handed over by Dart, one geofence per place) superseded by [ADR-NET-007](ADR-NET-007-armed-triggers-pulled-in-background.md)
+Status: Accepted; items 1 and 2 (places handed over by Dart, one geofence per place) superseded by [ADR-NET-007](ADR-NET-007-armed-triggers-pulled-in-background.md); in items 3 and 4, the reasons that add only what changed are superseded by [ADR-PLATFORM-011](ADR-PLATFORM-011-registration-keeps-visits.md) (also `restart_after_stop`, and only with "all the time")
 
 ## Context
 

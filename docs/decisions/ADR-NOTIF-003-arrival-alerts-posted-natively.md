@@ -1,6 +1,6 @@
 # ADR-NOTIF-003: Arrival alerts are posted natively, a second writer of notifications
 
-Status: Accepted. Item 6 fulfilled by task 6 (PR #399): the tap opens the trigger's route, of which only `/shopping` with `store=` type ids may be opened, through ADR-PLATFORM-008's two channels, and Kotlin writes `trigger.tapped` once, for the alert last shown.
+Status: Accepted. Item 6 fulfilled by task 6 (PR #399): the tap opens the trigger's route, of which only `/shopping` with `store=` type ids may be opened, through ADR-PLATFORM-008's two channels, and Kotlin writes `trigger.tapped` once, for the alert last shown. In item 4, forgetting the visit of a geofence added afresh is superseded by [ADR-PLATFORM-011](./ADR-PLATFORM-011-registration-keeps-visits.md): only a withdrawn trigger's visit is forgotten.
 Decided in: workspace epic `2026-11-places/01-arrival-list`, task 5, PR #397
 Amends: rules 2 and 5 of [ADR-NOTIF-001](./ADR-NOTIF-001-diff-based-reconciliation-with-id-partitioning.md)
 Supersedes: item 6 of [ADR-NET-007](./ADR-NET-007-armed-triggers-pulled-in-background.md) (`would_fire` on `place.entered` rows)

@@ -38,6 +38,6 @@ class LocationBootReceiver : BroadcastReceiver() {
         val boots = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1)
         val rebooted = boots != config.lastBootCount
         config.lastBootCount = boots
-        return if (rebooted) "reboot" else "restart_after_stop"
+        return if (rebooted) "reboot" else RegistrationPlan.REASON_RESTART_AFTER_STOP
     }
 }
