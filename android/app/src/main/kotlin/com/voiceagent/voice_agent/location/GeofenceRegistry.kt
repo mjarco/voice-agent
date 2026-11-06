@@ -44,18 +44,7 @@ object GeofenceRegistry {
 
     const val REASON_RETRY = "retry"
     const val REASON_SWITCH = "switch"
-    const val REASON_TRIGGERS = "triggers_changed"
-
-    /**
-     * Reasons after which Play services still holds what was registered, as
-     * long as the intent survived (a force stop cancels it): the app start and
-     * a new trigger set. For these only new
-     * or changed geofences are added: adding one again replaces it and resets
-     * its state, so with initial trigger 0 a visit in progress would lose its
-     * enter and dwell. Every other reason (boot, update, retry, the switch, a
-     * permission change) adds them all.
-     */
-    private val KEEPING_REASONS = setOf("app_start", REASON_TRIGGERS)
+    const val REASON_TRIGGERS = RegistrationPlan.REASON_TRIGGERS
 
     /** Registrations run here, one at a time. */
     val executor = Executors.newSingleThreadExecutor()
@@ -145,13 +134,13 @@ object GeofenceRegistry {
         val chosen = all.take(MAX_GEOFENCES)
         val ids = chosen.map { it.id }.toSet()
         val held = config.registeredIds
-        val heldKeys = config.registeredKeys
-        val intact = reason in KEEPING_REASONS && config.registeredHash != null && !config.degraded &&
+        val standing = config.registeredHash != null && !config.degraded &&
             pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE) != null
-        val toAdd = if (intact) chosen.filter { keyOf(it) !in heldKeys } else chosen
-        val gone = held - ids
+        val plan = RegistrationPlan.of(reason, standing, chosen, held, config.registeredKeys)
+        val toAdd = plan.toAdd
+        val gone = plan.gone
         // Nothing to do leaves a visit in progress alone, and writes no row.
-        if (intact && toAdd.isEmpty() && gone.isEmpty()) return Outcome.UNCHANGED
+        if (plan.intact && toAdd.isEmpty() && gone.isEmpty()) return Outcome.UNCHANGED
         if (all.size > chosen.size) {
             record(
                 context,
@@ -189,7 +178,7 @@ object GeofenceRegistry {
             return Outcome.FAILED
         }
         config.registered(ids, chosen.map { keyOf(it) }.toSet(), hashOf(chosen), System.currentTimeMillis())
-        forgetVisits(context, toAdd.map { it.id }.toSet() + gone)
+        forgetVisits(context, plan.forget)
         record(
             context,
             "geofences_registered",
@@ -205,11 +194,11 @@ object GeofenceRegistry {
     }
 
     /**
-     * A geofence removed, or added afresh, will never report the exit of a
-     * visit in progress, so that visit is forgotten (ADR-NOTIF-003, item 4).
-     * Added again with initial trigger 0 while you stand inside, it reports no
-     * enter or dwell either, so this cannot fire twice. Visits live on the
-     * pipeline's thread, so the change is queued there.
+     * A geofence removed with its trigger will never report the exit of a visit
+     * in progress, so that visit is forgotten (ADR-PLATFORM-011). One added
+     * again keeps its visit: Play services may report a dwell while you stand
+     * inside, and the visit's once holds it. Visits live on the pipeline's
+     * thread, so the change is queued there.
      */
     private fun forgetVisits(context: Context, ids: Set<String>) {
         if (ids.isEmpty()) return
