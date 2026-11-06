@@ -155,6 +155,15 @@ class TriggersTest {
     }
 
     @Test
+    fun aVersionOrPlaceTooLongForAReportIsRejected() {
+        assertEquals("version too long", rejectedWhy(trigger(version = "v".repeat(101))))
+        assertEquals(
+            "place too long",
+            rejectedWhy(trigger { getJSONObject("when").getJSONObject("enter").put("place", "p".repeat(101)) }),
+        )
+    }
+
+    @Test
     fun aBodyNestedTooDeepIsRefusedNotFatal() {
         val deep = "[".repeat(200_000) + "]".repeat(200_000)
         try {

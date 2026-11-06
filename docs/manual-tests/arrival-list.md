@@ -263,8 +263,8 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 **Do:** in T16's visit, after the notification: `am force-stop`, confirm no pid, open the app; then reboot the phone; keep the mock location 3 more minutes each time.
 
 **Why:** the visit state is on disk, so a restart of the app or the phone does not fire twice (04, section 5).
-**Expected:** no new notification and no `trigger.fired`; after the reboot no `place.entered` either (initial trigger 0), and the exit still writes `place.left`.
-**On failure:** `visits` in `geofences.xml` before and after; `GeofenceConfig.visits` is saved with `commit`.
+**Expected:** no new notification and no `trigger.fired`. After the force stop and after the reboot the geofence is added afresh, so its visit leaves `visits` in `geofences.xml`, and no `place.entered` follows while you stay (initial trigger 0); the exit still writes `place.left`. This case is what makes forgetting a re-added geofence's visit safe (ADR-NOTIF-003, item 4).
+**On failure:** a `place.entered` right after the registration means Play services reported a geofence added while inside: forgetting the visit at `GeofenceRegistry.forgetVisits` then fires twice.
 
 ### T18. A new list mid-visit gives none
 
@@ -274,6 +274,8 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 **Why:** once per visit is keyed by the trigger's id, not its version (04, section 5).
 **Expected:** `triggers_pulled` `{"changed":true}`, no `geofences_registered` with `"added"` > 0 for that trigger (its key is unchanged), no new `trigger.fired`.
 **On failure:** `Triggers.geofenceKey` (an added geofence resets its enter); `Visits.step`.
+
+A withdrawn trigger's visit is forgotten with its geofence: tick off the last item while inside, leave, add an item, come back within 6 h, and the dwell fires (`GeofenceRegistry.forgetVisits`). Run it with T18 when time allows.
 
 ### T19. A swipe writes `trigger.ignored`
 
@@ -288,7 +290,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 **Status:** pending
 **Do:**
-1. Turn off the channel "Alerty w sklepach" in system settings; make a new visit.
+1. Turn off the channel "Alerty w sklepach" in system settings (it exists once the switch is on); make a new visit.
 2. Turn the channel on; `adb shell pm revoke <package> android.permission.POST_NOTIFICATIONS`; make a new visit.
 3. Grant it again.
 

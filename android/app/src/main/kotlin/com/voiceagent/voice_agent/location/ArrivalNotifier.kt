@@ -42,14 +42,14 @@ object ArrivalNotifier {
         // Made ahead, in order: the swipe's intent must name the shown row.
         val firedId = Uuid7.next()
         val shownId = Uuid7.next()
-        var why = blocked(context)
-        if (why == null) {
-            why = try {
+        // The visit's once is already spent, so a failure here still writes its row.
+        val why = try {
+            blocked(context) ?: run {
                 post(context, trigger, shownId, at)
                 null
-            } catch (failure: Exception) {
-                "post_failed: ${failure.javaClass.simpleName}"
             }
+        } catch (failure: Exception) {
+            "post_failed: ${failure.javaClass.simpleName}"
         }
         val fired = JSONObject()
             .put("trigger", trigger.id)
@@ -83,7 +83,15 @@ object ArrivalNotifier {
         return null
     }
 
-    /** Heads-up with sound; once made, only you change it, in the system's settings. */
+    /**
+     * Made when the switch goes on, so the channel is in the system's settings
+     * before the first alert. Heads-up with sound; once made, only you change it.
+     */
+    fun ensureChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        ensureChannel(context.getSystemService(NotificationManager::class.java))
+    }
+
     private fun ensureChannel(manager: NotificationManager) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return

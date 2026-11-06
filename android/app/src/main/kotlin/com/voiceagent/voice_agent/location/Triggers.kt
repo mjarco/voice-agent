@@ -154,6 +154,8 @@ object Triggers {
         if (id.isEmpty()) return reject("missing id")
         if (id.length > MAX_ID_LENGTH) return reject("id too long")
         if (version.isEmpty()) return reject("missing version")
+        // Every report carries it; a long one would push caused_by out of the row's 500 characters.
+        if (version.length > MAX_ID_LENGTH) return reject("version too long")
 
         val condition = raw.optJSONObject("when") ?: return reject("missing when")
         val kinds = condition.keys().asSequence().toList().sorted()
@@ -176,6 +178,7 @@ object Triggers {
         if ((0 until surfaces.length()).none { surfaces.opt(it) == "phone" }) return reject("no phone surface")
 
         val place = string(enter, "place") ?: return reject("missing place")
+        if (place.length > MAX_ID_LENGTH) return reject("place too long")
         val lat = number(enter, "lat") ?: return reject("missing lat")
         val lon = number(enter, "lon") ?: return reject("missing lon")
         if (lat !in -90.0..90.0 || lon !in -180.0..180.0) return reject("coordinates out of range")

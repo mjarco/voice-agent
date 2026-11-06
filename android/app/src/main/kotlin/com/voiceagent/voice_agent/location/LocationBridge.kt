@@ -74,6 +74,7 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                     // On the registry's thread (see above), so the reply comes once registered.
                     GeofenceRegistry.reconcileNow(context, GeofenceRegistry.REASON_SWITCH)
                     if (enabled) {
+                        ArrivalNotifier.ensureChannel(context)
                         TriggerPuller.schedule(context)
                         TriggerPuller.pullLater(context, TriggerPuller.REASON_SWITCH)
                     }

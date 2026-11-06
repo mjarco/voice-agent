@@ -26,7 +26,9 @@ each kind its own id range. A native writer breaks rule 2 as written, so it need
 2. **Its id range is `1_000_000–1_999_999`**: `1_000_000 + crc32(trigger id) % 1_000_000`, one id
    per trigger, so a second visit replaces the first if it is still on screen. The range lies
    between the daily summaries (`1000–1003`) and the reserved action-item range (`2_000_000+`), and
-   clear of the services' ids (`1`, `4102`). This amends rule 5 of ADR-NOTIF-001.
+   clear of the services' ids (`1`, `4102`). This amends rule 5 of ADR-NOTIF-001. Two triggers may share
+   an id (about n²/2 000 000 for n triggers); the later alert then replaces the earlier, whose swipe
+   is lost. Accepted at up to 90 triggers.
 3. **The channel is heads-up with sound** (`IMPORTANCE_HIGH`): you are walking in and glance once,
    and an alert is rare. Once the channel exists only you change it, in the system's settings.
 4. **Once per visit is kept on disk** (`Visits`, in `geofences.xml`), keyed by the trigger's id,
@@ -34,10 +36,14 @@ each kind its own id range. A native writer breaks rule 2 as written, so it need
    transition is the dwell when `dwell_s` > 0 and the enter when it is 0; an expired trigger never
    fires. A visit with no exit is ended lazily, at the next transition of that trigger after
    `max_visit_s`, with a `place.left` row of `"transition":"max_visit"` dated at the visit's end.
-   Visit state is read and written only on the location pipeline's thread, and saved with
-   `commit` before the notification is posted.
+   A geofence removed (its trigger withdrawn) or added afresh (boot, update, retry, a changed key)
+   will never report the exit of a visit in progress, so that visit is forgotten at once; added
+   with initial trigger 0 while you stand inside, it reports no enter or dwell either, so this
+   cannot fire twice (manual plan, T17). Visit state is read and written only on the location
+   pipeline's thread, and saved with `commit` before the notification is posted.
 5. **Reports are location-log rows** (04, section 7), each naming its cause by row id
-   (`LocationStore.enqueue` returns the UUIDv7): `trigger.fired` (`caused_by` the `place.entered`
+   (`LocationStore.enqueue` returns the UUIDv7, now monotonic within the process, so a report
+   made in the same millisecond as its cause sorts after it): `trigger.fired` (`caused_by` the `place.entered`
    row, with `"surface":"phone"` and `"shown"`), `trigger.shown` (`caused_by` the fired row), and
    `trigger.ignored` on a swipe (`caused_by` the shown row), written by `ArrivalDismissReceiver`
    (not exported) from the notification's delete intent. With notifications off (the permission,
@@ -56,7 +62,10 @@ each kind its own id range. A native writer breaks rule 2 as written, so it need
 - Dart's `cancelAll()` at a revoked permission (ADR-NOTIF-001, rule 6) also clears an arrival alert
   on screen. That is harmless: with the permission revoked no alert could show anyway.
 - A swipe or a tap after "Alerty w sklepach" is turned off writes nothing; the switch off also clears
-  the visits, so the next switch on starts with none.
+  the visits, so the next switch on starts with none. The switch on creates the channel, so it is
+  in the system's settings before the first alert.
+- A trigger whose `version` or `place` is over 100 characters is rejected, so a report's detail
+  always has room for `caused_by` within the log's 500 characters.
 - Visits and `Triggers` have JVM unit tests (`android/app/src/test/`); posting, the channel and the
   swipe are verified on the device by `docs/manual-tests/arrival-list.md`, T16–T21.
 - This grants no other feature a native notification path.
