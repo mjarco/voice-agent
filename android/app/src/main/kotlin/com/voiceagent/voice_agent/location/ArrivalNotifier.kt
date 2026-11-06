@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.voiceagent.voice_agent.ArrivalTapBridge
 import com.voiceagent.voice_agent.MainActivity
 import java.time.Instant
 import java.util.zip.CRC32
@@ -60,6 +61,9 @@ object ArrivalNotifier {
         if (why != null) fired.put("why", why)
         LocationPipeline.recordStatus(context, "trigger.fired", fired, at, firedId)
         if (why != null) return
+        // Ids are stable per place, so this map is as small as the places.
+        val config = GeofenceConfig(context)
+        config.lastShown = config.lastShown + (trigger.id to shownId)
         LocationPipeline.recordStatus(
             context,
             "trigger.shown",
@@ -67,6 +71,27 @@ object ArrivalNotifier {
             at,
             shownId,
         )
+    }
+
+    /**
+     * A tap on the alert (04, section 7): `trigger.tapped`, naming the shown
+     * row. Written only for the alert last shown for that trigger, and once;
+     * with the switch off nothing is written. Queued on the pipeline's thread.
+     */
+    fun tapped(context: Context, triggerId: String, version: String, shownId: String) {
+        val at = Instant.now()
+        LocationPipeline.write(context) {
+            val config = GeofenceConfig(context)
+            if (!config.alertsEnabled) return@write
+            config.lastShown = Visits.takeShown(config.lastShown, triggerId, shownId) ?: return@write
+            LocationPipeline.recordStatus(
+                context,
+                "trigger.tapped",
+                JSONObject().put("trigger", triggerId).put("v", version).put("caused_by", JSONArray().put(shownId)),
+                at,
+            )
+            LocationPipeline.scheduleDrain(context)
+        }
     }
 
     /** Why nothing could show now, or null when it can. */
@@ -105,10 +130,13 @@ object ArrivalNotifier {
     @SuppressLint("MissingPermission") // checked in blocked()
     private fun post(context: Context, trigger: Trigger, shownId: String, at: Instant) {
         val id = idOf(trigger.id)
-        // The tap opens the app as the launcher does; the trigger's route is task 6.
+        // The tap reaches MainActivity, cold or warm (ArrivalTapBridge).
         val open = Intent(context, MainActivity::class.java)
-            .setAction(Intent.ACTION_MAIN)
-            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .setAction(ArrivalTapBridge.ACTION)
+            .putExtra(ArrivalTapBridge.EXTRA_TRIGGER, trigger.id)
+            .putExtra(ArrivalTapBridge.EXTRA_VERSION, trigger.version)
+            .putExtra(ArrivalTapBridge.EXTRA_SHOWN, shownId)
+            .putExtra(ArrivalTapBridge.EXTRA_OPEN, trigger.open)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val dismiss = Intent(context, ArrivalDismissReceiver::class.java)
             .setAction(ArrivalDismissReceiver.ACTION)

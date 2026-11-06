@@ -20,6 +20,8 @@ data class Trigger(
     val expiresAtMs: Long,
     /** Shown as it comes (04, section 3); may be empty. */
     val body: String = "",
+    /** The route a tap opens (04, section 6); Dart checks it. Empty: the start screen. */
+    val open: String = "",
 )
 
 /** A trigger the phone cannot run, reported once per id and version. */
@@ -52,6 +54,9 @@ object Triggers {
 
     /** A dwell longer than a day is no arrival; it also keeps `dwell_s * 1000` in an Int. */
     const val MAX_DWELL_S = 86_400
+
+    /** A route longer than this opens nothing; no route of the app comes near it. */
+    const val MAX_OPEN_LENGTH = 300
 
     /** 04, section 5: a visit with no exit ends after 6 hours. */
     const val DEFAULT_MAX_VISIT_S = 21_600
@@ -187,6 +192,7 @@ object Triggers {
         if (dwell > MAX_DWELL_S) return reject("dwell_s too long")
         val title = string(show, "title") ?: return reject("missing show.title")
         val body = string(show, "body") ?: ""
+        val open = (string(show, "open") ?: "").takeIf { it.length <= MAX_OPEN_LENGTH } ?: ""
         val expires = (string(raw, "expires_at") ?: "").let { text ->
             try {
                 OffsetDateTime.parse(text).toInstant().toEpochMilli()
@@ -194,7 +200,7 @@ object Triggers {
                 return reject("missing expires_at")
             }
         }
-        return Read.Ok(Trigger(id, version, place, lat, lon, radius, dwell, title, expires, body))
+        return Read.Ok(Trigger(id, version, place, lat, lon, radius, dwell, title, expires, body, open))
     }
 
     /**

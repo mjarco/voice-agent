@@ -13,6 +13,7 @@ class MainActivity : FlutterActivity() {
 
     private var mediaButtonBridge: MediaButtonBridge? = null
     private var shareBridge: ShareBridge? = null
+    private var arrivalTapBridge: ArrivalTapBridge? = null
 
     /** A recreated activity gets its starting intent again. */
     private var recreated = false
@@ -46,17 +47,25 @@ class MainActivity : FlutterActivity() {
         shareChannel.setMethodCallHandler(share)
         shareBridge = share
         if (!recreated) share.accept(intent)
+
+        val arrivalChannel = MethodChannel(messenger, "com.voiceagent/arrival_tap")
+        val arrival = ArrivalTapBridge(this, arrivalChannel)
+        arrivalChannel.setMethodCallHandler(arrival)
+        arrivalTapBridge = arrival
+        if (!recreated) arrival.accept(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         shareBridge?.accept(intent)
+        arrivalTapBridge?.accept(intent)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         mediaButtonBridge?.deactivateSession()
         mediaButtonBridge = null
         shareBridge = null
+        arrivalTapBridge = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 

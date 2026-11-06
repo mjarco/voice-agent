@@ -23,6 +23,7 @@ import 'package:voice_agent/app/background/wire_agenda_for_background.dart';
 import 'package:voice_agent/core/background/flutter_foreground_task_service.dart';
 import 'package:voice_agent/core/background/workmanager_core_boot.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/notifications/arrival_tap_channel.dart';
 import 'package:voice_agent/core/notifications/data/local_notification_service.dart';
 import 'package:voice_agent/core/notifications/notification_providers.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
@@ -56,6 +57,10 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
   // observe the launch tap. `getNotificationAppLaunchDetails` queries
   // the platform channel directly and does not require plugin initialize.
   final cold = await LocalNotificationService.readColdStartPayload();
+  // An arrival alert is posted natively (ADR-NOTIF-003), so its tap comes
+  // over its own channel; its route joins the same two channels.
+  final arrivalTaps = ArrivalTapChannel();
+  final coldArrival = await arrivalTaps.takeInitialRoute();
 
   final sharedTexts = SharedTextChannel();
   final coldSharedText = await sharedTexts.takeInitialText();
@@ -109,6 +114,11 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
   // production (overridable in tests).
   final tapStream =
       (core.notifications as LocalNotificationService).tapStream;
+  // One stream of routes from both kinds of notification. Not broadcast, so
+  // an arrival tap during boot waits for App to listen.
+  final taps = StreamController<String>();
+  tapStream.listen(taps.add);
+  arrivalTaps.routes.listen(taps.add);
 
   runApp(
     ProviderScope(
@@ -132,9 +142,8 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
             .overrideWithValue(agenda.scheduler),
 
         // Deep-link channels (ADR-PLATFORM-008).
-        pendingDeepLinkProvider.overrideWith((ref) => cold),
-        notificationTapStreamProvider
-            .overrideWith((ref) => tapStream),
+        pendingDeepLinkProvider.overrideWith((ref) => cold ?? coldArrival),
+        notificationTapStreamProvider.overrideWith((ref) => taps.stream),
         pendingSharedTextProvider.overrideWith((ref) => coldSharedText),
         sharedTextStreamProvider.overrideWith((ref) => sharedTexts.texts),
 

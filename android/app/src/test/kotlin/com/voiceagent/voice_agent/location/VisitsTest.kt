@@ -158,6 +158,17 @@ class VisitsTest {
     }
 
     @Test
+    fun aTapCountsOnceAndOnlyForTheAlertLastShown() {
+        val last = mapOf(id to "shown-2", "arrival-list:9" to "shown-9")
+        val taken = Visits.takeShown(last, id, "shown-2")
+        assertEquals(mapOf("arrival-list:9" to "shown-9"), taken)
+        // The same tap again, an older alert of that trigger, a forged id.
+        assertNull(Visits.takeShown(taken!!, id, "shown-2"))
+        assertNull(Visits.takeShown(last, id, "shown-1"))
+        assertNull(Visits.takeShown(last, "arrival-list:404", "shown-2"))
+    }
+
+    @Test
     fun notificationIdsStayInTheirRange() {
         for (n in 0 until 500) {
             val nid = ArrivalNotifier.idOf("arrival-list:$n")

@@ -52,6 +52,14 @@ object Visits {
         return Step(out, endedAtMs, fire)
     }
 
+    /**
+     * A tap on the alert shown as [shownId]: the map without it, or null when
+     * that is not the alert last shown for [triggerId] (a second tap, an older
+     * alert, a forged intent), which then writes no row.
+     */
+    fun takeShown(lastShown: Map<String, String>, triggerId: String, shownId: String): Map<String, String>? =
+        if (lastShown[triggerId] == shownId) lastShown - triggerId else null
+
     /** The visits of triggers withdrawn from the set are forgotten. */
     fun prune(visits: Map<String, Visit>, ids: Set<String>): Map<String, Visit> =
         visits.filterKeys { it in ids }

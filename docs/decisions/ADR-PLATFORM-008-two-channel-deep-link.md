@@ -1,6 +1,6 @@
 # ADR-PLATFORM-008: Two-channel cross-app-entry deep link with one-shot + stream invariant
 
-Status: Proposed
+Status: Proposed. A second notification source joins both channels: arrival alerts' taps, over `com.voiceagent/arrival_tap` (ADR-NOTIF-003, PR #399).
 Proposed in: P040
 
 ## Context
