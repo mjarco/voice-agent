@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.work.BackoffPolicy
 import androidx.work.ExistingWorkPolicy
@@ -134,7 +135,7 @@ object GeofenceRegistry {
         val chosen = all.take(MAX_GEOFENCES)
         val ids = chosen.map { it.id }.toSet()
         val held = config.registeredIds
-        val standing = config.registeredHash != null && !config.degraded &&
+        val standing = config.registeredHash != null && !config.degraded && backgroundGranted(context) &&
             pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE) != null
         val plan = RegistrationPlan.of(reason, standing, chosen, held, config.registeredKeys)
         val toAdd = plan.toAdd
@@ -160,6 +161,9 @@ object GeofenceRegistry {
             }
             if (toAdd.isNotEmpty()) {
                 if (!fineGranted(context)) throw SecurityException("no fine location")
+                // Without "all the time" Play services may accept the geofences
+                // and never report them, so the missing permission is said here.
+                if (!backgroundGranted(context)) throw SecurityException("no background location")
                 await(add(context, toAdd))
             }
         } catch (failure: Exception) {
@@ -322,6 +326,12 @@ object GeofenceRegistry {
         val intent = pendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)!!
         return LocationServices.getGeofencingClient(context).addGeofences(request, intent)
     }
+
+    /** "All the time"; before Android 10 it came with the fine permission. */
+    private fun backgroundGranted(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun fineGranted(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==

@@ -40,7 +40,9 @@ object RegistrationPlan {
 
     /**
      * [standing] says the last registration is still held: its hash is known,
-     * location was not lost, and the intent survived (a force stop cancels it).
+     * location was not lost, the intent survived (a force stop cancels it) and
+     * location is allowed all the time. Without that last one Play services
+     * stops reporting, so a registration with "while in use" is not intact.
      */
     fun of(
         reason: String,

@@ -37,6 +37,15 @@ class RegistrationPlanTest {
     }
 
     @Test
+    fun withoutAllTheTimeTheAppStartAddsEverythingAgain() {
+        // Defect D3: the registry passes standing = false without "all the time",
+        // so the add is tried and fails with 1004 instead of returning unchanged.
+        val plan = RegistrationPlan.of(RegistrationPlan.REASON_APP_START, false, listOf(a, b), held, heldKeys)
+        assertFalse(plan.intact)
+        assertEquals(listOf(a, b), plan.toAdd)
+    }
+
+    @Test
     fun aRebootAddsEverythingAgainAndForgetsNoVisit() {
         val plan = RegistrationPlan.of("reboot", true, listOf(a, b), held, heldKeys)
         assertFalse(plan.intact)
