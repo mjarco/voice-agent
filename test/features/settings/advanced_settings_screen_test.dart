@@ -192,11 +192,11 @@ void main() {
     testWidgets('renders default VadConfig values in sliders', (tester) async {
       await _pumpAdvanced(tester);
 
-      expect(find.text('0.40'), findsOneWidget);
-      expect(find.text('0.35'), findsOneWidget);
+      // Both thresholds default to 0.20 (voice-agent#402).
+      expect(find.text('0.20'), findsNWidgets(2));
+      expect(find.text('1500ms'), findsOneWidget);
+      expect(find.text('250ms'), findsOneWidget);
       expect(find.text('500ms'), findsOneWidget);
-      expect(find.text('400ms'), findsOneWidget);
-      expect(find.text('300ms'), findsOneWidget);
     });
 
     testWidgets('renders seeded VadConfig values in sliders', (tester) async {
@@ -244,8 +244,8 @@ void main() {
 
       expect(service.savedVadConfig, const VadConfig.defaults());
       // UI reflects defaults immediately
-      expect(find.text('0.40'), findsOneWidget);
-      expect(find.text('500ms'), findsOneWidget);
+      expect(find.text('0.20'), findsNWidgets(2));
+      expect(find.text('1500ms'), findsOneWidget);
     });
 
     testWidgets('async config load updates sliders before user edits',

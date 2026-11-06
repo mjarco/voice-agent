@@ -5,11 +5,11 @@ void main() {
   group('VadConfig.defaults()', () {
     test('has expected default values', () {
       const d = VadConfig.defaults();
-      expect(d.positiveSpeechThreshold, 0.40);
-      expect(d.negativeSpeechThreshold, 0.35);
-      expect(d.hangoverMs, 500);
-      expect(d.minSpeechMs, 400);
-      expect(d.preRollMs, 300);
+      expect(d.positiveSpeechThreshold, 0.20);
+      expect(d.negativeSpeechThreshold, 0.20);
+      expect(d.hangoverMs, 1500);
+      expect(d.minSpeechMs, 250);
+      expect(d.preRollMs, 500);
     });
   });
 
@@ -120,10 +120,10 @@ void main() {
   group('VadConfig.toString()', () {
     test('contains field values', () {
       final s = const VadConfig.defaults().toString();
-      expect(s, contains('0.4'));
+      expect(s, contains('0.2'));
+      expect(s, contains('1500'));
+      expect(s, contains('250'));
       expect(s, contains('500'));
-      expect(s, contains('400'));
-      expect(s, contains('300'));
     });
   });
 }
