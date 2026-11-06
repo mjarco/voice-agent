@@ -4,6 +4,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/core/links/link_opener.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
@@ -40,7 +41,29 @@ class _StubRepository implements PinsRepository {
   }
 }
 
-Future<void> _pump(WidgetTester tester, PinsRepository repo) async {
+class _FakeLinkOpener implements LinkOpener {
+  final opened = <Uri>[];
+
+  @override
+  Future<bool> open(Uri uri) async {
+    if (!isOpenableLink(uri)) return false;
+    opened.add(uri);
+    return true;
+  }
+}
+
+PinDetail _pinWith(String text) => PinDetail(
+      recordId: 'abc',
+      pinName: 'pin abc',
+      text: text,
+      createdAt: DateTime.utc(2026, 11, 6),
+    );
+
+Future<void> _pump(
+  WidgetTester tester,
+  PinsRepository repo, {
+  LinkOpener? opener,
+}) async {
   final router = GoRouter(
     initialLocation: '/pins/abc',
     routes: [
@@ -94,7 +117,10 @@ Future<void> _pump(WidgetTester tester, PinsRepository repo) async {
 
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [pinsRepositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        pinsRepositoryProvider.overrideWithValue(repo),
+        linkOpenerProvider.overrideWithValue(opener ?? _FakeLinkOpener()),
+      ],
       child: MaterialApp.router(routerConfig: router),
     ),
   );
@@ -292,6 +318,90 @@ void main() {
         find.byKey(const Key('pin-detail-open-conversation')),
         findsNothing,
       );
+    });
+
+    group('an article pinned as Markdown', () {
+      testWidgets('a tapped web link opens in another app', (tester) async {
+        final opener = _FakeLinkOpener();
+        await _pump(
+          tester,
+          _StubRepository()..pin = _pinWith('[Go blog](https://go.dev/blog)'),
+          opener: opener,
+        );
+
+        await tester.tap(find.text('Go blog', findRichText: true));
+        await tester.pumpAndSettle();
+
+        expect(opener.opened, [Uri.parse('https://go.dev/blog')]);
+      });
+
+      testWidgets('a link that is not web or mail is not opened and says so',
+          (tester) async {
+        final opener = _FakeLinkOpener();
+        await _pump(
+          tester,
+          _StubRepository()..pin = _pinWith('[run](javascript:alert(1))'),
+          opener: opener,
+        );
+
+        await tester.tap(find.text('run', findRichText: true));
+        await tester.pumpAndSettle();
+
+        expect(opener.opened, isEmpty);
+        expect(find.textContaining('Cannot open the link'), findsOneWidget);
+      });
+
+      testWidgets('a table keeps its columns and scrolls sideways',
+          (tester) async {
+        await _pump(
+          tester,
+          _StubRepository()
+            ..pin = _pinWith(
+              '| GPIO | Function |\n| --- | --- |\n| 21 | SDA |\n| 22 | SCL |',
+            ),
+        );
+
+        final table = find.byType(Table);
+        expect(table, findsOneWidget);
+        expect(
+          tester.widget<Table>(table).defaultColumnWidth,
+          isA<IntrinsicColumnWidth>(),
+        );
+        final scroll = find.ancestor(
+          of: table,
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is SingleChildScrollView &&
+                w.scrollDirection == Axis.horizontal,
+          ),
+        );
+        expect(scroll, findsOneWidget);
+      });
+
+      testWidgets('an image that is not on the web shows its description',
+          (tester) async {
+        await _pump(
+          tester,
+          _StubRepository()..pin = _pinWith('![Starter jar](file:///etc/x.png)'),
+        );
+
+        expect(find.byKey(const Key('pin-detail-image')), findsNothing);
+        expect(find.byKey(const Key('pin-detail-image-fallback')), findsOneWidget);
+        expect(find.text('Starter jar'), findsOneWidget);
+      });
+
+      testWidgets('a web image that fails to load shows its description',
+          (tester) async {
+        await _pump(
+          tester,
+          _StubRepository()
+            ..pin = _pinWith('![Starter jar](https://example.org/jar.jpg)'),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('pin-detail-image')), findsOneWidget);
+        expect(find.byKey(const Key('pin-detail-image-fallback')), findsOneWidget);
+      });
     });
   });
 }

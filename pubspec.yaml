@@ -4,7 +4,7 @@ publish_to: 'none'
 # Single source of truth for the app version. Format: MAJOR.MINOR.PATCH+BUILD.
 # Bump it in the same PR as the change, and tag `vMAJOR.MINOR.PATCH` after merge.
 # See "Versioning & Releases" in CLAUDE.md for the rules.
-version: 1.18.0+33
+version: 1.19.0+34
 
 environment:
   sdk: ^3.11.1
@@ -33,6 +33,7 @@ dependencies:
   flutter_timezone: ^3.0.1
   workmanager: ^0.10.10
   flutter_markdown_plus: ^1.0.4
+  url_launcher: ^6.3.3
   opentelemetry: ^0.18.11
   http: ^1.1.0
   package_info_plus: ^8.0.0
