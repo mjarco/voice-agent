@@ -4,4 +4,8 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Debug builds only: a device check runs against a test personal-agent over
+         http on the LAN, and Kotlin (the trigger pull, the location log upload)
+         is refused cleartext otherwise. Release builds keep the default. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>
