@@ -1,6 +1,6 @@
 # ADR-PLATFORM-010: Geofences of places run natively beside the location log
 
-Status: Accepted
+Status: Accepted; items 1 and 2 (places handed over by Dart, one geofence per place) superseded by [ADR-NET-007](ADR-NET-007-armed-triggers-pulled-in-background.md)
 
 ## Context
 
