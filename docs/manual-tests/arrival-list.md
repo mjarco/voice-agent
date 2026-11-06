@@ -1,7 +1,7 @@
 # Manual test: the arrival list
 
 **Design:** [ADR-PLATFORM-010](../decisions/ADR-PLATFORM-010-geofences-of-places.md), [ADR-NET-007](../decisions/ADR-NET-007-armed-triggers-pulled-in-background.md), [ADR-NOTIF-003](../decisions/ADR-NOTIF-003-arrival-alerts-posted-natively.md), [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); workspace epic `2026-11-places/01-arrival-list` and its trigger contract `compilations/notification-triggers/reviewed/04-trigger-contract.md`; PR #395 (task 3), PR #396 (task 4), PR #397 (task 5), PR #399 (task 6); [ADR-PLATFORM-008](../decisions/ADR-PLATFORM-008-two-channel-deep-link.md) for the tap.
-**Overall status:** **pending**.
+**Overall status:** **in-progress**: run by the agent on 2026-11-06 (the run's report, workspace docs `requirements/roadmaps/2026-11-places/epics/01-arrival-list/drafts/06-device-run-report.md`); T4, T6 and T17 failed (defects D1–D3, to be fixed after stable 1.19.0 by the owner's decision); T10, T11 and T23 step 2 wait for the owner on stable; T13 skipped.
 **Why now:** geofences, the "always" permission, boot, update, force stop and location turned off exist only on a device.
 **When:** once, at the end of the epic, with the cases of tasks 4–6; nothing goes on the Pixel before then (owner's decision of 2026-11-05).
 **Time budget:** ~45 min for task 3's cases (agent, dev flavor over USB adb), then real arrivals (owner, stable on production).
@@ -15,34 +15,34 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 | # | Case | Status |
 |---|---|---|
-| S1 | Test personal-agent on `:8898` with places | pending |
-| S2 | The dev build, debuggable, pointed at it | pending |
-| S3 | Reading the queue and the geofence state | pending |
-| T1 | After install the switch is off and nothing is written | pending |
-| T2 | Turning it on asks for permissions and registers every place | pending |
-| T3 | Rows follow "Alerty w sklepach" alone, with the log paused | pending |
-| T4 | Without "always": `geofences_failed`, then registered once granted | pending |
-| T5 | Adding, deleting and renaming a place | pending |
-| T6 | Reboot, update and force stop each register again | pending |
-| T7 | Location off, then on: degraded, then the retry job registers | pending |
-| T8 | Turning it off removes the geofences, and then nothing is written | pending |
-| T9 | Mock transitions: enter, dwell and exit rows | pending |
+| S1 | Test personal-agent on `:8898` with places | done |
+| S2 | The dev build, debuggable, pointed at it | done |
+| S3 | Reading the queue and the geofence state | done |
+| T1 | After install the switch is off and nothing is written | passed |
+| T2 | Turning it on asks for permissions and registers every place | passed |
+| T3 | Rows follow "Alerty w sklepach" alone, with the log paused | passed |
+| T4 | Without "always": `geofences_failed`, then registered once granted | failed |
+| T5 | Adding, deleting and renaming a place | passed |
+| T6 | Reboot, update and force stop each register again | failed |
+| T7 | Location off, then on: degraded, then the retry job registers | passed with a deviation |
+| T8 | Turning it off removes the geofences, and then nothing is written | passed |
+| T9 | Mock transitions: enter, dwell and exit rows | passed |
 | T10 | A hands-free session runs alongside | pending |
 | T11 | Real arrivals on stable, in PA's Location view | pending |
-| T12 | The pull, and "unchanged" on the next start | pending |
-| T13 | A change in the list reaches the phone | pending |
-| T14 | Turning it off clears the set and stops the hourly pull | pending |
-| T15 | Offline: one `triggers_failed`, the set stands | pending |
-| T16 | One notification per visit, with its reports | pending |
-| T17 | No second one after a restart mid-visit | pending |
-| T18 | A new list mid-visit gives none | pending |
-| T19 | A swipe writes `trigger.ignored` | pending |
-| T20 | Notifications off: `"shown":false` | pending |
-| T21 | An expired trigger stays silent | pending |
-| T22 | A tap with the app closed opens the place's list | pending |
-| T23 | A tap with the app running, and over a hands-free session | pending |
-| T24 | Recents and a second tap do not count again | pending |
-| T25 | A tap after the switch is off | pending |
+| T12 | The pull, and "unchanged" on the next start | passed |
+| T13 | A change in the list reaches the phone | skipped |
+| T14 | Turning it off clears the set and stops the hourly pull | passed |
+| T15 | Offline: one `triggers_failed`, the set stands | passed |
+| T16 | One notification per visit, with its reports | passed |
+| T17 | No second one after a restart mid-visit | failed |
+| T18 | A new list mid-visit gives none | passed |
+| T19 | A swipe writes `trigger.ignored` | passed |
+| T20 | Notifications off: `"shown":false` | passed |
+| T21 | An expired trigger stays silent | passed |
+| T22 | A tap with the app closed opens the place's list | passed |
+| T23 | A tap with the app running, and over a hands-free session | in-progress |
+| T24 | Recents and a second tap do not count again | passed |
+| T25 | A tap after the switch is off | passed |
 
 ---
 
@@ -50,25 +50,27 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### S1. Test personal-agent on `:8898` with places
 
-**Status:** pending
+**Status:** done (2026-11-06)
+
+If `:8898` is taken, any free port does; give the test PA its own `PA_MCP_SOCKET`, or it takes the shared default socket of another dev PA. T12 and T14 need the PA's requests: run it behind a small logging proxy (method, path, `If-None-Match`, status).
 
 **Do:** set up the test PA as `ws-device-check` describes (never `:8888`). Put three places in it with `PUT /api/v1/places/<uuid>`: one where the phone lies (home), two elsewhere, each with a store type (e.g. `diy`, `grocery`, `garden`). Put one shopping item under each of the first two types, none under the third. `GET /api/v1/triggers` then holds two triggers: geofences come from triggers since task 4, not from places.
 
 ### S2. The dev build, debuggable, pointed at it
 
-**Status:** pending
+**Status:** done (2026-11-06)
 
 **Do:**
 1. `flutter build apk --flavor dev --debug --dart-define-from-file=$SP/env.mobile`, with the test PA's env file. A debug build, because `run-as` (S3) works only on a debuggable app.
 2. `adb -s <usb serial> install -r build/app/outputs/flutter-apk/app-dev-debug.apk`, then `pm clear com.voiceagent.voice_agent.dev`.
 3. Open Settings, read the URL, Test Connection. Open Miejsca: the three places load.
-4. Settings shows 1.17.0.
+4. Settings shows the version under test (1.19.0 at the 2026-11-06 run).
 
-Kotlin cannot post to an `http://` PA (ADR-PLATFORM-009, item 8), so on dev the rows stay in the phone's queue and are read there (S3), not in PA. "Ostatni błąd wysyłki" showing a cleartext error is expected.
+A release build's Kotlin cannot reach an `http://` PA (ADR-PLATFORM-009, item 8). Debug builds allow cleartext (`android/app/src/debug/AndroidManifest.xml`), so the trigger pull and the rows reach the test PA; read them there (`GET /api/v1/location/entries`) or in the queue (S3).
 
 ### S3. Reading the queue and the geofence state
 
-**Status:** pending
+**Status:** done (2026-11-06)
 
 ```bash
 P=com.voiceagent.voice_agent.dev
@@ -85,7 +87,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T1. After install the switch is off and nothing is written
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:**
 1. After S2, open Dziennik lokalizacji.
 2. `am force-stop`, open the app again, read the queue.
@@ -96,7 +98,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T2. Turning it on asks for permissions and registers a geofence per trigger
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:**
 1. With location permission not yet granted, turn "Alerty w sklepach" on.
 2. Grant while-in-use, notifications, then "all the time" on the settings page; come back.
@@ -108,7 +110,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T3. Rows follow "Alerty w sklepach" alone, with the log paused
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA); the row's reason was `restart_after_stop`, the boot broadcast after the stop
 **Do:**
 1. Turn "Zbieraj lokalizację" off, leave the alerts on.
 2. `am force-stop`, open the app, read the queue.
@@ -119,7 +121,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T4. Without "always": `geofences_failed`, then registered once granted
 
-**Status:** pending
+**Status:** failed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA): step 2 wrote no `geofences_failed` and kept "obszary: 2" (D3 in the run's report, workspace docs `requirements/roadmaps/2026-11-places/epics/01-arrival-list/drafts/06-device-run-report.md`); step 4 passed
 **Do:**
 1. `adb shell pm revoke com.voiceagent.voice_agent.dev android.permission.ACCESS_BACKGROUND_LOCATION` (it kills the process).
 2. Open the app, read the screen and the queue.
@@ -127,12 +129,12 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 4. Tap "Nadaj", grant "all the time", come back to the app; read the screen and the queue.
 
 **Why:** ADR-PLATFORM-010 item 4: a missing permission is not retried; a return to the app with the permission changed registers.
-**Expected:** after 2: `geofences_failed` `{"code":1004,"reason":"app_start",…}`, "obszary: 0", "Nadaj" shown. After 3: no new row (no retry job for 1004). After 4: `geofences_registered` with `"reason":"permission_changed"` within seconds, and "obszary: 3".
+**Expected:** after 2: `geofences_failed` `{"code":1004,"reason":"app_start",…}`, "obszary: 0", "Nadaj" shown. After 3: no new row (no retry job for 1004). After 4: `geofences_registered` with `"reason":"permission_changed"` within seconds, and "obszary" back to the number of triggers. "Nadaj" opens App info in system settings; a driver that does not tap there grants with `pm grant`, which takes the same return path.
 **On failure:** the code in the row; `locationLogResumeProvider` (did Dart call `appResumed`?) and `GeofenceRegistry.permissionMayHaveChanged` (`last_permission` in `geofences.xml`).
 
 ### T5. Adding, deleting and renaming a place
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA); places changed through the test PA's API
 **Do:**
 1. Name a fourth place in Miejsca, with the first place's store type; bring the app back to front after 5 minutes (or restart it).
 2. Delete it; the same.
@@ -144,7 +146,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T6. Reboot, update and force stop each register again
 
-**Status:** pending
+**Status:** failed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA): steps 1–3 passed; step 4 re-registered everything, `restart_after_stop` after a plain kill (D2)
 **Do:**
 1. `adb reboot`; unlock; wait 2 minutes without opening the app; read the queue.
 2. `adb install -r` the same APK; read the queue.
@@ -152,12 +154,12 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 4. Close the app from recents (no force stop), open it again; read the queue.
 
 **Why:** ADR-PLATFORM-010 item 4: geofences are lost at each of these. Step 4 is item 3: an app start that finds the registration standing adds nothing, so a visit in progress keeps its state.
-**Expected:** a `geofences_registered` row for each, with `"reason"` `reboot`, `app_updated`, and `app_start` (and `restart_after_stop` if the system sends the boot broadcast after the stop); "obszary: 3" and the time moves each time. After step 4 no new row, and the time stays.
+**Expected:** a `geofences_registered` row for each, with `"reason"` `reboot`, `app_updated`, and `app_start` (and `restart_after_stop` if the system sends the boot broadcast after the stop); "obszary" equal to the number of triggers and the time moves each time. After step 4 no new row, and the time stays.
 **On failure:** `LocationBootReceiver` (one receiver for both pipelines).
 
 ### T7. Location off, then on: degraded, then the retry job registers
 
-**Status:** pending
+**Status:** passed with a deviation (2026-11-06, Pixel 11 Pro, Android 17): location off for 2 and 5 minutes sent no `GEOFENCE_NOT_AVAILABLE` and no degraded row; the geofences survived (T9 entered right after)
 **Do:**
 1. `adb shell cmd location set-location-enabled false`; wait 2 minutes; read the queue.
 2. `adb shell cmd location set-location-enabled true`; wait up to 10 minutes, reading the queue each minute.
@@ -168,7 +170,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T8. Turning it off removes the geofences, and then nothing is written
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:**
 1. Turn "Alerty w sklepach" off.
 2. `am force-stop`, open the app; read the queue.
@@ -179,7 +181,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T9. Mock transitions: enter, dwell and exit rows
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:**
 1. Alerts on. `adb shell appops set com.android.shell android:mock_location allow`.
 2. Put the test provider at a place far from home: `adb shell cmd location providers add-test-provider gps` and `adb shell cmd location providers set-test-provider-location gps --location <lat>,<lon>`; repeat every 10 s for 2 minutes.
@@ -192,7 +194,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T10. A hands-free session runs alongside
 
-**Status:** pending
+**Status:** pending (owner, on stable during T11: the dev build has no Groq key)
 **Do:** with alerts on, start a hands-free session, toggle alerts off and on, end the session.
 
 **Why:** registration waits on Play services on its own thread (ADR-PLATFORM-010 item 4); the pipeline's thread and the session must never wait behind it.
@@ -210,7 +212,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T12. The pull, and "unchanged" on the next start
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:**
 1. Alerts on, after T2. Note "sprawdzone <time>".
 2. Force stop the app (`am force-stop`, confirm no pid), wait a minute, open it.
@@ -222,7 +224,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T13. A change in the list reaches the phone
 
-**Status:** pending
+**Status:** skipped (2026-11-06, owner's decision: over an hour of waiting)
 **Do:**
 1. Add an item under the third place's store type in the test PA.
 2. Leave the phone alone, screen off, for up to 75 minutes (the hourly job), then read the queue.
@@ -234,7 +236,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T14. Turning it off clears the set and stops the hourly pull
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA), except the hour without a pull (skipped with T13)
 **Do:** turn "Alerty w sklepach" off; read `geofences.xml`, the job list and, after an hour, PA's log.
 
 **Why:** the switch is the consent; with it off nothing is pulled (ADR-NET-007, items 1 and 3).
@@ -243,7 +245,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T15. Offline: one `triggers_failed`, the set stands
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:** under `trap '… airplane-mode disable' EXIT`, airplane mode on; force stop and open the app twice, 6 minutes apart; airplane mode off; open the app after 5 minutes.
 
 **Why:** a failed pull keeps the set last pulled, and the phone fires from it offline (criterion 5; ADR-NET-007, item 2).
@@ -252,7 +254,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T16. One notification per visit, with its reports
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:**
 1. As T9, steps 1–2, at a place with something to buy; watch the screen.
 2. Stay 3 more minutes; then move away as T9, step 3; read the queue.
@@ -263,7 +265,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T17. No second one after a restart mid-visit
 
-**Status:** pending
+**Status:** failed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA): after a force stop mid-visit a second alert ~65 s later, twice (D1); the reboot part is inconclusive, since a reboot drops the test provider
 **Do:** in T16's visit, after the notification: `am force-stop`, confirm no pid, open the app; then reboot the phone; keep the mock location 3 more minutes each time.
 
 **Why:** the visit state is on disk, so a restart of the app or the phone does not fire twice (04, section 5).
@@ -272,7 +274,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T18. A new list mid-visit gives none
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:** in a visit that has fired, add an item to that store's list in the test PA; return to the app after 5 minutes (a pull) and stay 3 more minutes.
 
 **Why:** once per visit is keyed by the trigger's id, not its version (04, section 5).
@@ -283,7 +285,7 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 
 ### T19. A swipe writes `trigger.ignored`
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:** in a new visit (exit, then enter again), swipe the notification away; read the queue.
 
 **Why:** 04, section 7: you swiped it away, reported against the shown row.
@@ -292,7 +294,7 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 
 ### T20. Notifications off: `"shown":false`
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:**
 1. Turn off the channel "Alerty w sklepach" in system settings (it exists once the switch is on); make a new visit.
 2. Turn the channel on; `adb shell pm revoke <package> android.permission.POST_NOTIFICATIONS`; make a new visit.
@@ -304,7 +306,7 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 
 ### T21. An expired trigger stays silent
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA), with the stored set's `expires_at` moved to yesterday on the phone
 **Do:** with the phone's clock moved past the trigger's `expires_at` (or a test PA that compiled it 3 days ago), make a visit.
 
 **Why:** expired triggers never fire, by the phone's clock (04, section 3).
@@ -313,10 +315,10 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 
 ### T22. A tap with the app closed opens the place's list
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA), by step 4 (step 2 cannot work, see Do)
 **Do:**
 1. Make a visit as T16 at a place with two store types (in the test PA, e.g. `diy` and `garden`, an item under each).
-2. Before the alert comes, `am force-stop` the app and confirm no pid.
+2. ~~Before the alert comes, `am force-stop` the app~~: a force stop cancels the geofences' intent, so no alert would come. Use step 4 for the cold path.
 3. Tap the alert; read the screen and the queue.
 4. A new visit; this time leave the app in Recents and kill only its process (`adb shell am kill <package>`, confirm no pid), then tap the alert. Android recreates the activity and delivers the tap through `onNewIntent`.
 
@@ -326,7 +328,7 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 
 ### T23. A tap with the app running, and over a hands-free session
 
-**Status:** pending
+**Status:** in-progress: steps 1 and 3 passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA); step 2 pending (owner, on stable during T11)
 **Do:**
 1. A new visit, the app open on Record. Tap the alert.
 2. A new visit with a hands-free session listening. Tap the alert, then return to Record.
@@ -338,8 +340,8 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 
 ### T24. Recents and a second tap do not count again
 
-**Status:** pending
-**Do:** after T22, leave the app with Back, open it again from Recents; then fire `adb shell am start -n <package>/.MainActivity -a com.voiceagent.voice_agent.ARRIVAL_TAPPED --es trigger <id> --es v <v> --es shown <the same shown id> --es open /settings`.
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
+**Do:** after T22, leave the app with Back, open it again from Recents; then fire `adb shell am start -n <package>/.MainActivity -a com.voiceagent.voice_agent.ARRIVAL_TAPPED --es trigger <id> --es v <v> --es shown <the same shown id> --es open /settings --activity-clear-task` (without `--activity-clear-task` the running task is only brought to front and the intent is not delivered).
 
 **Why:** one tap counts once: a redelivered or repeated intent writes no row, and a route a trigger may not open opens the start screen (04, section 6).
 **Expected:** Recents opens the app as it was, with no new `trigger.tapped`. The `am start` writes no row and opens the start screen (Record), not `/settings` (04, section 6: anything else opens the start screen).
@@ -347,7 +349,7 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 
 ### T25. A tap after the switch is off
 
-**Status:** pending
+**Status:** passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA)
 **Do:** with an alert in the shade, turn "Alerty w sklepach" off; tap the alert.
 
 **Why:** owner's decision with Gate 2 of task 6 (point 4): the list still opens; with the switch off nothing is written.
