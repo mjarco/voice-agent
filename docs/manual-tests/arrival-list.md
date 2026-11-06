@@ -128,7 +128,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 3. Wait 3 minutes and read the queue again.
 4. Tap "Nadaj", grant "all the time", come back to the app; read the screen and the queue.
 
-**Why:** ADR-PLATFORM-010 item 4: a missing permission is not retried; a return to the app with the permission changed registers.
+**Why:** ADR-PLATFORM-010 item 4: a missing permission is not retried; a return to the app with the permission changed registers. ADR-PLATFORM-011 item 3: without "all the time" a registration does not stand, so the app start reports it.
 **Expected:** after 2: `geofences_failed` `{"code":1004,"reason":"app_start",…}`, "obszary: 0", "Nadaj" shown. After 3: no new row (no retry job for 1004). After 4: `geofences_registered` with `"reason":"permission_changed"` within seconds, and "obszary" back to the number of triggers. "Nadaj" opens App info in system settings; a driver that does not tap there grants with `pm grant`, which takes the same return path.
 **On failure:** the code in the row; `locationLogResumeProvider` (did Dart call `appResumed`?) and `GeofenceRegistry.permissionMayHaveChanged` (`last_permission` in `geofences.xml`).
 
@@ -154,7 +154,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 4. Close the app from recents (no force stop), open it again; read the queue.
 
 **Why:** ADR-PLATFORM-010 item 4: geofences are lost at each of these. Step 4 is item 3: an app start that finds the registration standing adds nothing, so a visit in progress keeps its state.
-**Expected:** a `geofences_registered` row for each, with `"reason"` `reboot`, `app_updated`, and `app_start` (and `restart_after_stop` if the system sends the boot broadcast after the stop); "obszary" equal to the number of triggers and the time moves each time. After step 4 no new row, and the time stays.
+**Expected:** a `geofences_registered` row for each, with `"reason"` `reboot`, `app_updated`, and `app_start` or `restart_after_stop` (Android 17 sends the boot broadcast at the next start after a stop); "obszary" equal to the number of triggers and the time moves each time. After step 4 no new row, and the time stays: on Android 17 the plain kill brings `restart_after_stop` too, which keeps a standing registration (ADR-PLATFORM-011, item 2).
 **On failure:** `LocationBootReceiver` (one receiver for both pipelines).
 
 ### T7. Location off, then on: degraded, then the retry job registers
@@ -269,8 +269,8 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 **Do:** in T16's visit, after the notification: `am force-stop`, confirm no pid, open the app; then reboot the phone; keep the mock location 3 more minutes each time.
 
 **Why:** the visit state is on disk, so a restart of the app or the phone does not fire twice (04, section 5).
-**Expected:** no new notification and no `trigger.fired`. After the force stop and after the reboot the geofence is added afresh, so its visit leaves `visits` in `geofences.xml`, and no `place.entered` follows while you stay (initial trigger 0); the exit still writes `place.left`. This case is what makes forgetting a re-added geofence's visit safe (ADR-NOTIF-003, item 4).
-**On failure:** a `place.entered` right after the registration means Play services reported a geofence added while inside: forgetting the visit at `GeofenceRegistry.forgetVisits` then fires twice.
+**Expected:** no new notification and no `trigger.fired`. After the force stop and after the reboot the geofence is added afresh, and its visit stays in `visits` in `geofences.xml` (ADR-PLATFORM-011, item 1). Play services may report a `place.entered` dwell about a minute later while you stay (seen on Android 17); it fires nothing. The exit still writes `place.left` and ends the visit.
+**On failure:** a `trigger.fired` after the registration: the visit was forgotten (`RegistrationPlan.of`, `forget`) or `visits` was unreadable.
 
 ### T18. A new list mid-visit gives none
 
@@ -281,7 +281,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 **Expected:** `triggers_pulled` `{"changed":true}`, no `geofences_registered` with `"added"` > 0 for that trigger (its key is unchanged), no new `trigger.fired`.
 **On failure:** `Triggers.geofenceKey` (an added geofence resets its enter); `Visits.step`.
 
-A withdrawn trigger's visit is forgotten with its geofence: tick off the last item while inside, leave, add an item, come back within 6 h, and the dwell fires (`GeofenceRegistry.forgetVisits`). Run it with T18 when time allows.
+A withdrawn trigger's visit is forgotten with its geofence: tick off the last item while inside, leave, add an item, come back within 6 h, and the dwell fires (`RegistrationPlan.of`, `forget`). Run it with T18 when time allows.
 
 ### T19. A swipe writes `trigger.ignored`
 
