@@ -27,13 +27,14 @@ import java.util.concurrent.TimeoutException
 import org.json.JSONObject
 
 /**
- * Geofences of places (ADR-PLATFORM-010): one per place, registered beside the
- * location log. Until task 4 they only write rows; nothing is shown.
+ * Geofences of the armed triggers (ADR-PLATFORM-010, ADR-NET-007): one per
+ * trigger, registered beside the location log. They write rows; nothing is
+ * shown until task 5.
  *
  * Registration is safe to repeat, as the pipeline's subscription is: geofences
  * are lost at a reboot, an update, a force stop and when location goes off, so
- * it runs at each of those, at app start, and when the places, the switch or
- * the permission change. It runs on its own thread, one at a time, and waits
+ * it runs at each of those, at app start, and when the trigger set, the switch
+ * or the permission change. It runs on its own thread, one at a time, and waits
  * there for Play services; rows go to the pipeline's thread, which never waits
  * on Play services, so a reading or a broadcast is never held behind it.
  */
@@ -43,28 +44,24 @@ object GeofenceRegistry {
 
     const val REASON_RETRY = "retry"
     const val REASON_SWITCH = "switch"
+    const val REASON_TRIGGERS = "triggers_changed"
 
     /**
      * Reasons after which Play services still holds what was registered, as
-     * long as the intent survived (a force stop cancels it). For these only new
+     * long as the intent survived (a force stop cancels it): the app start and
+     * a new trigger set. For these only new
      * or changed geofences are added: adding one again replaces it and resets
      * its state, so with initial trigger 0 a visit in progress would lose its
      * enter and dwell. Every other reason (boot, update, retry, the switch, a
      * permission change) adds them all.
      */
-    private val KEEPING_REASONS = setOf("app_start", "places_changed")
+    private val KEEPING_REASONS = setOf("app_start", REASON_TRIGGERS)
 
     /** Registrations run here, one at a time. */
     val executor = Executors.newSingleThreadExecutor()
 
     /** Android's limit per app. */
     private const val MAX_GEOFENCES = 100
-
-    /** The smallest radius Android's geofencing is reliable at. */
-    private const val MIN_RADIUS_M = 150
-
-    /** One value with `dwell_s` of the triggers (personal-agent, thought-agent#637). */
-    private const val LOITERING_DELAY_MS = 60_000
 
     private const val REQUEST_CODE = 4102
     private const val RETRY_WORK = "geofence-register"
@@ -75,16 +72,14 @@ object GeofenceRegistry {
     private const val CODE_TIMEOUT = -1
     private const val CODE_UNKNOWN = -2
 
-    fun radiusOf(place: GeofencePlace): Int = maxOf(place.radiusM, MIN_RADIUS_M)
-
     fun pendingIntent(context: Context, flags: Int): PendingIntent? {
         val intent = Intent(context, GeofenceReceiver::class.java).setAction(GeofenceReceiver.ACTION)
         return PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
     }
 
-    /** What the set would register as, so an unchanged hand-over registers nothing. */
-    fun hashOf(places: List<GeofencePlace>): String {
-        val text = places.take(MAX_GEOFENCES).map { keyOf(it) }.sorted().joinToString("\n")
+    /** What the set would register as. */
+    fun hashOf(triggers: List<Trigger>): String {
+        val text = triggers.take(MAX_GEOFENCES).map { keyOf(it) }.sorted().joinToString("\n")
         val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
         return digest.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
     }
@@ -124,9 +119,8 @@ object GeofenceRegistry {
         Outcome.FAILED
     }
 
-    /** What a geofence is made of; a place whose key changed is added again. */
-    private fun keyOf(place: GeofencePlace): String =
-        "${place.id}|${place.latitude}|${place.longitude}|${radiusOf(place)}"
+    /** What a geofence is made of; a trigger whose key changed is added again. */
+    private fun keyOf(trigger: Trigger): String = Triggers.geofenceKey(trigger)
 
     /**
      * The permission changed since the last registration, as when "always" was
@@ -147,7 +141,7 @@ object GeofenceRegistry {
             return Outcome.OFF
         }
         config.lastPermission = LocationPipeline.permission(context)
-        val all = config.places
+        val all = config.triggers
         val chosen = all.take(MAX_GEOFENCES)
         val ids = chosen.map { it.id }.toSet()
         val held = config.registeredIds
@@ -210,6 +204,36 @@ object GeofenceRegistry {
     }
 
     /**
+     * A pulled set (ADR-NET-007). Must run on [executor], so it never races the
+     * switch or a registration; the caller has checked the switch is on.
+     * Returns whether the set changed.
+     */
+    fun adopt(context: Context, json: String, etag: String?, set: TriggerSet): Boolean {
+        val config = GeofenceConfig(context)
+        // compiled_at changes at every compile; the rest is the set (04, section 2).
+        val changed = config.triggerSetJson?.let { Triggers.contentOf(it) } != Triggers.contentOf(json)
+        config.storeTriggers(json, etag, System.currentTimeMillis())
+        reportRejected(context, config, set)
+        if (changed) reconcileNow(context, REASON_TRIGGERS)
+        return changed
+    }
+
+    /** One `trigger.rejected` per id and version (04, section 4); the rest are forgotten. */
+    private fun reportRejected(context: Context, config: GeofenceConfig, set: TriggerSet) {
+        val reported = config.rejectedReported.toMutableSet()
+        val now = set.rejected.map { it.key }.toSet()
+        for (rejection in set.rejected) {
+            if (!reported.add(rejection.key)) continue
+            record(
+                context,
+                "trigger.rejected",
+                JSONObject().put("trigger", rejection.id).put("v", rejection.version).put("why", rejection.why.take(100)),
+            )
+        }
+        config.rejectedReported = now
+    }
+
+    /**
      * The system dropped every geofence: location went off. Runs on the
      * registry's thread, after any registration in progress, so that one cannot
      * overwrite this state or cancel the retry scheduled here; [done] runs after.
@@ -266,18 +290,19 @@ object GeofenceRegistry {
     }
 
     @SuppressLint("MissingPermission") // checked by the caller
-    private fun add(context: Context, places: List<GeofencePlace>): Task<Void> {
-        val geofences = places.map { place ->
+    private fun add(context: Context, triggers: List<Trigger>): Task<Void> {
+        val geofences = triggers.map { trigger ->
             Geofence.Builder()
-                .setRequestId(place.id)
-                .setCircularRegion(place.latitude, place.longitude, radiusOf(place).toFloat())
+                .setRequestId(trigger.id)
+                .setCircularRegion(trigger.latitude, trigger.longitude, Triggers.radiusOf(trigger).toFloat())
                 .setExpirationDuration(Geofence.NEVER_EXPIRE)
                 .setTransitionTypes(
                     Geofence.GEOFENCE_TRANSITION_ENTER or
                         Geofence.GEOFENCE_TRANSITION_DWELL or
                         Geofence.GEOFENCE_TRANSITION_EXIT,
                 )
-                .setLoiteringDelay(LOITERING_DELAY_MS)
+                // The trigger's own dwell (04, section 3); 0 fires on the enter.
+                .setLoiteringDelay(trigger.dwellS * 1000)
                 .setNotificationResponsiveness(0)
                 .build()
         }
@@ -314,7 +339,7 @@ object GeofenceRegistry {
     }
 
     /** Rows are written on the pipeline's thread, in order, then drained. */
-    private fun record(context: Context, status: String, detail: JSONObject) {
+    fun record(context: Context, status: String, detail: JSONObject) {
         LocationPipeline.write(context) {
             LocationPipeline.recordStatus(context, status, detail)
             LocationPipeline.scheduleDrain(context)

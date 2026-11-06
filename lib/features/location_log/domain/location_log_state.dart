@@ -12,6 +12,8 @@ class LocationLogState {
     this.alertsEnabled = false,
     this.geofenceCount = 0,
     this.geofencesAt,
+    this.triggerCount = 0,
+    this.triggersCheckedAt,
   });
 
   factory LocationLogState.fromMap(Map<Object?, Object?> map) {
@@ -29,6 +31,8 @@ class LocationLogState {
       alertsEnabled: map['alertsEnabled'] == true,
       geofenceCount: map['geofenceCount'] as int? ?? 0,
       geofencesAt: time(map['geofencesAtMs']),
+      triggerCount: map['triggerCount'] as int? ?? 0,
+      triggersCheckedAt: time(map['triggersCheckedAtMs']),
     );
   }
 
@@ -49,6 +53,12 @@ class LocationLogState {
 
   /// When they were last registered.
   final DateTime? geofencesAt;
+
+  /// Armed triggers in the set last pulled (ADR-NET-007); Dart sees only the count.
+  final int triggerCount;
+
+  /// When personal-agent last answered a pull, with a new set or "unchanged".
+  final DateTime? triggersCheckedAt;
 }
 
 enum LocationLogMode {

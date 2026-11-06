@@ -2,22 +2,12 @@ package com.voiceagent.voice_agent.location
 
 import android.content.Context
 import android.content.SharedPreferences
-import org.json.JSONArray
 import org.json.JSONObject
 
-/** A place as Dart hands it over, kept so boot needs no Flutter. */
-data class GeofencePlace(
-    val id: String,
-    val name: String,
-    val latitude: Double,
-    val longitude: Double,
-    val radiusM: Int,
-)
-
 /**
- * What the geofences of places remember (ADR-PLATFORM-010), in their own file,
- * apart from the location log's: the switch, the places last handed over, and
- * the set last registered.
+ * What the geofences remember (ADR-PLATFORM-010, ADR-NET-007), in their own
+ * file, apart from the location log's: the switch, the trigger set last pulled,
+ * and the geofences last registered.
  */
 class GeofenceConfig(context: Context) {
     private val prefs: SharedPreferences =
@@ -28,36 +18,73 @@ class GeofenceConfig(context: Context) {
         get() = prefs.getBoolean("alerts_enabled", false)
         set(value) = prefs.edit().putBoolean("alerts_enabled", value).apply()
 
-    /** In the order Dart sent them, which decides what the cap keeps. */
-    var places: List<GeofencePlace>
-        get() {
-            val raw = prefs.getString("places", null) ?: return emptyList()
-            val array = JSONArray(raw)
-            return (0 until array.length()).map { i ->
-                val o = array.getJSONObject(i)
-                GeofencePlace(
-                    id = o.getString("id"),
-                    name = o.optString("name"),
-                    latitude = o.getDouble("lat"),
-                    longitude = o.getDouble("lon"),
-                    radiusM = o.getInt("radius_m"),
-                )
+    /** The inner set as personal-agent sent it, `{"contract":1,…}`; null before the first pull. */
+    val triggerSetJson: String?
+        get() = prefs.getString("trigger_set", null)
+
+    /** The set's `ETag`, exactly as received (weak behind Cloudflare). */
+    val triggersEtag: String?
+        get() = prefs.getString("triggers_etag", null)
+
+    /** The last pull that personal-agent answered, with 200 or 304. */
+    val triggersCheckedAtMs: Long
+        get() = prefs.getLong("triggers_checked_at", 0)
+
+    /** The last pull tried, answered or not; a return to the app waits on it. */
+    var triggersTriedAtMs: Long
+        get() = prefs.getLong("triggers_tried_at", 0)
+        set(value) = prefs.edit().putLong("triggers_tried_at", value).apply()
+
+    /** A pull failed and none has worked since: the next failure writes no row. */
+    var triggersFailing: Boolean
+        get() = prefs.getBoolean("triggers_failing", false)
+        set(value) = prefs.edit().putBoolean("triggers_failing", value).apply()
+
+    /** `id|version` of each rejected trigger already reported (04, section 4). */
+    var rejectedReported: Set<String>
+        get() = prefs.getStringSet("rejected_reported", null)?.toSet() ?: emptySet()
+        set(value) = prefs.edit().putStringSet("rejected_reported", value).apply()
+
+    /** The stored set, read; empty before the first pull or if it cannot be read. */
+    val triggerSet: TriggerSet
+        get() = triggerSetJson?.let {
+            try {
+                Triggers.parse(JSONObject(it))
+            } catch (_: Exception) {
+                null
             }
-        }
-        set(value) {
-            val array = JSONArray()
-            for (p in value) {
-                array.put(
-                    JSONObject()
-                        .put("id", p.id)
-                        .put("name", p.name)
-                        .put("lat", p.latitude)
-                        .put("lon", p.longitude)
-                        .put("radius_m", p.radiusM),
-                )
-            }
-            prefs.edit().putString("places", array.toString()).apply()
-        }
+        } ?: TriggerSet(emptyList(), emptyList(), Triggers.DEFAULT_MAX_VISIT_S)
+
+    val triggers: List<Trigger>
+        get() = triggerSet.triggers
+
+    /** A 200: the new set replaces the old as a whole (04, section 2). */
+    fun storeTriggers(json: String, etag: String?, atMs: Long) {
+        prefs.edit()
+            .putString("trigger_set", json)
+            .putString("triggers_etag", etag)
+            .putLong("triggers_checked_at", atMs)
+            // Task 3's places, handed over by Dart, are no longer read.
+            .remove("places")
+            .apply()
+    }
+
+    /** A 304: the set stands. */
+    fun triggersChecked(atMs: Long) {
+        prefs.edit().putLong("triggers_checked_at", atMs).apply()
+    }
+
+    /** The switch went off: the next switch on pulls afresh. */
+    fun clearTriggers() {
+        prefs.edit()
+            .remove("trigger_set")
+            .remove("triggers_etag")
+            .remove("triggers_checked_at")
+            .remove("triggers_tried_at")
+            .remove("triggers_failing")
+            .remove("rejected_reported")
+            .apply()
+    }
 
     /**
      * Every id Play services may hold. After a failure it keeps the ids of

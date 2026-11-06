@@ -59,6 +59,10 @@ dependencies {
     implementation("androidx.work:work-runtime:2.11.2")
     implementation("com.google.android.gms:play-services-location:21.3.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // The trigger parser is tested off the device (ADR-NET-007); android.jar's
+    // org.json is a stub there, so the real one is put first.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }
 
 flutter {

@@ -27,6 +27,8 @@ void main() {
           'alertsEnabled': true,
           'geofenceCount': 12,
           'geofencesAtMs': 2000,
+          'triggerCount': 4,
+          'triggersCheckedAtMs': 3000,
         };
       }
       return null;
@@ -48,6 +50,11 @@ void main() {
     expect(state.alertsEnabled, isTrue);
     expect(state.geofenceCount, 12);
     expect(state.geofencesAt, DateTime.fromMillisecondsSinceEpoch(2000));
+    expect(state.triggerCount, 4);
+    expect(
+      state.triggersCheckedAt,
+      DateTime.fromMillisecondsSinceEpoch(3000),
+    );
   });
 
   test('commands carry their arguments', () async {
@@ -83,5 +90,7 @@ void main() {
     expect(state.alertsEnabled, isFalse);
     expect(state.geofenceCount, 0);
     expect(state.geofencesAt, isNull);
+    expect(state.triggerCount, 0);
+    expect(state.triggersCheckedAt, isNull);
   });
 }

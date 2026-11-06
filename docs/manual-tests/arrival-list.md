@@ -1,11 +1,11 @@
 # Manual test: the arrival list
 
-**Design:** [ADR-PLATFORM-010](../decisions/ADR-PLATFORM-010-geofences-of-places.md), [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); workspace epic `2026-11-places/01-arrival-list` and its trigger contract `compilations/notification-triggers/reviewed/04-trigger-contract.md`; PR #395 (task 3).
+**Design:** [ADR-PLATFORM-010](../decisions/ADR-PLATFORM-010-geofences-of-places.md), [ADR-NET-007](../decisions/ADR-NET-007-armed-triggers-pulled-in-background.md), [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); workspace epic `2026-11-places/01-arrival-list` and its trigger contract `compilations/notification-triggers/reviewed/04-trigger-contract.md`; PR #395 (task 3), PR #396 (task 4).
 **Overall status:** **pending**.
 **Why now:** geofences, the "always" permission, boot, update, force stop and location turned off exist only on a device.
 **When:** once, at the end of the epic, with the cases of tasks 4–6; nothing goes on the Pixel before then (owner's decision of 2026-11-05).
 **Time budget:** ~45 min for task 3's cases (agent, dev flavor over USB adb), then real arrivals (owner, stable on production).
-**What we are testing:** task 3: every place gets a geofence, registration survives everything the location log's subscription survives, and enter, dwell and exit become status rows of the log. Nothing is shown. Tasks 4–6 add their cases below.
+**What we are testing:** task 3: registration survives everything the location log's subscription survives, and enter, dwell and exit become status rows of the log. Task 4: the phone pulls the armed triggers, each trigger gets a geofence (a store with nothing to buy gets none), and an enter or dwell row says whether the trigger would fire. Nothing is shown. Tasks 5–6 add their cases below.
 
 ## Status legend
 
@@ -29,6 +29,10 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T9 | Mock transitions: enter, dwell and exit rows | pending |
 | T10 | A hands-free session runs alongside | pending |
 | T11 | Real arrivals on stable, in PA's Location view | pending |
+| T12 | The pull, and "unchanged" on the next start | pending |
+| T13 | A change in the list reaches the phone | pending |
+| T14 | Turning it off clears the set and stops the hourly pull | pending |
+| T15 | Offline: one `triggers_failed`, the set stands | pending |
 
 ---
 
@@ -38,7 +42,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 **Status:** pending
 
-**Do:** set up the test PA as `ws-device-check` describes (never `:8888`). Put three places in it with `PUT /api/v1/places/<uuid>`: one where the phone lies (home), two elsewhere.
+**Do:** set up the test PA as `ws-device-check` describes (never `:8888`). Put three places in it with `PUT /api/v1/places/<uuid>`: one where the phone lies (home), two elsewhere, each with a store type (e.g. `diy`, `grocery`, `garden`). Put one shopping item under each of the first two types, none under the third. `GET /api/v1/triggers` then holds two triggers: geofences come from triggers since task 4, not from places.
 
 ### S2. The dev build, debuggable, pointed at it
 
@@ -48,7 +52,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 1. `flutter build apk --flavor dev --debug --dart-define-from-file=$SP/env.mobile`, with the test PA's env file. A debug build, because `run-as` (S3) works only on a debuggable app.
 2. `adb -s <usb serial> install -r build/app/outputs/flutter-apk/app-dev-debug.apk`, then `pm clear com.voiceagent.voice_agent.dev`.
 3. Open Settings, read the URL, Test Connection. Open Miejsca: the three places load.
-4. Settings shows 1.16.0.
+4. Settings shows 1.17.0.
 
 Kotlin cannot post to an `http://` PA (ADR-PLATFORM-009, item 8), so on dev the rows stay in the phone's queue and are read there (S3), not in PA. "Ostatni błąd wysyłki" showing a cleartext error is expected.
 
@@ -63,7 +67,7 @@ sqlite3 $SP/location_log.db "SELECT seq, id, payload FROM location_queue ORDER B
 adb -s <serial> exec-out run-as $P cat shared_prefs/geofences.xml
 ```
 
-The screen (Settings → Dziennik lokalizacji) shows "obszary: N", "Zarejestrowane: <time>" and "W kolejce: N". Every new row's `id` is a UUIDv7: the 13th hex digit is `7`.
+The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone <time>", "obszary: N", "Zarejestrowane: <time>" and "W kolejce: N". `geofences.xml` holds the set (`trigger_set`) and its `triggers_etag`. Every new row's `id` is a UUIDv7: the 13th hex digit is `7`.
 
 ---
 
@@ -80,7 +84,7 @@ The screen (Settings → Dziennik lokalizacji) shows "obszary: N", "Zarejestrowa
 **Expected:** "Alerty w sklepach" off, "obszary: 0", no time; no `geofences_*` or `place.*` row in the queue; `geofences.xml` has no `registered_hash`.
 **On failure:** `GeofenceConfig.alertsEnabled` default; `GeofenceRegistry.removeAll` writes `geofences_removed` only for reason `switch` or a past registration.
 
-### T2. Turning it on asks for permissions and registers every place
+### T2. Turning it on asks for permissions and registers a geofence per trigger
 
 **Status:** pending
 **Do:**
@@ -88,8 +92,8 @@ The screen (Settings → Dziennik lokalizacji) shows "obszary: N", "Zarejestrowa
 2. Grant while-in-use, notifications, then "all the time" on the settings page; come back.
 3. Read the screen and the queue.
 
-**Why:** the switch is the consent and asks for background location and notifications (epic §3.6, owner's decision 3 of 2026-11-05); every place gets a geofence.
-**Expected:** the three dialogs in that order; "obszary: 3" with a time; a `geofences_registered` row, detail `{"count":3,"reason":"switch"}` (or `"retry"` if "always" came only after the first try, see T4).
+**Why:** the switch is the consent and asks for background location and notifications (epic §3.6, owner's decision 3 of 2026-11-05); each armed trigger gets a geofence (ADR-NET-007, item 5).
+**Expected:** the three dialogs in that order; `geofences_registered` `{"count":0,"reason":"switch"}` (the set is empty until the pull), then `triggers_pulled` `{"count":2,"changed":true,"reason":"switch"}` and `geofences_registered` `{"count":2,"added":2,"reason":"triggers_changed"}`; "wyzwalacze: 2", "obszary: 2" with a time. The third place, with nothing to buy, has no geofence. If "always" came only after the first try, see T4.
 **On failure:** `_setAlertsEnabled` in `location_log_screen.dart`; `GeofenceRegistry.reconcile`; `geofences_failed` with its `code` says why (1004: permission; 1000: location off).
 
 ### T3. Rows follow "Alerty w sklepach" alone, with the log paused
@@ -120,13 +124,13 @@ The screen (Settings → Dziennik lokalizacji) shows "obszary: N", "Zarejestrowa
 
 **Status:** pending
 **Do:**
-1. Name a fourth place in Miejsca.
-2. Delete it.
-3. Rename one of the others.
+1. Name a fourth place in Miejsca, with the first place's store type; bring the app back to front after 5 minutes (or restart it).
+2. Delete it; the same.
+3. Rename one of the others; the same.
 
-**Why:** the set's hash: a change of places registers again, a new name alone does not.
-**Expected:** 1: `geofences_registered` `{"count":4,"reason":"places_changed"}`, "obszary: 4". 2: the same with 3. 3: no new row; `geofences.xml` holds the new name.
-**On failure:** `placeGeofencesSyncProvider` (did Dart send?) and `PlaceGeofencesBridge` (hash compare).
+**Why:** since task 4 places reach the geofences only through personal-agent's triggers; the geofence's key leaves out the text (ADR-NET-007, item 5).
+**Expected:** 1: `triggers_pulled` `{"count":3,…}`, `geofences_registered` `{"count":3,"added":1,"reason":"triggers_changed"}`. 2: count 2, added 0. 3: `triggers_pulled` (the title changed) and no `geofences_registered` row (nothing to add or remove).
+**On failure:** `TriggerPuller` (was the return within 5 minutes of the last try?), `GeofenceRegistry.adoptAndWait` and `Triggers.geofenceKey`.
 
 ### T6. Reboot, update and force stop each register again
 
@@ -173,7 +177,7 @@ The screen (Settings → Dziennik lokalizacji) shows "obszary: N", "Zarejestrowa
 4. Remove the test provider; read the queue.
 
 **Why:** S1.1 of the epic: each enter, dwell and exit becomes a status row with the phone's time and 03's event type.
-**Expected:** `place.entered` with `"transition":"enter"`, then `"dwell"` about 60 s later, then `place.left` with `"exit"`; detail has `place`, `name`, `radius_m`, `fix_at`, `accuracy_m`; `recorded_at` after `fix_at`. If Play services' geofencing ignores the test provider, record "skipped (mock ignored)": T11 covers it.
+**Expected:** `place.entered` with `"transition":"enter"` and `"would_fire":false`, then `"dwell"` about 60 s later with `"would_fire":true`, then `place.left` with `"exit"`; detail has `place` (`place:<id>`), `trigger`, `v`, `name` (the trigger's title), `radius_m`, `fix_at`, `accuracy_m`; `recorded_at` after `fix_at`. Use a place with something to buy: the third has no geofence. If Play services' geofencing ignores the test provider, record "skipped (mock ignored)": T11 covers it.
 **On failure:** `GeofenceReceiver.record`; whether the fused provider took the mock (`adb shell dumpsys location`).
 
 ### T10. A hands-free session runs alongside
@@ -194,8 +198,52 @@ The screen (Settings → Dziennik lokalizacji) shows "obszary: N", "Zarejestrowa
 **Expected:** `place.entered` and `place.left` rows at home and in stores in the Location view; `fix_at` against `recorded_at` and the log's readings give the delay; read with the epic's ten visits.
 **On failure:** `geofences_failed` and `app.location_degraded` rows in the same view.
 
+### T12. The pull, and "unchanged" on the next start
+
+**Status:** pending
+**Do:**
+1. Alerts on, after T2. Note "sprawdzone <time>".
+2. Force stop the app (`am force-stop`, confirm no pid), wait a minute, open it.
+3. Read the screen, the queue, and the test PA's log of requests.
+
+**Why:** the set's version is its `ETag`; an unchanged set is a `304` (04, section 2; ADR-NET-007, item 2).
+**Expected:** PA logs `GET /api/v1/triggers` with `If-None-Match` and answers 304; "sprawdzone" moves to the new time; no new `triggers_pulled` row.
+**On failure:** `triggers_etag` in `geofences.xml`; PA's ETag match (ADR-API-114, weak).
+
+### T13. A change in the list reaches the phone
+
+**Status:** pending
+**Do:**
+1. Add an item under the third place's store type in the test PA.
+2. Leave the phone alone, screen off, for up to 75 minutes (the hourly job), then read the queue.
+3. Tick the item off and repeat.
+
+**Why:** criterion 1 of the epic: a change in places or the list re-arms within about an hour, with the app closed (ADR-NET-007, item 1).
+**Expected:** 2: `triggers_pulled` `{"count":3,"changed":true,"reason":"hourly"}` and `geofences_registered` with `"added":1`. 3: count 2 and the third geofence removed.
+**On failure:** `adb shell dumpsys jobscheduler | grep -A5 voice_agent.dev` (the job and its network constraint); Doze can delay it: note how long.
+
+### T14. Turning it off clears the set and stops the hourly pull
+
+**Status:** pending
+**Do:** turn "Alerty w sklepach" off; read `geofences.xml`, the job list and, after an hour, PA's log.
+
+**Why:** the switch is the consent; with it off nothing is pulled (ADR-NET-007, items 1 and 3).
+**Expected:** `geofences.xml` has no `trigger_set` and no `triggers_etag`; the job is gone from `dumpsys jobscheduler`; PA logs no `GET /triggers` from the phone. Turning it on again pulls at once (T2's rows).
+**On failure:** `LocationBridge` `setAlertsEnabled` and `TriggerPuller.cancel`.
+
+### T15. Offline: one `triggers_failed`, the set stands
+
+**Status:** pending
+**Do:** under `trap '… airplane-mode disable' EXIT`, airplane mode on; force stop and open the app twice, 6 minutes apart; airplane mode off; open the app after 5 minutes.
+
+**Why:** a failed pull keeps the set last pulled, and the phone fires from it offline (criterion 5; ADR-NET-007, item 2).
+**Expected:** one `triggers_failed` row for both tries; "wyzwalacze: 2" and "obszary: 2" stay; after the network returns, `triggers_pulled` `{"changed":false,…}`.
+**On failure:** `triggers_failing` in `geofences.xml`.
+
+A rejected trigger (`trigger.rejected`) cannot be made by personal-agent today, which compiles only what goal 2 builds; the JVM tests in `android/app/src/test/` cover it.
+
 ---
 
 ## When this plan is done
 
-Task 3: T1–T8 and T10 are must-pass. T9 is conditional on Play services taking a test provider; if it does not, T11 alone proves the rows. T11 is read with the epic's ten visits. The plan runs at the epic's end, so it is not a gate of task 3's merge. Tasks 4–6 add their cases and their own must-pass list.
+Task 3: T1–T8 and T10 are must-pass. T9 is conditional on Play services taking a test provider; if it does not, T11 alone proves the rows. T11 is read with the epic's ten visits. The plan runs at the epic's end, so it is not a gate of task 3's merge. Task 4: T12, T14 and T15 are must-pass, with T2, T5 and T9 as they read since task 4; T13 is must-pass with its delay noted, since Doze may hold the job. Tasks 5–6 add their cases and their own must-pass list.

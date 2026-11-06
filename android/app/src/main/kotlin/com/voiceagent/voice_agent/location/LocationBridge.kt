@@ -43,6 +43,8 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 "alertsEnabled" to geofences.alertsEnabled,
                 "geofenceCount" to geofences.registeredCount,
                 "geofencesAtMs" to geofences.registeredAtMs,
+                "triggerCount" to geofences.triggers.size,
+                "triggersCheckedAtMs" to geofences.triggersCheckedAtMs,
             )
             "setCredentials" -> {
                 config.apiUrl = call.argument<String>("apiUrl")
@@ -56,13 +58,22 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                     LocationPipeline.reconcile(context, "switch")
                 }
             }
-            // "Alerty w sklepach": the geofences of places, apart from the log's switch.
+            // "Alerty w sklepach": the triggers' geofences, apart from the log's switch.
             "setAlertsEnabled" -> {
                 val enabled = call.argument<Boolean>("enabled") == true
                 if (enabled != geofences.alertsEnabled) {
                     geofences.alertsEnabled = enabled
+                    if (!enabled) {
+                        TriggerPuller.cancel(context)
+                        // The next switch on pulls afresh (ADR-NET-007).
+                        geofences.clearTriggers()
+                    }
                     // On the registry's thread (see above), so the reply comes once registered.
                     GeofenceRegistry.reconcileNow(context, GeofenceRegistry.REASON_SWITCH)
+                    if (enabled) {
+                        TriggerPuller.schedule(context)
+                        TriggerPuller.pullLater(context, TriggerPuller.REASON_SWITCH)
+                    }
                 }
             }
             "setMode" -> {
@@ -81,13 +92,21 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
-            // A return to the app: "always" may have been granted on the settings page.
-            "appResumed" -> GeofenceRegistry.permissionMayHaveChanged(context)
+            // A return to the app: "always" may have been granted on the settings
+            // page, and the triggers may be due (at most once per 5 minutes).
+            "appResumed" -> {
+                GeofenceRegistry.permissionMayHaveChanged(context)
+                TriggerPuller.appResumed(context)
+            }
             "reconcile" -> {
                 try {
                     LocationPipeline.reconcile(context, "app_start")
                 } finally {
                     GeofenceRegistry.reconcileLater(context, "app_start")
+                    if (geofences.alertsEnabled) {
+                        TriggerPuller.schedule(context)
+                        TriggerPuller.pullLater(context, TriggerPuller.REASON_APP_START)
+                    }
                 }
             }
             else -> return NOT_IMPLEMENTED

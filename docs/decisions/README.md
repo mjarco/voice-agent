@@ -85,6 +85,7 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-NET-004](ADR-NET-004-app-version-sync-header.md) | Report installed app version via X-App-Version sync header | Accepted |
 | [ADR-NET-005](ADR-NET-005-location-log-background-upload.md) | The location log uploads in the background | Accepted |
 | [ADR-NET-006](ADR-NET-006-places-local-copy-and-queue.md) | Places are written on the phone first and sent while the app is in use | Accepted |
+| [ADR-NET-007](ADR-NET-007-armed-triggers-pulled-in-background.md) | Armed triggers are pulled in the background, and geofences come from them | Accepted |
 
 ### NOTIF — Local Notifications
 
@@ -101,4 +102,4 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-PLATFORM-002](ADR-PLATFORM-002-cancel-on-background.md) | Cancel-on-background policy for recording | Accepted |
 | [ADR-PLATFORM-003](ADR-PLATFORM-003-permission-via-record-package.md) | Microphone permission via record package | Accepted |
 | [ADR-PLATFORM-009](ADR-PLATFORM-009-native-location-pipeline.md) | The location log runs natively, apart from Flutter | Accepted |
-| [ADR-PLATFORM-010](ADR-PLATFORM-010-geofences-of-places.md) | Geofences of places run natively beside the location log | Accepted |
+| [ADR-PLATFORM-010](ADR-PLATFORM-010-geofences-of-places.md) | Geofences of places run natively beside the location log | Accepted; items 1–2 superseded by ADR-NET-007 |

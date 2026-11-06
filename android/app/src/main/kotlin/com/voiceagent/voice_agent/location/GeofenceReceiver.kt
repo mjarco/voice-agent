@@ -10,9 +10,11 @@ import java.time.Instant
 import org.json.JSONObject
 
 /**
- * The system wakes this at a place's enter, dwell or exit (ADR-PLATFORM-010).
- * Each becomes a status row of the location log, named by the event types of
- * 03: `place.entered` for enter and dwell, `place.left` for exit.
+ * The system wakes this at a trigger's enter, dwell or exit (ADR-PLATFORM-010,
+ * ADR-NET-007). Each becomes a status row of the location log, named by the
+ * event types of 03: `place.entered` for enter and dwell, `place.left` for exit.
+ * An enter or dwell row says whether the trigger would fire; nothing is shown
+ * until task 5, which also judges once per visit.
  */
 class GeofenceReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -56,16 +58,27 @@ class GeofenceReceiver : BroadcastReceiver() {
             Geofence.GEOFENCE_TRANSITION_EXIT -> "place.left" to "exit"
             else -> return
         }
-        val places = config.places.associateBy { it.id }
+        val triggers = config.triggers.associateBy { it.id }
         val fix = event.triggeringLocation
+        val nowMs = receivedAt.toEpochMilli()
         for (geofence in event.triggeringGeofences.orEmpty()) {
-            val place = places[geofence.requestId]
+            val trigger = triggers[geofence.requestId]
             val detail = JSONObject()
-                .put("place", geofence.requestId)
-                .put("transition", transition)
-            place?.let {
-                detail.put("name", it.name.takeCodePoints(MAX_NAME))
-                detail.put("radius_m", GeofenceRegistry.radiusOf(it))
+            if (trigger == null) {
+                // A geofence of a set already replaced: only the trigger's id is known.
+                detail.put("trigger", geofence.requestId).put("transition", transition)
+            } else {
+                detail.put("place", trigger.place)
+                    .put("transition", transition)
+                    .put("trigger", trigger.id)
+                    .put("v", trigger.version)
+                    // The trigger carries no place name; its title starts with it.
+                    .put("name", trigger.title.takeCodePoints(MAX_NAME))
+                    .put("radius_m", Triggers.radiusOf(trigger))
+                if (status == "place.entered") {
+                    detail.put("would_fire", Triggers.wouldFire(trigger, transition, nowMs))
+                    if (Triggers.expired(trigger, nowMs)) detail.put("expired", true)
+                }
             }
             if (fix != null) {
                 detail.put("fix_at", Instant.ofEpochMilli(fix.time).toString())

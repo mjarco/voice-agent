@@ -51,6 +51,8 @@ LocationLogState _state({
   bool alerts = false,
   int geofences = 0,
   DateTime? geofencesAt,
+  int triggers = 0,
+  DateTime? triggersAt,
 }) => LocationLogState(
   enabled: enabled,
   mode: mode,
@@ -61,6 +63,8 @@ LocationLogState _state({
   alertsEnabled: alerts,
   geofenceCount: geofences,
   geofencesAt: geofencesAt,
+  triggerCount: triggers,
+  triggersCheckedAt: triggersAt,
 );
 
 bool _switchValue(WidgetTester tester, String key) =>
@@ -143,7 +147,8 @@ void main() {
       expect(find.text('Alerty w sklepach'), findsOneWidget);
       expect(_switchValue(tester, 'location-log-switch'), isTrue);
       expect(_switchValue(tester, 'arrival-alerts-switch'), isFalse);
-      expect(find.textContaining('obszary: 0'), findsOneWidget);
+      expect(find.textContaining('wyzwalacze: 0 · obszary: 0'), findsOneWidget);
+      expect(find.textContaining('sprawdzone'), findsNothing);
       await tester.pumpWidget(const SizedBox());
     });
 
@@ -188,8 +193,14 @@ void main() {
             alerts: true,
             geofences: 14,
             geofencesAt: DateTime(2026, 11, 5, 9, 7, 3),
+            triggers: 15,
+            triggersAt: DateTime(2026, 11, 5, 9, 6, 0),
           ),
         ),
+      );
+      expect(
+        find.textContaining('wyzwalacze: 15, sprawdzone 5.11 09:06:00'),
+        findsOneWidget,
       );
       expect(find.textContaining('obszary: 14'), findsOneWidget);
       expect(
