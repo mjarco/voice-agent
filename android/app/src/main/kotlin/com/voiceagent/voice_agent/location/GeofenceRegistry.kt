@@ -130,13 +130,23 @@ object GeofenceRegistry {
             removeAll(context, config, reason)
             return Outcome.OFF
         }
-        config.lastPermission = LocationPipeline.permission(context)
+        val previousPermission = config.lastPermission
+        val permission = LocationPipeline.permission(context)
+        config.lastPermission = permission
+        val fine = fineGranted(context)
+        val background = backgroundGranted(context)
         val all = config.triggers
         val chosen = all.take(MAX_GEOFENCES)
         val ids = chosen.map { it.id }.toSet()
         val held = config.registeredIds
-        val standing = config.registeredHash != null && !config.degraded && backgroundGranted(context) &&
-            pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE) != null
+        val standing = RegistrationPlan.standing(
+            hashKnown = config.registeredHash != null,
+            degraded = config.degraded,
+            intentAlive = pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE) != null,
+            allowed = fine && background,
+            previousPermission = previousPermission,
+            permission = permission,
+        )
         val plan = RegistrationPlan.of(reason, standing, chosen, held, config.registeredKeys)
         val toAdd = plan.toAdd
         val gone = plan.gone
@@ -151,6 +161,18 @@ object GeofenceRegistry {
         }
         val client = LocationServices.getGeofencingClient(context)
         try {
+            if (toAdd.isNotEmpty() && !(fine && background)) {
+                // Held geofences would never report: take them all out, then say
+                // why. Without "all the time" Play services may accept geofences
+                // and stay silent, so the missing permission is said here.
+                try {
+                    pendingIntent(context, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_MUTABLE)
+                        ?.let { await(client.removeGeofences(it)) }
+                } catch (_: Exception) {
+                    // Kept as uncertain below: the next registration removes them first.
+                }
+                throw SecurityException(if (!fine) "no fine location" else "no background location")
+            }
             if (config.registeredHash == null && held.isNotEmpty()) {
                 // The last attempt failed half-way: what Play services holds is
                 // unknown, so start from nothing rather than leave a stale one.
@@ -159,13 +181,7 @@ object GeofenceRegistry {
             } else if (gone.isNotEmpty()) {
                 await(client.removeGeofences(gone.toList()))
             }
-            if (toAdd.isNotEmpty()) {
-                if (!fineGranted(context)) throw SecurityException("no fine location")
-                // Without "all the time" Play services may accept the geofences
-                // and never report them, so the missing permission is said here.
-                if (!backgroundGranted(context)) throw SecurityException("no background location")
-                await(add(context, toAdd))
-            }
+            if (toAdd.isNotEmpty()) await(add(context, toAdd))
         } catch (failure: Exception) {
             val code = codeOf(failure)
             // Every id that may still be held is kept, so the next try removes it.

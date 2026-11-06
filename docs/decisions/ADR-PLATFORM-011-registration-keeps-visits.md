@@ -33,17 +33,25 @@ section 2) found three defects in one function, `GeofenceRegistry.reconcile`:
 2. **`restart_after_stop` keeps the registration** like the app start and a new trigger set, while
    it stands. A force stop cancels the intent, so after a real one everything is still added again;
    a reboot (`reboot`) and an update still add everything.
-3. **A registration stands only with "all the time".** Without it the app start does not return
-   unchanged, and an add is refused before Play services with code 1004: `geofences_failed`, the
-   held ids kept as uncertain (so the screen shows "obszary: 0"), no retry job, and a return to the
-   app with the permission changed registers (ADR-PLATFORM-010 item 4 stands). Before Android 10
-   the fine permission includes it.
-4. The decision is computed by `RegistrationPlan`, pure Kotlin with JVM tests; the registry only
-   calls Play services.
+3. **A registration stands only with fine location all the time, unchanged since it was made.**
+   Without "all the time", or with precise location turned off, Play services stops reporting, so
+   the app start does not return unchanged. Any change of the permission since the last
+   registration also makes the next one try in full. An add without the permission first removes
+   every geofence of the app (by its intent; a failure is left to the next registration), then fails
+   before Play services with code 1004: `geofences_failed`, the held ids kept as uncertain (so the
+   screen shows "obszary: 0"), no retry job, and a return to the app with the permission changed
+   registers (ADR-PLATFORM-010 item 4 stands). Before Android 10 the fine permission includes
+   "all the time".
+4. The decision is computed by `RegistrationPlan` (`standing` and `of`), pure Kotlin with JVM
+   tests; the registry reads the permissions and the intent and calls Play services.
 
 ## Consequences
 
 - A visit can outlive a missed exit by up to `max_visit_s`. That is one alert held back on a
   return within 6 h, against a second alert in the same visit on any force stop or kill.
 - Android 17's boot broadcast after a kill no longer costs a re-registration or a row.
+- A trigger withdrawn and armed again while you stand inside (the last item ticked off, a new one
+  added; or a trigger pushed out of the first 100 and back) has lost its visit, so its dwell may
+  fire a second alert. Accepted: both are rare, and the visit of a withdrawn trigger has nothing
+  left to hold back.
 - The manual plan `docs/manual-tests/arrival-list.md` T4, T6 and T17 change their expected results.

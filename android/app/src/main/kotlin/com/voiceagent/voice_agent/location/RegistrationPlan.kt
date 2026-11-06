@@ -39,11 +39,23 @@ object RegistrationPlan {
     )
 
     /**
-     * [standing] says the last registration is still held: its hash is known,
-     * location was not lost, the intent survived (a force stop cancels it) and
-     * location is allowed all the time. Without that last one Play services
-     * stops reporting, so a registration with "while in use" is not intact.
+     * Whether the last registration is still held and reporting: its hash is
+     * known, location was not lost, the intent survived (a force stop cancels
+     * it), fine location is allowed all the time ([allowed]), and the
+     * permission is the one it was registered with. Without fine or background
+     * location Play services stops reporting, so such a registration does not
+     * stand, and any change of the permission makes the next one try in full.
      */
+    fun standing(
+        hashKnown: Boolean,
+        degraded: Boolean,
+        intentAlive: Boolean,
+        allowed: Boolean,
+        previousPermission: String?,
+        permission: String,
+    ): Boolean = hashKnown && !degraded && intentAlive && allowed && previousPermission == permission
+
+    /** [standing] is [RegistrationPlan.standing]'s answer. */
     fun of(
         reason: String,
         standing: Boolean,

@@ -36,11 +36,45 @@ class RegistrationPlanTest {
         assertEquals(listOf(a, b), plan.toAdd)
     }
 
+    private fun standing(
+        allowed: Boolean = true,
+        previous: String? = "always",
+        now: String = "always",
+        intentAlive: Boolean = true,
+    ) = RegistrationPlan.standing(
+        hashKnown = true,
+        degraded = false,
+        intentAlive = intentAlive,
+        allowed = allowed,
+        previousPermission = previous,
+        permission = now,
+    )
+
+    @Test
+    fun aRegistrationStandsOnlyWithItsIntentAndAllTheTimeUnchanged() {
+        assertTrue(standing())
+        // A force stop cancels the intent.
+        assertFalse(standing(intentAlive = false))
+        // Defect D3: "all the time" revoked; the process restarts with while_in_use.
+        assertFalse(standing(allowed = false, now = "while_in_use"))
+        // Precise location off, "all the time" kept: fine is gone, so no geofence reports.
+        assertFalse(standing(allowed = false, now = "approximate"))
+        // Any change since the last registration makes the next one try in full.
+        assertFalse(standing(previous = "while_in_use"))
+        assertFalse(standing(previous = null))
+    }
+
     @Test
     fun withoutAllTheTimeTheAppStartAddsEverythingAgain() {
-        // Defect D3: the registry passes standing = false without "all the time",
-        // so the add is tried and fails with 1004 instead of returning unchanged.
-        val plan = RegistrationPlan.of(RegistrationPlan.REASON_APP_START, false, listOf(a, b), held, heldKeys)
+        // Defect D3: the app start no longer returns unchanged, so the add is
+        // tried and refused with 1004 (the registry's part, run on the device, T4).
+        val plan = RegistrationPlan.of(
+            RegistrationPlan.REASON_APP_START,
+            standing(allowed = false, now = "while_in_use"),
+            listOf(a, b),
+            held,
+            heldKeys,
+        )
         assertFalse(plan.intact)
         assertEquals(listOf(a, b), plan.toAdd)
     }
@@ -73,6 +107,7 @@ class RegistrationPlanTest {
     fun aDwellAfterARegistrationMidVisitDoesNotFireAgain() {
         // Defect D1, T17: fired, then a force stop re-adds every geofence, and
         // Play services reports a dwell about 65 s later while you stand inside.
+        // The re-add forgets no visit, so the visit's once holds the dwell.
         val entered = Visits.step(emptyMap(), a.id, a, "enter", t0, maxVisitS)
         val fired = Visits.step(entered.visits, a.id, a, "dwell", t0 + 60_000, maxVisitS)
         assertTrue(fired.fire)

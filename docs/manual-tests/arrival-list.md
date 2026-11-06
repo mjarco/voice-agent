@@ -129,7 +129,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 4. Tap "Nadaj", grant "all the time", come back to the app; read the screen and the queue.
 
 **Why:** ADR-PLATFORM-010 item 4: a missing permission is not retried; a return to the app with the permission changed registers. ADR-PLATFORM-011 item 3: without "all the time" a registration does not stand, so the app start reports it.
-**Expected:** after 2: `geofences_failed` `{"code":1004,"reason":"app_start",…}`, "obszary: 0", "Nadaj" shown. After 3: no new row (no retry job for 1004). After 4: `geofences_registered` with `"reason":"permission_changed"` within seconds, and "obszary" back to the number of triggers. "Nadaj" opens App info in system settings; a driver that does not tap there grants with `pm grant`, which takes the same return path.
+**Expected:** after 2: `geofences_failed` `{"code":1004,…}` with `"reason"` `restart_after_stop` (Android 17 sends the boot broadcast after the revoke's kill) or `app_start`, possibly one of each; "obszary: 0", "Nadaj" shown. After 3: no new row (no retry job for 1004). After 4: `geofences_registered` with `"reason":"permission_changed"` within seconds, and "obszary" back to the number of triggers. "Nadaj" opens App info in system settings; a driver that does not tap there grants with `pm grant`, which takes the same return path.
 **On failure:** the code in the row; `locationLogResumeProvider` (did Dart call `appResumed`?) and `GeofenceRegistry.permissionMayHaveChanged` (`last_permission` in `geofences.xml`).
 
 ### T5. Adding, deleting and renaming a place
