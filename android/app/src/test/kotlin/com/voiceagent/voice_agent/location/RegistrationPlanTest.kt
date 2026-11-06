@@ -19,6 +19,24 @@ class RegistrationPlanTest {
     private val heldKeys = setOf(Triggers.geofenceKey(a), Triggers.geofenceKey(b))
 
     @Test
+    fun aRestartAfterAProcessKillWithTheRegistrationStandingAddsNothing() {
+        // Defect D2: Android 17 sends the boot broadcast after a plain kill.
+        val plan = RegistrationPlan.of(RegistrationPlan.REASON_RESTART_AFTER_STOP, true, listOf(a, b), held, heldKeys)
+        assertTrue(plan.intact)
+        assertTrue(plan.toAdd.isEmpty())
+        assertTrue(plan.gone.isEmpty())
+        assertTrue(plan.forget.isEmpty())
+    }
+
+    @Test
+    fun aRestartAfterAForceStopAddsEverythingAgain() {
+        // A force stop cancels the intent, so the registration does not stand.
+        val plan = RegistrationPlan.of(RegistrationPlan.REASON_RESTART_AFTER_STOP, false, listOf(a, b), held, heldKeys)
+        assertFalse(plan.intact)
+        assertEquals(listOf(a, b), plan.toAdd)
+    }
+
+    @Test
     fun aRebootAddsEverythingAgainAndForgetsNoVisit() {
         val plan = RegistrationPlan.of("reboot", true, listOf(a, b), held, heldKeys)
         assertFalse(plan.intact)
@@ -50,7 +68,7 @@ class RegistrationPlanTest {
         val fired = Visits.step(entered.visits, a.id, a, "dwell", t0 + 60_000, maxVisitS)
         assertTrue(fired.fire)
 
-        val plan = RegistrationPlan.of("restart_after_stop", false, listOf(a, b), held, heldKeys)
+        val plan = RegistrationPlan.of(RegistrationPlan.REASON_RESTART_AFTER_STOP, false, listOf(a, b), held, heldKeys)
         val kept = fired.visits - plan.forget
         val again = Visits.step(kept, a.id, a, "dwell", t0 + 300_000, maxVisitS)
         assertFalse(again.fire)

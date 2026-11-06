@@ -10,17 +10,23 @@ object RegistrationPlan {
     /** The app started, and found its registration. */
     const val REASON_APP_START = "app_start"
 
+    /**
+     * The boot broadcast with no reboot: Android sends it at the next start
+     * after a force stop, and on Android 17 after a plain process kill too.
+     */
+    const val REASON_RESTART_AFTER_STOP = "restart_after_stop"
+
     const val REASON_TRIGGERS = "triggers_changed"
 
     /**
      * Reasons after which Play services may still hold what was registered:
-     * the app start and a new trigger set.
+     * the app start, a restart after the process ended, and a new trigger set.
      * Whether it does is the caller's `standing`. For these only new or changed
      * geofences are added: adding one again replaces it and resets its state,
      * so a visit in progress would lose its enter and dwell. Every other reason
      * (boot, update, retry, the switch, a permission change) adds them all.
      */
-    val KEEPING_REASONS = setOf(REASON_APP_START, REASON_TRIGGERS)
+    val KEEPING_REASONS = setOf(REASON_APP_START, REASON_RESTART_AFTER_STOP, REASON_TRIGGERS)
 
     data class Plan(
         /** The last registration stands, so only what changed is added. */
