@@ -28,8 +28,8 @@ import org.json.JSONObject
 
 /**
  * Geofences of the armed triggers (ADR-PLATFORM-010, ADR-NET-007): one per
- * trigger, registered beside the location log. They write rows; nothing is
- * shown until task 5.
+ * trigger, registered beside the location log. They write rows, and a firing
+ * transition posts an alert (ADR-NOTIF-003).
  *
  * Registration is safe to repeat, as the pipeline's subscription is: geofences
  * are lost at a reboot, an update, a force stop and when location goes off, so

@@ -74,6 +74,22 @@ class GeofenceConfig(context: Context) {
         prefs.edit().putLong("triggers_checked_at", atMs).apply()
     }
 
+    /**
+     * Visits in progress (ADR-NOTIF-003). Read and written only on the
+     * pipeline's thread, so a broadcast and the switch never interleave; saved
+     * with `commit`, so a restart right after an alert does not fire it again.
+     */
+    var visits: Map<String, Visit>
+        get() = Visits.fromJson(prefs.getString("visits", null))
+        set(value) {
+            prefs.edit().putString("visits", Visits.toJson(value)).commit()
+        }
+
+    /** The switch went off: the next switch on starts with no visit. Pipeline's thread. */
+    fun clearVisits() {
+        prefs.edit().remove("visits").commit()
+    }
+
     /** The switch went off: the next switch on pulls afresh. */
     fun clearTriggers() {
         prefs.edit()

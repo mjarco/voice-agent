@@ -62,21 +62,34 @@ object LocationPipeline {
         }
     }
 
-    fun recordStatus(context: Context, status: String, detail: String? = null, recordedAt: Instant = Instant.now()) {
+    /** Returns the row's id. */
+    fun recordStatus(
+        context: Context,
+        status: String,
+        detail: String? = null,
+        recordedAt: Instant = Instant.now(),
+        id: String = Uuid7.next(),
+    ): String {
         val payload = JSONObject()
             .put("kind", "status")
             .put("recorded_at", recordedAt.toString())
             .put("status", status)
         // The server refuses a longer one, and a refused row is gone.
         detail?.let { payload.put("detail", it.take(MAX_DETAIL_LENGTH)) }
-        LocationStore.get(context).enqueue(payload)
+        return LocationStore.get(context).enqueue(payload, id)
     }
 
     /**
      * A status whose detail is JSON. Cutting it at 500 characters would leave
      * half an object, so it is kept whole or shrunk by dropping the name.
      */
-    fun recordStatus(context: Context, status: String, detail: JSONObject, recordedAt: Instant = Instant.now()) {
+    fun recordStatus(
+        context: Context,
+        status: String,
+        detail: JSONObject,
+        recordedAt: Instant = Instant.now(),
+        id: String = Uuid7.next(),
+    ): String {
         var text = detail.toString()
         if (text.length > MAX_DETAIL_LENGTH) {
             detail.remove("name")
@@ -85,7 +98,7 @@ object LocationPipeline {
         if (text.length > MAX_DETAIL_LENGTH) {
             text = JSONObject().put("detail_too_long", text.length).toString()
         }
-        recordStatus(context, status, text, recordedAt)
+        return recordStatus(context, status, text, recordedAt, id)
     }
 
     fun recordReadings(context: Context, locations: List<Location>, config: LocationConfig) {

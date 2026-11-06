@@ -85,14 +85,15 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-NET-004](ADR-NET-004-app-version-sync-header.md) | Report installed app version via X-App-Version sync header | Accepted |
 | [ADR-NET-005](ADR-NET-005-location-log-background-upload.md) | The location log uploads in the background | Accepted |
 | [ADR-NET-006](ADR-NET-006-places-local-copy-and-queue.md) | Places are written on the phone first and sent while the app is in use | Accepted |
-| [ADR-NET-007](ADR-NET-007-armed-triggers-pulled-in-background.md) | Armed triggers are pulled in the background, and geofences come from them | Accepted |
+| [ADR-NET-007](ADR-NET-007-armed-triggers-pulled-in-background.md) | Armed triggers are pulled in the background, and geofences come from them | Accepted; item 6 superseded by NOTIF-003 |
 
 ### NOTIF — Local Notifications
 
 | ADR | Title | Status |
 | --- | ----- | ------ |
-| [ADR-NOTIF-001](ADR-NOTIF-001-diff-based-reconciliation-with-id-partitioning.md) | Local notifications via diff-based reconciliation with reserved ID partitioning | Proposed; id formula superseded by NOTIF-002 |
+| [ADR-NOTIF-001](ADR-NOTIF-001-diff-based-reconciliation-with-id-partitioning.md) | Local notifications via diff-based reconciliation with reserved ID partitioning | Proposed; id formula superseded by NOTIF-002; rules 2 and 5 amended by NOTIF-003 |
 | [ADR-NOTIF-002](ADR-NOTIF-002-routine-reminder-key.md) | Routine reminders keyed by routine and day, within the 32-bit id range | Accepted |
+| [ADR-NOTIF-003](ADR-NOTIF-003-arrival-alerts-posted-natively.md) | Arrival alerts are posted natively, a second writer of notifications | Accepted |
 
 ### PLATFORM — Mobile Platform & UX
 

@@ -18,6 +18,8 @@ data class Trigger(
     val dwellS: Int,
     val title: String,
     val expiresAtMs: Long,
+    /** Shown as it comes (04, section 3); may be empty. */
+    val body: String = "",
 )
 
 /** A trigger the phone cannot run, reported once per id and version. */
@@ -133,7 +135,7 @@ object Triggers {
     /**
      * Whether this transition is the one the trigger fires on: the dwell when
      * `dwell_s` > 0, the enter when it is 0, and never once expired. Once per
-     * visit is not judged here (task 5).
+     * visit is judged by [Visits].
      */
     fun wouldFire(trigger: Trigger, transition: String, nowMs: Long): Boolean {
         if (expired(trigger, nowMs)) return false
@@ -181,6 +183,7 @@ object Triggers {
         val dwell = nonNegativeInt(enter, "dwell_s") ?: return reject("missing dwell_s")
         if (dwell > MAX_DWELL_S) return reject("dwell_s too long")
         val title = string(show, "title") ?: return reject("missing show.title")
+        val body = string(show, "body") ?: ""
         val expires = (string(raw, "expires_at") ?: "").let { text ->
             try {
                 OffsetDateTime.parse(text).toInstant().toEpochMilli()
@@ -188,7 +191,7 @@ object Triggers {
                 return reject("missing expires_at")
             }
         }
-        return Read.Ok(Trigger(id, version, place, lat, lon, radius, dwell, title, expires))
+        return Read.Ok(Trigger(id, version, place, lat, lon, radius, dwell, title, expires, body))
     }
 
     /**
