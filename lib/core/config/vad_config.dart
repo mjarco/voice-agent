@@ -11,13 +11,16 @@ class VadConfig {
     required this.preRollMs,
   });
 
-  /// Default values matching the VAD pipeline's original hardcoded constants.
+  /// Defaults tuned to catch as much speech as possible and to wait 1.5 s
+  /// of silence before an utterance ends (voice-agent#402). A frame counts as
+  /// speech by [positiveSpeechThreshold] alone; the negative one only reaches
+  /// the VAD library, whose own segmentation is not used.
   const VadConfig.defaults()
-      : positiveSpeechThreshold = 0.40,
-        negativeSpeechThreshold = 0.35,
-        hangoverMs = 500,
-        minSpeechMs = 400,
-        preRollMs = 300;
+      : positiveSpeechThreshold = 0.20,
+        negativeSpeechThreshold = 0.20,
+        hangoverMs = 1500,
+        minSpeechMs = 250,
+        preRollMs = 500;
 
   /// Probability above which a frame is considered speech. Range [0.1, 0.9].
   final double positiveSpeechThreshold;
