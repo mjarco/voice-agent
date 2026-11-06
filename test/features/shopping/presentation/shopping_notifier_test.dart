@@ -300,4 +300,91 @@ void main() {
       expect(row.note, isNotNull);
     });
   });
+
+  group('a place from an arrival alert', () {
+    const placeCatalogue = ShoppingCatalogue(
+      storeTypes: [
+        StoreType(id: 'diy', label: 'Budowlany', count: 2),
+        StoreType(id: 'garden', label: 'Ogród', count: 1),
+        StoreType(id: 'grocery', label: 'Spożywczy', count: 1),
+      ],
+      total: 4,
+    );
+
+    setUp(() {
+      repository.catalogue = placeCatalogue;
+      repository.toBuy = [
+        sampleItem(id: 'a', text: 'peszel', storeTypes: ['diy']),
+        sampleItem(id: 'b', text: 'ziemia', storeTypes: ['garden']),
+        sampleItem(id: 'c', text: 'mleko', storeTypes: ['grocery']),
+        sampleItem(id: 'd', text: 'konewka', storeTypes: ['grocery', 'garden']),
+      ];
+    });
+
+    test('shows items under any of its types, read as one list', () async {
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+
+      await notifier.selectPlace(['diy', 'garden']);
+
+      final state = notifier.state as ShoppingLoaded;
+      expect(state.items.map((i) => i.id), ['a', 'b', 'd']);
+      expect(state.placeTypes, ['diy', 'garden']);
+      expect(state.filter, isNull);
+      expect(state.view, ShoppingView.toBuy);
+      expect(repository.lastStoreType, isNull);
+    });
+
+    test('drops types the catalogue does not know; with none left, all',
+        () async {
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+
+      await notifier.selectPlace(['diy', 'nonexistent']);
+      expect((notifier.state as ShoppingLoaded).placeTypes, ['diy']);
+
+      await notifier.selectPlace(['nonexistent']);
+      final state = notifier.state as ShoppingLoaded;
+      expect(state.placeTypes, isEmpty);
+      expect(state.items, hasLength(4));
+    });
+
+    test('marking bought records the item\'s first type of the place',
+        () async {
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+      await notifier.selectPlace(['diy', 'garden']);
+
+      expect(await notifier.markBought('d'), isTrue);
+
+      expect(repository.lastBoughtStoreType, 'garden');
+    });
+
+    test('choosing one chip leaves the place', () async {
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+      await notifier.selectPlace(['diy', 'garden']);
+
+      await notifier.selectFilter('grocery');
+
+      final state = notifier.state as ShoppingLoaded;
+      expect(state.placeTypes, isEmpty);
+      expect(state.filter, 'grocery');
+      expect(state.items.map((i) => i.id), ['c', 'd']);
+    });
+
+    test('an added item under another type is said to be not shown',
+        () async {
+      final notifier = await create();
+      addTearDown(notifier.dispose);
+      await notifier.selectPlace(['diy']);
+
+      repository.nextAdd = ShoppingAddResult(
+        item: sampleItem(id: 'n', text: 'chleb', storeTypes: ['grocery']),
+        created: true,
+      );
+
+      expect(await notifier.add('chleb'), ShoppingAddOutcome.addedNotShown);
+    });
+  });
 }

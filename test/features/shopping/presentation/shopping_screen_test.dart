@@ -15,6 +15,7 @@ Future<void> _pump(
   WidgetTester tester,
   FakeShoppingRepository repo, {
   FakeShoppingProposals? proposals,
+  List<String> placeTypes = const [],
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -28,7 +29,7 @@ Future<void> _pump(
           ),
         ),
       ],
-      child: const MaterialApp(home: ShoppingScreen()),
+      child: MaterialApp(home: ShoppingScreen(placeTypes: placeTypes)),
     ),
   );
   await tester.pumpAndSettle();
@@ -314,6 +315,43 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('shopping-proposal-p1')), findsOneWidget);
+    });
+  });
+
+  group('a place from an arrival alert', () {
+    bool selected(WidgetTester tester, String key) =>
+        tester.widget<ChoiceChip>(find.byKey(Key(key))).selected;
+
+    testWidgets('selects every one of its store types', (tester) async {
+      final repo = FakeShoppingRepository()
+        ..toBuy = [
+          sampleItem(id: 'a', text: 'kabel HDMI', storeTypes: ['electrical']),
+          sampleItem(id: 'b', text: 'mleko', storeTypes: ['grocery']),
+          sampleItem(id: 'c', text: 'gwoździe', storeTypes: ['other']),
+        ];
+      await _pump(tester, repo, placeTypes: ['electrical', 'grocery']);
+
+      expect(selected(tester, 'shopping-filter-electrical'), isTrue);
+      expect(selected(tester, 'shopping-filter-grocery'), isTrue);
+      expect(selected(tester, 'shopping-filter-all'), isFalse);
+      expect(find.text('kabel HDMI'), findsOneWidget);
+      expect(find.text('mleko'), findsOneWidget);
+      expect(find.text('gwoździe'), findsNothing);
+    });
+
+    testWidgets('a chip tap goes back to choosing one', (tester) async {
+      await _pump(
+        tester,
+        FakeShoppingRepository(),
+        placeTypes: ['electrical', 'grocery'],
+      );
+
+      await tester.tap(find.byKey(const Key('shopping-filter-electrical')));
+      await tester.pumpAndSettle();
+
+      expect(selected(tester, 'shopping-filter-electrical'), isTrue);
+      // Out of the place, a type with nothing to buy has no chip again.
+      expect(find.byKey(const Key('shopping-filter-grocery')), findsNothing);
     });
   });
 }

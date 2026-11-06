@@ -28,6 +28,7 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
 
   ShoppingView _view = ShoppingView.toBuy;
   String? _filter;
+  List<String> _placeTypes = const [];
   int _generation = 0;
   Timer? _reread;
   String? lastActionError;
@@ -39,23 +40,44 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
     final generation = ++_generation;
     final view = _view;
     final filter = _filter;
+    final placeTypes = _placeTypes;
     try {
       final results = await Future.wait([
         _repository.fetchCatalogue(),
-        _repository.fetchItems(view, storeType: filter),
+        // A place's types are read as one list and kept to them below.
+        _repository.fetchItems(
+          view,
+          storeType: placeTypes.isEmpty ? filter : null,
+        ),
         _readWaiting(),
       ]);
       // A newer read is on its way; this answer is stale.
       if (!mounted || generation != _generation) return;
+      final catalogue = results[0] as ShoppingCatalogue;
+      var items = results[1] as List<ShoppingItem>;
+      // Types the catalogue does not know are dropped; with none left, all.
+      final known = {for (final t in catalogue.storeTypes) t.id};
+      final types = [
+        for (final t in placeTypes)
+          if (known.contains(t)) t,
+      ];
+      if (types.isNotEmpty) {
+        items = [
+          for (final item in items)
+            if (item.storeTypes.any(types.contains)) item,
+        ];
+      }
+      if (placeTypes.isNotEmpty) _placeTypes = types;
       final waiting = results[2] as List<ShoppingProposal>?;
       state = ShoppingLoaded(
-        catalogue: results[0] as ShoppingCatalogue,
-        items: results[1] as List<ShoppingItem>,
+        catalogue: catalogue,
+        items: items,
         proposals: waiting == null
             ? _proposalRows
             : ShoppingProposalRow.fromRead(waiting, _proposalRows),
         view: view,
         filter: filter,
+        placeTypes: types,
       );
     } catch (e) {
       if (!mounted || generation != _generation) return;
@@ -69,6 +91,7 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
           proposals: current.proposals,
           view: current.view,
           filter: current.filter,
+          placeTypes: current.placeTypes,
           readError: e.toString(),
         );
       }
@@ -109,6 +132,18 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
   /// [storeType] is a store type id, or null for all.
   Future<void> selectFilter(String? storeType) {
     _filter = storeType;
+    _placeTypes = const [];
+    _showSelection();
+    return load();
+  }
+
+  /// The store types of a place, from a tap on its arrival alert: To buy,
+  /// with every one of them selected.
+  Future<void> selectPlace(List<String> storeTypes) {
+    if (storeTypes.isEmpty) return Future.value();
+    _view = ShoppingView.toBuy;
+    _filter = null;
+    _placeTypes = storeTypes.toSet().toList();
     _showSelection();
     return load();
   }
@@ -122,6 +157,7 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
       proposals: current.proposals,
       view: _view,
       filter: _filter,
+      placeTypes: _placeTypes,
       reading: true,
     );
   }
@@ -147,6 +183,9 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
 
   bool _shown(ShoppingItem item) {
     if (_view != ShoppingView.toBuy) return false;
+    if (_placeTypes.isNotEmpty) {
+      return item.storeTypes.any(_placeTypes.contains);
+    }
     final filter = _filter;
     if (filter == null || item.storeTypes.contains(filter)) return true;
     return filter == 'other' && item.storeTypes.isEmpty;
@@ -155,8 +194,17 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
   Future<bool> setTypes(String id, List<String> storeTypes) =>
       _act(() => _repository.setTypes(id, storeTypes));
 
+  /// Under a place's types, where it was bought is the item's first of them.
   Future<bool> markBought(String id) =>
-      _act(() => _repository.markBought(id, storeType: _filter));
+      _act(() => _repository.markBought(id, storeType: _boughtType(id)));
+
+  String? _boughtType(String id) {
+    if (_placeTypes.isEmpty) return _filter;
+    final current = state;
+    if (current is! ShoppingLoaded) return null;
+    final item = current.items.where((i) => i.id == id).firstOrNull;
+    return item?.storeTypes.where(_placeTypes.contains).firstOrNull;
+  }
 
   Future<bool> remove(String id) => _act(() => _repository.remove(id));
 
@@ -196,6 +244,7 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
       ],
       view: current.view,
       filter: current.filter,
+      placeTypes: current.placeTypes,
       reading: current.reading,
       readError: current.readError,
     );

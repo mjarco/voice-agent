@@ -42,7 +42,15 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
           routes: [
             GoRoute(
               path: '/shopping',
-              builder: (context, state) => const ShoppingScreen(),
+              // `?store=diy,garden`: a tap on an arrival alert, already
+              // checked by arrivalRoute (ADR-NOTIF-003).
+              builder: (context, state) => ShoppingScreen(
+                placeTypes: [
+                  for (final t
+                      in (state.uri.queryParameters['store'] ?? '').split(','))
+                    if (t.isNotEmpty) t,
+                ],
+              ),
             ),
           ],
         ),

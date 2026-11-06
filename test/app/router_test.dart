@@ -12,7 +12,14 @@ import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
+import 'package:voice_agent/core/network/shopping_proposals_port.dart';
+import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
+import 'package:voice_agent/features/shopping/presentation/shopping_providers.dart';
+import 'package:voice_agent/features/shopping/presentation/shopping_screen.dart';
+
+import '../core/network/fake_shopping_proposals.dart';
+import '../features/shopping/fake_shopping_repository.dart';
 
 import '../helpers/stub_background_service.dart';
 import '../helpers/stub_notifications.dart';
@@ -135,6 +142,53 @@ void main() {
         find.byType(NavigationBar),
       );
       expect(navBar.selectedIndex, 2);
+    });
+  });
+
+  group('an arrival alert\'s route (ADR-NOTIF-003)', () {
+    final shoppingOverrides = [
+      ...overrides,
+      shoppingRepositoryProvider.overrideWithValue(FakeShoppingRepository()),
+      shoppingProposalsPortProvider.overrideWithValue(FakeShoppingProposals()),
+    ];
+
+    testWidgets('a cold start opens Shopping with the place\'s types',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...shoppingOverrides,
+            pendingDeepLinkProvider.overrideWith(
+              (ref) => '/shopping?store=electrical,grocery',
+            ),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final screen = tester.widget<ShoppingScreen>(find.byType(ShoppingScreen));
+      expect(screen.placeTypes, ['electrical', 'grocery']);
+      expect(tester.widget<NavigationBar>(find.byType(NavigationBar))
+          .selectedIndex, 1);
+    });
+
+    testWidgets('a warm tap opens it too', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...shoppingOverrides,
+            notificationTapStreamProvider.overrideWith(
+              (ref) => Stream.value('/shopping?store=electrical'),
+            ),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final screen = tester.widget<ShoppingScreen>(find.byType(ShoppingScreen));
+      expect(screen.placeTypes, ['electrical']);
     });
   });
 }

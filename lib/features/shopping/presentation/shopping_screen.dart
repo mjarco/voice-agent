@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,7 +11,11 @@ import 'package:voice_agent/features/shopping/presentation/shopping_notifier.dar
 import 'package:voice_agent/features/shopping/presentation/shopping_providers.dart';
 
 class ShoppingScreen extends ConsumerStatefulWidget {
-  const ShoppingScreen({super.key});
+  const ShoppingScreen({super.key, this.placeTypes = const []});
+
+  /// The store types of a place, from `/shopping?store=…`, the route a tap
+  /// on an arrival alert opens: selected together.
+  final List<String> placeTypes;
 
   @override
   ConsumerState<ShoppingScreen> createState() => _ShoppingScreenState();
@@ -27,6 +32,24 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
   void initState() {
     super.initState();
     _text.addListener(() => setState(() {}));
+    _selectPlace();
+  }
+
+  /// The screen lives on in its branch, so a later tap brings new types here.
+  @override
+  void didUpdateWidget(ShoppingScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(oldWidget.placeTypes, widget.placeTypes)) _selectPlace();
+  }
+
+  /// After the frame: a provider is not changed while widgets build.
+  void _selectPlace() {
+    final types = widget.placeTypes;
+    if (types.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(shoppingNotifierProvider.notifier).selectPlace(types);
+    });
   }
 
   @override
@@ -230,8 +253,13 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     final toBuy = state.view == ShoppingView.toBuy;
     // Counts are items to buy, so Bought offers every type. The active filter
     // stays after its last item goes.
-    final filters = state.catalogue.storeTypes
-        .where((t) => !toBuy || t.count > 0 || t.id == state.filter);
+    final filters = state.catalogue.storeTypes.where(
+      (t) =>
+          !toBuy ||
+          t.count > 0 ||
+          t.id == state.filter ||
+          state.placeTypes.contains(t.id),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -251,7 +279,7 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
             ChoiceChip(
               key: const Key('shopping-filter-all'),
               label: Text(toBuy ? 'All (${state.catalogue.total})' : 'All'),
-              selected: state.filter == null,
+              selected: state.filter == null && state.placeTypes.isEmpty,
               onSelected: (_) => notifier.selectFilter(null),
             ),
             for (final type in filters)
@@ -260,7 +288,8 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
                 label: Text(
                   toBuy ? '${type.label} (${type.count})' : type.label,
                 ),
-                selected: type.id == state.filter,
+                selected: type.id == state.filter ||
+                    state.placeTypes.contains(type.id),
                 onSelected: (_) => notifier.selectFilter(type.id),
               ),
           ],
