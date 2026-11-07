@@ -106,7 +106,7 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 try {
                     LocationPipeline.reconcile(context, "app_start")
                 } finally {
-                    GeofenceRegistry.reconcileLater(context, "app_start")
+                    GeofenceRegistry.reconcileLater(context, RegistrationPlan.REASON_APP_START)
                     if (geofences.alertsEnabled) {
                         TriggerPuller.schedule(context)
                         TriggerPuller.pullLater(context, TriggerPuller.REASON_APP_START)
