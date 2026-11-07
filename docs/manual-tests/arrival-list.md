@@ -1,7 +1,7 @@
 # Manual test: the arrival list
 
 **Design:** [ADR-PLATFORM-010](../decisions/ADR-PLATFORM-010-geofences-of-places.md), [ADR-NET-007](../decisions/ADR-NET-007-armed-triggers-pulled-in-background.md), [ADR-NOTIF-003](../decisions/ADR-NOTIF-003-arrival-alerts-posted-natively.md), [ADR-PLATFORM-009](../decisions/ADR-PLATFORM-009-native-location-pipeline.md), [ADR-NET-005](../decisions/ADR-NET-005-location-log-background-upload.md); workspace epic `2026-11-places/01-arrival-list` and its trigger contract `compilations/notification-triggers/reviewed/04-trigger-contract.md`; PR #395 (task 3), PR #396 (task 4), PR #397 (task 5), PR #399 (task 6); [ADR-PLATFORM-008](../decisions/ADR-PLATFORM-008-two-channel-deep-link.md) for the tap.
-**Overall status:** **in-progress**: run by the agent on 2026-11-06 (the run's report, workspace docs `requirements/roadmaps/2026-11-places/epics/01-arrival-list/drafts/06-device-run-report.md`); T4, T6 and T17 failed (defects D1–D3), then passed on 1.19.2+36 on 2026-11-07 after the fix (ADR-PLATFORM-011; T17's reboot part not run); T10, T11 and T23 step 2 wait for the owner on stable; T13 skipped.
+**Overall status:** **in-progress**: run by the agent on 2026-11-06 (the run's report, workspace docs `requirements/roadmaps/2026-11-places/epics/01-arrival-list/drafts/06-device-run-report.md`); T4, T6 and T17 failed (defects D1–D3), then passed on 1.19.2+36 on 2026-11-07 after the fix (ADR-PLATFORM-011; T17's reboot part not run); T10 and T23 step 2 passed on dev 1.20.0+37 on 2026-11-07; T11 is a field check (workspace docs `field-checks/register.md`, FC-1–FC-3), outside this plan's run since the owner's decision of 2026-11-07; stable 1.20.0+37 installed; T13 skipped.
 **Why now:** geofences, the "always" permission, boot, update, force stop and location turned off exist only on a device.
 **When:** once, at the end of the epic, with the cases of tasks 4–6; nothing goes on the Pixel before then (owner's decision of 2026-11-05).
 **Time budget:** ~45 min for task 3's cases (agent, dev flavor over USB adb), then real arrivals (owner, stable on production).
@@ -27,8 +27,8 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T7 | Location off, then on: degraded, then the retry job registers | passed with a deviation |
 | T8 | Turning it off removes the geofences, and then nothing is written | passed |
 | T9 | Mock transitions: enter, dwell and exit rows | passed |
-| T10 | A hands-free session runs alongside | pending |
-| T11 | Real arrivals on stable, in PA's Location view | pending |
+| T10 | A hands-free session runs alongside | passed |
+| T11 | Real arrivals on stable, in PA's Location view | field check FC-1 |
 | T12 | The pull, and "unchanged" on the next start | passed |
 | T13 | A change in the list reaches the phone | skipped |
 | T14 | Turning it off clears the set and stops the hourly pull | passed |
@@ -40,7 +40,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T20 | Notifications off: `"shown":false` | passed |
 | T21 | An expired trigger stays silent | passed |
 | T22 | A tap with the app closed opens the place's list | passed |
-| T23 | A tap with the app running, and over a hands-free session | in-progress |
+| T23 | A tap with the app running, and over a hands-free session | passed |
 | T24 | Recents and a second tap do not count again | passed |
 | T25 | A tap after the switch is off | passed |
 
@@ -194,7 +194,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T10. A hands-free session runs alongside
 
-**Status:** pending (owner, on stable during T11: the dev build has no Groq key)
+**Status:** passed (2026-11-07, Pixel 11 Pro, Android 17, dev 1.20.0+37, test PA, a dummy Groq key): alerts on, a session started, alerts off (`geofences_removed`) and on (`geofences_registered`, `added` 2) in Settings while it listened; back on Record it still listened, and it ended normally; the log's readings came every ~31 s through the registration. The key only lets the session start; no speech was transcribed
 **Do:** with alerts on, start a hands-free session, toggle alerts off and on, end the session.
 
 **Why:** registration waits on Play services on its own thread (ADR-PLATFORM-010 item 4); the pipeline's thread and the session must never wait behind it.
@@ -203,7 +203,7 @@ The screen (Settings → Dziennik lokalizacji) shows "wyzwalacze: N, sprawdzone 
 
 ### T11. Real arrivals on stable, in PA's Location view
 
-**Status:** pending (owner)
+**Status:** field check FC-1 (workspace docs `field-checks/register.md`, with FC-2 and FC-3 from the same measure), read on 2026-11-21; stable 1.20.0+37 installed on 2026-11-07
 **Do:** at the epic's end, install the stable build, turn the alerts on, live your ordinary visits.
 
 **Why:** only real visits show the geofence delay, which tunes the trigger's `dwell_s` and radius in PA.
@@ -328,7 +328,7 @@ A withdrawn trigger's visit is forgotten with its geofence: tick off the last it
 
 ### T23. A tap with the app running, and over a hands-free session
 
-**Status:** in-progress: steps 1 and 3 passed (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA); step 2 pending (owner, on stable during T11)
+**Status:** passed: steps 1 and 3 (2026-11-06, Pixel 11 Pro, Android 17, dev 1.19.0+34, test PA); step 2 (2026-11-07, Pixel 11 Pro, Android 17, dev 1.20.0+37, test PA, a dummy Groq key): with a session listening, the alert's tap opened Shopping with Budowlany selected, one `trigger.tapped`, and Record still listened
 **Do:**
 1. A new visit, the app open on Record. Tap the alert.
 2. A new visit with a hands-free session listening. Tap the alert, then return to Record.
