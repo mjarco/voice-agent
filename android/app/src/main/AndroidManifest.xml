@@ -58,10 +58,15 @@
         </activity>
         <!-- flutter_foreground_task: the plugin starts this service but does not
              declare it. Hands-free listening (microphone) and TTS replies
-             (mediaPlayback) keep running with the screen off. Do not rename. -->
+             (mediaPlayback) keep running with the screen off. Do not rename.
+             stopWithTask (ADR-AUDIO-015): a swipe from recents stops it and
+             the plugin does not restart it. Set here, never as the plugin's
+             option: that one stops the service whenever no activity is
+             resumed (the screen locked, the app left). -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="microphone|mediaPlayback"
+            android:stopWithTask="true"
             android:exported="false" />
         <!-- flutter_local_notifications: show scheduled routine reminders (P040)
              and reschedule them after a reboot or app update. -->

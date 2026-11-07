@@ -13,6 +13,7 @@ class MainActivity : FlutterActivity() {
 
     private var mediaButtonBridge: MediaButtonBridge? = null
     private var audioFocusBridge: AudioFocusBridge? = null
+    private var notificationActionBridge: NotificationActionBridge? = null
     private var shareBridge: ShareBridge? = null
     private var arrivalTapBridge: ArrivalTapBridge? = null
 
@@ -43,6 +44,11 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler(focus)
         EventChannel(messenger, "com.voiceagent/audio_focus/events")
             .setStreamHandler(focus)
+
+        val actions = NotificationActionBridge(this)
+        notificationActionBridge = actions
+        EventChannel(messenger, "com.voiceagent/notification_actions/events")
+            .setStreamHandler(actions)
 
         MethodChannel(messenger, "com.voiceagent/location_log")
             .setMethodCallHandler(LocationBridge(this))
@@ -75,14 +81,10 @@ class MainActivity : FlutterActivity() {
         // A focus left held by a destroyed engine would keep other apps paused.
         audioFocusBridge?.abandon()
         audioFocusBridge = null
+        notificationActionBridge?.dispose()
+        notificationActionBridge = null
         shareBridge = null
         arrivalTapBridge = null
         super.cleanUpFlutterEngine(flutterEngine)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // Another app may have played audio while we were in the background (#358).
-        mediaButtonBridge?.claimMediaButtonRouting()
     }
 }

@@ -68,6 +68,7 @@ class _TrackingBackgroundService implements BackgroundService {
   Future<void> updateNotification({
     required String title,
     required String body,
+    List<ServiceNotificationButton> buttons = const [],
   }) async {
     calls.add('updateNotification($title/$body)');
   }

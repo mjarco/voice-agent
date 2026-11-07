@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/background/background_service.dart';
 import 'package:voice_agent/core/background/flutter_foreground_task_service.dart';
 
 void main() {
@@ -63,6 +66,37 @@ void main() {
       await service.updateNotification(
         title: 'Test',
         body: 'Test body',
+      );
+    });
+  });
+
+  group('ADR-AUDIO-015', () {
+    test('the plugin option stopWithTask is left unset', () {
+      // Set, it would stop the service whenever no activity is resumed.
+      expect(
+        FlutterForegroundTaskService.foregroundTaskOptions.stopWithTask,
+        isNull,
+      );
+    });
+
+    test('the manifest makes a swipe from recents stop the service', () {
+      final manifest =
+          File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+      final service = RegExp(
+        r'<service\s[^>]*flutter_foreground_task\.service\.ForegroundService[^>]*>',
+      ).firstMatch(manifest)?.group(0);
+      expect(service, isNotNull);
+      expect(service, contains('android:stopWithTask="true"'));
+    });
+
+    test('the buttons reach the plugin with their ids and texts', () {
+      final buttons = FlutterForegroundTaskService.pluginButtons(const [
+        ServiceNotificationButton(id: 'pause', text: 'Pause'),
+        ServiceNotificationButton(id: 'stop', text: 'Stop'),
+      ]);
+      expect(
+        [for (final b in buttons) '${b.id}/${b.text}'],
+        ['pause/Pause', 'stop/Stop'],
       );
     });
   });

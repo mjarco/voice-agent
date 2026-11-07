@@ -19,4 +19,9 @@ abstract class MediaButtonPort {
   /// Unregisters the app as the active media-button receiver and
   /// releases platform resources.
   Future<void> deactivate();
+
+  /// Activates the receiver if needed and makes the app the target of the
+  /// headset button (Android: a short burst of silence, ADR-AUDIO-012).
+  /// Called on entering Listening (ADR-AUDIO-015).
+  Future<void> claim();
 }

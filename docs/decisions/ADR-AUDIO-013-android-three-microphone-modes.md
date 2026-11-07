@@ -3,7 +3,7 @@
 Status: Accepted
 Decided in: PR #405 (epic 2026-11-mic-modes/01-mic-modes, task 2)
 Supersedes: [ADR-AUDIO-011](./ADR-AUDIO-011-always-on-capture-with-engagement-gate.md) **on Android only**. iOS keeps ADR-AUDIO-011 unchanged.
-Extended by: [ADR-AUDIO-014](./ADR-AUDIO-014-android-own-transient-audio-focus.md) (the app's own audio focus).
+Extended by: [ADR-AUDIO-014](./ADR-AUDIO-014-android-own-transient-audio-focus.md) (the app's own audio focus), [ADR-AUDIO-015](./ADR-AUDIO-015-android-notification-and-headset-follow-the-mode.md) (the notification and the headset button per mode).
 Design note: the workspace docs, `research/2026-11-voice-agent-mic-states/reviewed/04-simplified-model.md` (accepted by the owner on 2026-11-07), with the device probe in `requirements/roadmaps/2026-11-mic-modes/epics/01-mic-modes/source/2026-11-07-probe-run.md`.
 
 ## Context

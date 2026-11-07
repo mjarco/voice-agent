@@ -62,9 +62,14 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
 
   void _activateMediaButton() {
     _mediaButtonPort = ref.read(mediaButtonProvider);
-    unawaited(_mediaButtonPort!.activate());
+    // Android (ADR-AUDIO-015): the hands-free controller owns the media
+    // session, from entering Listening to Off; the screen only listens.
+    _ownsMediaSession = !ref.read(micModesEnabledProvider);
+    if (_ownsMediaSession) unawaited(_mediaButtonPort!.activate());
     _mediaButtonSub = _mediaButtonPort!.events.listen(_onMediaButtonEvent);
   }
+
+  bool _ownsMediaSession = false;
 
   void _activateVolumeButton() {
     _volumeButtonPort = ref.read(volumeButtonProvider);
@@ -222,7 +227,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   @override
   void dispose() {
     _mediaButtonSub?.cancel();
-    unawaited(_mediaButtonPort?.deactivate());
+    if (_ownsMediaSession) unawaited(_mediaButtonPort?.deactivate());
     _volumeButtonSub?.cancel();
     unawaited(_volumeButtonPort?.deactivate());
     unawaited(_ambientPlayer?.dispose());

@@ -15,6 +15,28 @@ enum AudioSessionTarget {
   ambient,
 }
 
+/// A button of the foreground notification (Android). A press reaches the
+/// app as its [id] through the notification actions port
+/// (ADR-AUDIO-015).
+class ServiceNotificationButton {
+  const ServiceNotificationButton({required this.id, required this.text});
+
+  final String id;
+  final String text;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ServiceNotificationButton &&
+      other.id == id &&
+      other.text == text;
+
+  @override
+  int get hashCode => Object.hash(id, text);
+
+  @override
+  String toString() => 'ServiceNotificationButton($id, $text)';
+}
+
 /// Abstract interface for background service management.
 ///
 /// Manages the platform-specific keepalive mechanism that prevents the OS from
@@ -35,6 +57,12 @@ abstract class BackgroundService {
     AudioSessionTarget target = AudioSessionTarget.playback,
   });
 
-  Future<void> updateNotification({required String title, required String body});
+  /// Changes the notification of the running service. [buttons] replace
+  /// the notification's buttons (Android only; none by default).
+  Future<void> updateNotification({
+    required String title,
+    required String body,
+    List<ServiceNotificationButton> buttons = const [],
+  });
   bool get isRunning;
 }

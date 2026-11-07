@@ -14,6 +14,10 @@ import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
+import 'package:voice_agent/core/media_button/media_button_port.dart';
+import 'package:voice_agent/core/media_button/media_button_provider.dart';
+import 'package:voice_agent/core/notification_actions/notification_action_port.dart';
+import 'package:voice_agent/core/notification_actions/notification_action_provider.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
@@ -91,6 +95,12 @@ class _Service implements BackgroundService {
   int stops = 0;
   bool _running = false;
 
+  /// Each notification as "body [button ids]".
+  final List<String> notifications = [];
+
+  /// When set, a notification update waits for it.
+  Completer<void>? updateGate;
+
   @override
   bool get isRunning => _running;
 
@@ -112,7 +122,37 @@ class _Service implements BackgroundService {
   Future<void> updateNotification({
     required String title,
     required String body,
-  }) async {}
+    List<ServiceNotificationButton> buttons = const [],
+  }) async {
+    if (updateGate != null) await updateGate!.future;
+    notifications.add('$body ${[for (final b in buttons) b.id]}');
+  }
+}
+
+/// Logs the media session's calls with the recorder starts at that moment.
+class _MediaButton implements MediaButtonPort {
+  _MediaButton(this.engine);
+  final _Engine engine;
+  final List<String> calls = [];
+
+  @override
+  Stream<MediaButtonEvent> get events => const Stream.empty();
+  @override
+  Future<void> activate() async => calls.add('activate');
+  @override
+  Future<void> deactivate() async => calls.add('deactivate');
+  @override
+  Future<void> claim() async => calls.add('claim@${engine.starts}');
+}
+
+class _Actions implements NotificationActionPort {
+  final StreamController<NotificationAction> _ctrl =
+      StreamController<NotificationAction>.broadcast();
+
+  void press(NotificationAction action) => _ctrl.add(action);
+
+  @override
+  Stream<NotificationAction> get actions => _ctrl.stream;
 }
 
 class _Tts implements TtsService {
@@ -249,6 +289,8 @@ class _Harness {
     container = ProviderContainer(overrides: [
       micModesEnabledProvider.overrideWithValue(micModes),
       audioFocusProvider.overrideWithValue(focus),
+      mediaButtonProvider.overrideWithValue(mediaButton),
+      notificationActionProvider.overrideWithValue(actions),
       handsFreeEngineProvider.overrideWithValue(engine),
       backgroundServiceProvider.overrideWithValue(service),
       ttsServiceProvider.overrideWithValue(tts),
@@ -267,6 +309,8 @@ class _Harness {
 
   final engine = _Engine();
   late final focus = _Focus(engine);
+  late final mediaButton = _MediaButton(engine);
+  final actions = _Actions();
   final service = _Service();
   final tts = _Tts();
   late final ProviderContainer container;
@@ -963,6 +1007,169 @@ void main() {
 
       expect(h.focus.calls, isEmpty);
       expect(h.mode, MicMode.off);
+    });
+  });
+  group('Notification and headset (ADR-AUDIO-015)', () {
+    test('each mode shows its text and buttons', () async {
+      final h = _Harness();
+      await h.listening();
+      await h.ctrl.pauseSession();
+      await h.ctrl.resumeSession();
+      await _settle();
+
+      expect(h.service.notifications, [
+        'Listening [pause, stop]',
+        'Standby [resume, stop]',
+        'Listening [pause, stop]',
+      ]);
+    });
+
+    test('Off has no notification: the service stops', () async {
+      final h = _Harness();
+      await h.standby();
+      await h.ctrl.stopSession();
+      await _settle();
+
+      expect(h.service.stops, 1);
+      expect(h.service.notifications.last, 'Standby [resume, stop]');
+    });
+
+    test('a queued update reaches the service before its stop', () async {
+      final h = _Harness();
+      await h.listening();
+      await _settle();
+      h.service.updateGate = Completer<void>();
+
+      await h.ctrl.pauseSession();
+      final stopping = h.ctrl.stopSession();
+      await _settle();
+      expect(h.service.stops, 0, reason: 'the Standby update is still queued');
+
+      h.service.updateGate!.complete();
+      await stopping;
+      expect(h.service.notifications.last, 'Standby [resume, stop]');
+      expect(h.service.stops, 1);
+    });
+
+    test('Standby after an error says what failed', () async {
+      final h = _Harness();
+      await h.listening();
+      h.engine.emit(const EngineError('Mic lost'));
+      await _settle();
+
+      expect(h.service.notifications.last, startsWith('Standby: '));
+      expect(h.service.notifications.last, contains('Mic lost'));
+      expect(h.service.notifications.last, endsWith('[resume, stop]'));
+    });
+
+    test('Standby after a loss of the focus says so', () async {
+      final h = _Harness();
+      await h.listening();
+      h.focus.lose(AudioFocusLoss.permanent);
+      await _settle();
+
+      expect(h.service.notifications.last,
+          'Standby: ${HandsFreeController.focusLostNotice} [resume, stop]');
+    });
+
+    test('Standby after a refused focus says the microphone is busy',
+        () async {
+      final h = _Harness();
+      h.focus.granted = false;
+      await h.ctrl.startSession();
+      await _settle();
+
+      expect(h.service.notifications.last,
+          'Standby: ${HandsFreeController.micBusyMessage} [resume, stop]');
+    });
+
+    test('Pause, Resume and Stop from the notification', () async {
+      final h = _Harness();
+      await h.listening();
+
+      h.actions.press(NotificationAction.pause);
+      await _settle();
+      expect(h.mode, MicMode.standby);
+      expect(h.engine.running, isFalse);
+
+      h.actions.press(NotificationAction.resume);
+      await _settle();
+      await _settle();
+      expect(h.mode, MicMode.listening);
+      expect(h.engine.running, isTrue);
+
+      h.actions.press(NotificationAction.stop);
+      await _settle();
+      expect(h.mode, MicMode.off);
+    });
+
+    test('a press that no longer fits the mode is ignored', () async {
+      final h = _Harness();
+      await h.standby();
+      final starts = h.engine.starts;
+
+      h.actions.press(NotificationAction.pause);
+      await _settle();
+      expect(h.mode, MicMode.standby);
+      expect(h.engine.starts, starts);
+
+      await h.ctrl.stopSession();
+      h.actions.press(NotificationAction.resume);
+      await _settle();
+      expect(h.mode, MicMode.off);
+      expect(h.engine.starts, starts);
+    });
+
+    test('Resume waits while push-to-talk records', () async {
+      final h = _Harness();
+      await h.listening();
+      await h.ctrl.suspendForManualRecording();
+
+      h.actions.press(NotificationAction.resume);
+      await _settle();
+      expect(h.mode, MicMode.standby);
+      expect(h.engine.running, isFalse, reason: 'one recorder at a time');
+
+      await h.ctrl.resumeAfterManualRecording();
+      expect(h.mode, MicMode.listening);
+    });
+
+    test('the headset is claimed on entering Listening, before the recorder',
+        () async {
+      final h = _Harness();
+      await h.listening();
+      await h.ctrl.pauseSession();
+      await h.ctrl.resumeSession();
+
+      expect(h.mediaButton.calls, ['claim@0', 'claim@1']);
+    });
+
+    test('a refused focus claims nothing', () async {
+      final h = _Harness();
+      h.focus.granted = false;
+      await h.ctrl.startSession();
+
+      expect(h.mediaButton.calls, isEmpty);
+    });
+
+    test('Stop releases the media session', () async {
+      final h = _Harness();
+      await h.standby();
+      await h.ctrl.stopSession();
+
+      expect(h.mediaButton.calls.last, 'deactivate');
+    });
+
+    test('iOS touches neither the notification buttons nor the headset',
+        () async {
+      final h = _Harness(micModes: false);
+      await h.ctrl.startSession();
+      h.actions.press(NotificationAction.stop);
+      await _settle();
+      await h.ctrl.stopSession();
+
+      expect(h.mediaButton.calls, isEmpty);
+      expect(h.service.notifications, ['Recording session active []']);
     });
   });
 }

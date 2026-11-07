@@ -1,10 +1,10 @@
 # Manual test: three microphone modes on Android
 
-**Design:** [ADR-AUDIO-013](../decisions/ADR-AUDIO-013-android-three-microphone-modes.md), [ADR-AUDIO-014](../decisions/ADR-AUDIO-014-android-own-transient-audio-focus.md); workspace epic `2026-11-mic-modes/01-mic-modes` and its design note `research/2026-11-voice-agent-mic-states/reviewed/04-simplified-model.md`; PR #405 (task 2), PR #406 (task 3).
+**Design:** [ADR-AUDIO-013](../decisions/ADR-AUDIO-013-android-three-microphone-modes.md), [ADR-AUDIO-014](../decisions/ADR-AUDIO-014-android-own-transient-audio-focus.md), [ADR-AUDIO-015](../decisions/ADR-AUDIO-015-android-notification-and-headset-follow-the-mode.md); workspace epic `2026-11-mic-modes/01-mic-modes` and its design note `research/2026-11-voice-agent-mic-states/reviewed/04-simplified-model.md`; PR #405 (task 2), PR #406 (task 3), PR #407 (task 4).
 **Overall status:** **pending**. Begun in task 2 with its cases; tasks 3–5 add theirs, and the whole plan runs once in task 6.
 **Why now:** whether the microphone is really released in Standby, the locked phone, the headset and the green dot exist only on a device.
 **When:** once, at the end of the epic (task 6). Task 2 gets only a smoke run of T1–T4 on a dev build.
-**Time budget:** ~30 min for task 2's cases, ~15 min for task 3's (agent, dev flavor over USB adb); the headset cases need the owner.
+**Time budget:** ~30 min for task 2's cases, ~15 min for task 3's, ~20 min for task 4's (agent, dev flavor over USB adb); the headset and the locked screen need the owner.
 **What we are testing:** task 2: the eight transitions of the model where task 2 implements them, tabs that do not touch the microphone, and Standby that releases the microphone on a locked phone and comes back from a headset press.
 
 ## Status legend
@@ -31,6 +31,10 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T12 | Another app's sound moves Listening to Standby | pending |
 | T13 | A paused video resumes on Pause and on Stop | pending |
 | T14 | A call means Standby; a start during a call is refused | pending |
+| T15 | The notification shows the mode and its buttons | pending |
+| T16 | Pause, Resume and Stop from the notification | pending |
+| T17 | The headset button is claimed in Listening and released in Off | pending |
+| T18 | A swipe from recents means Off | pending |
 
 ---
 
@@ -217,8 +221,60 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 **Expected:** step 1: Standby when the call rings and after it ends (no resume by itself). Step 2: Standby with "The microphone is busy (a call)."; no recorder; tapping the mic after the call resumes Listening.
 **On failure:** Listening during the call: the ringtone's loss did not reach the app. Listening in step 2: the request was granted during the call; note the Android version.
 
+### T15. The notification shows the mode and its buttons
+
+**Status:** pending
+
+**Do:**
+1. Start Listening and read the notification:
+   `adb -s <serial> shell dumpsys notification --noredact | grep -A40 voice_agent.dev`.
+2. Pause, read it again; Stop, read it again.
+3. Start Listening and play a video from adb (as in T12); read it.
+4. Start Listening, press Home, then lock the screen (`input keyevent KEYCODE_SLEEP`). After a minute read the notification, the services and the recorders (S2).
+
+**Why:** ADR-AUDIO-015, decisions 1 and 4 (the notification per mode; `stopWithTask` only in the manifest, so leaving the app keeps the service).
+**Expected:** step 1: text "Listening", actions "Pause" and "Stop". Step 2: "Standby" with "Resume" and "Stop"; after Stop no notification of the app. Step 3: "Standby: Paused by another app or a call." with "Resume" and "Stop". Step 4: the notification "Listening" and the service are still there, and the recorder is active and not silenced.
+**On failure:** step 4 without the service: the plugin's `stopWithTask` option is set somewhere (it stops the service when no activity is resumed). The text stays "Starting...": the update did not reach the plugin (`updateNotification` in `flutter_foreground_task_service.dart`, logcat `hf.notification_failed` in the dev telemetry).
+
+### T16. Pause, Resume and Stop from the notification
+
+**Status:** pending (the locked screen: owner)
+
+**Do:**
+1. Unlocked, in Listening: pull down the shade and tap "Pause"; read the recorders (S2).
+2. Tap "Resume"; read them. Tap "Stop".
+3. (Owner) Lock the phone in Listening; from the lock screen tap "Pause", then "Resume", then "Stop".
+
+**Why:** ADR-AUDIO-015, decision 2 (our receiver of the plugin's button broadcast) and the model's rows "Pause / Resume / Stop in the notification, anywhere".
+**Expected:** steps 1–2: Standby with no recorder; Listening with a recorder not silenced; Off with no service. logcat `NotificationActionBridge: button pressed: pause` (then `resume`, `stop`). Step 3: the same on the locked screen, or Android asks for the unlock first (note which; a lock-screen setting, not the app).
+**On failure:** no `button pressed` line: the plugin's action or extra changed (ADR-AUDIO-015 names both). A line but no change: the Dart side (`_onNotificationAction`). A recorder silenced after Resume on the locked screen: the background start was blocked (compare with T7).
+
+### T17. The headset button is claimed in Listening and released in Off
+
+**Status:** pending
+
+**Do:**
+1. Off: `adb -s <serial> shell dumpsys media_session | grep -i "media button session"`.
+2. Start Listening and read it again; send `adb -s <serial> shell input keyevent KEYCODE_MEDIA_PLAY_PAUSE`.
+3. Stop; read it again.
+4. Start Listening, play a video (T12, Standby follows), pause the video in its app, return to voice-agent; send the key again.
+
+**Why:** ADR-AUDIO-015, decision 3 (the session only outside Off, the claim on entering Listening, none on a return to the app).
+**Expected:** step 1: no `VoiceAgentMediaSession`. Step 2: the media button session is `VoiceAgentMediaSession`; the key moves Listening to Standby. Step 3: no `VoiceAgentMediaSession`. Step 4: the key plays the video; voice-agent stays in Standby.
+**On failure:** a session in Off: `deactivate` did not run on Stop. The key goes to voice-agent in step 4: something still claims on resume (`MainActivity.onResume`).
+
+### T18. A swipe from recents means Off
+
+**Status:** pending
+
+**Do:** in Listening, open recents and swipe the app away. Then read the recorders, the focus stack, the services (S2) and the media sessions (T17); wait 10 s and read the services again.
+
+**Why:** ADR-AUDIO-015, decision 4 (`stopWithTask`).
+**Expected:** no recorder, no focus entry of the app, no service and no notification, no `VoiceAgentMediaSession`; nothing comes back after 10 s. Reopening the app starts in Off.
+**On failure:** the notification comes back within a few seconds: the plugin's restart alarm ran (`android:stopWithTask` missing from the manifest, `ForegroundService.onTaskRemoved`). A recorder left: the engine was not destroyed with the task (logcat `cleanUpFlutterEngine`).
+
 ---
 
 ## When this plan is done
 
-Must pass: T1–T6, T8–T12. T7, T13 and T14 need the owner (a headset, a video app, a call); its result decides whether task 4's media-button claim is enough. Tasks 3–5 add their cases here before task 6 runs the plan.
+Must pass: T1–T6, T8–T12, T15–T18 (T16 step 3 is the owner's). T7, T13 and T14 need the owner (a headset, a video app, a call); T7 decides whether the media-button claim on entering Listening is enough. Tasks 3–5 add their cases here before task 6 runs the plan.

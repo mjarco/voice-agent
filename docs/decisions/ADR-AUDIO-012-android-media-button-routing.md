@@ -3,6 +3,7 @@
 Status: Accepted
 Decided in: #358, PR #361
 Related: [ADR-AUDIO-010](./ADR-AUDIO-010-ios-media-button-routing-constraints.md) (the iOS counterpart)
+Amended by: [ADR-AUDIO-015](./ADR-AUDIO-015-android-notification-and-headset-follow-the-mode.md) (the claim runs on entering Listening, not on every resume; the session lives only outside Off).
 
 ## Context
 

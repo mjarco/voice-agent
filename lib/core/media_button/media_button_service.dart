@@ -67,4 +67,16 @@ class MediaButtonService implements MediaButtonPort {
       );
     }
   }
+
+  @override
+  Future<void> claim() async {
+    try {
+      await _methodChannel.invokeMethod<void>('claim');
+    } catch (e) {
+      developer.log(
+        'Failed to claim the media button: $e',
+        name: 'MediaButtonService',
+      );
+    }
+  }
 }

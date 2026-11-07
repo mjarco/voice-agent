@@ -17,7 +17,7 @@ import io.flutter.plugin.common.MethodChannel
 /// to Dart via platform channels.
 ///
 /// - MethodChannel `com.voiceagent/media_button` handles `activate` /
-///   `deactivate` calls from Dart.
+///   `deactivate` / `claim` calls from Dart.
 /// - EventChannel `com.voiceagent/media_button/events` streams toggle
 ///   events back to Dart.
 class MediaButtonBridge(
@@ -38,6 +38,12 @@ class MediaButtonBridge(
             }
             "deactivate" -> {
                 deactivateSession()
+                result.success(null)
+            }
+            "claim" -> {
+                // Entering Listening (ADR-AUDIO-015): a new session claims
+                // as it activates, an existing one claims again.
+                if (mediaSession == null) activateSession() else claimMediaButtonRouting()
                 result.success(null)
             }
             else -> result.notImplemented()
@@ -94,8 +100,10 @@ class MediaButtonBridge(
     /// recently played audio, not to any active session. TTS is played by
     /// the TTS engine's UID, so the app never qualifies on its own: play a
     /// short burst of PCM silence under the app's UID (#358). Called when
-    /// the session activates and when the activity resumes, since another
-    /// app's playback in between takes the routing away.
+    /// the session activates and on entering Listening ("claim"), since
+    /// another app's playback in between takes the routing away. A return
+    /// to the app no longer claims (ADR-AUDIO-015), so a paused video
+    /// keeps the button.
     fun claimMediaButtonRouting() {
         if (mediaSession == null) return
         var track: AudioTrack? = null

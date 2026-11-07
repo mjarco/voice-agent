@@ -7,8 +7,12 @@ import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/audio_focus/audio_focus_port.dart';
 import 'package:voice_agent/core/audio_focus/audio_focus_provider.dart';
+import 'package:voice_agent/core/background/background_service.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/media_button/media_button_provider.dart';
+import 'package:voice_agent/core/notification_actions/notification_action_port.dart';
+import 'package:voice_agent/core/notification_actions/notification_action_provider.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
@@ -63,6 +67,12 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 /// recorder starts (a refusal, as during a call, means Standby with a
 /// message), gives it back on leaving Listening, and a permanent or
 /// transient loss moves Listening to Standby.
+///
+/// **Notification and headset (ADR-AUDIO-015):** on Android the
+/// foreground notification shows the mode with its buttons (Pause and
+/// Stop in Listening, Resume and Stop in Standby), and a press on them
+/// pauses, resumes or stops. The headset button is claimed on entering
+/// Listening and released in Off.
 class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     with WidgetsBindingObserver
     implements HandsFreeControlPort {
@@ -113,9 +123,14 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _ttsListenerCleanup = () => isSpeaking.removeListener(ttsListener);
     _focusLossSub =
         _ref.read(audioFocusProvider).losses.listen(_onFocusLoss);
+    _notificationActionSub = _ref
+        .read(notificationActionProvider)
+        .actions
+        .listen(_onNotificationAction);
   }
 
   StreamSubscription<AudioFocusLoss>? _focusLossSub;
+  StreamSubscription<NotificationAction>? _notificationActionSub;
 
   void Function()? _ttsListenerCleanup;
 
@@ -232,6 +247,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         return;
       }
     }
+    _showModeNotification();
     // The focus comes before the recorder: other apps' sound pauses
     // first, and a refusal (a call) starts no recorder at all. Held from
     // the moment it is asked for, so a pause during the request still
@@ -253,6 +269,9 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       return;
     }
     _standbyError = null;
+    // The headset button is ours again from here: another app may have
+    // played since (ADR-AUDIO-015).
+    unawaited(_ref.read(mediaButtonProvider).claim());
     _suspendedByUser = false;
     _suspendedForTts = false;
     _pendingConversationResume = false;
@@ -266,7 +285,10 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     state = _listeningOrBacklog();
   }
 
-  Future<void> _enterStandby({HandsFreeSessionError? error}) async {
+  Future<void> _enterStandby({
+    HandsFreeSessionError? error,
+    String? notice,
+  }) async {
     _modeGeneration++;
     _abandonFocus();
     unawaited(_ref.read(ttsServiceProvider).stop());
@@ -277,6 +299,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _engine = null;
     _phase = HandsFreeListeningPhase.listening;
     _standbyError = error;
+    _showModeNotification(notice: notice);
     state = _listeningOrBacklog();
     // Chained after any stop still running, so waiting on the last one
     // waits on them all.
@@ -319,7 +342,73 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     });
     if (loss == AudioFocusLoss.mayDuck) return;
     if (!_applyMicEvent(MicModeEvent.interrupted)) return;
-    unawaited(_enterStandby());
+    unawaited(_enterStandby(notice: focusLostNotice));
+  }
+
+  /// Why Standby came after a loss of the focus, in the notification.
+  static const focusLostNotice = 'Paused by another app or a call.';
+
+  static const notificationTitle = 'Voice Agent';
+  static const pauseButton =
+      ServiceNotificationButton(id: 'pause', text: 'Pause');
+  static const resumeButton =
+      ServiceNotificationButton(id: 'resume', text: 'Resume');
+  static const stopButton =
+      ServiceNotificationButton(id: 'stop', text: 'Stop');
+
+  /// The notification's updates, chained so they reach the plugin in order.
+  Future<void>? _notificationUpdate;
+
+  /// Shows the current mode in the foreground notification. Off has no
+  /// service, so no notification. Standby says why, when it was not asked
+  /// for: the error's message, or [notice].
+  void _showModeNotification({String? notice}) {
+    final String body;
+    final List<ServiceNotificationButton> buttons;
+    switch (micMode) {
+      case MicMode.listening:
+        body = 'Listening';
+        buttons = const [pauseButton, stopButton];
+      case MicMode.standby:
+        final reason = _standbyError?.message ?? notice;
+        body = reason == null ? 'Standby' : 'Standby: $reason';
+        buttons = const [resumeButton, stopButton];
+      case MicMode.off:
+        return;
+    }
+    final bg = _ref.read(backgroundServiceProvider);
+    final previous = _notificationUpdate ?? Future<void>.value();
+    _notificationUpdate = previous
+        .then((_) => bg.updateNotification(
+              title: notificationTitle,
+              body: body,
+              buttons: buttons,
+            ))
+        .catchError((Object e) {
+      Telemetry.instance.event('hf.notification_failed',
+          attrs: {'error': e.toString()});
+    });
+  }
+
+  /// A button of the notification: the same as Pause, Resume and Stop in
+  /// the app. A press that no longer fits the mode is ignored by the mode
+  /// table. Resume waits while push-to-talk records: its end returns to
+  /// Listening by itself.
+  void _onNotificationAction(NotificationAction action) {
+    if (!mounted || !_micModes) return;
+    Telemetry.instance.event('hf.notification_action', attrs: {
+      'action': action.name,
+      'mode': micMode.name,
+    });
+    switch (action) {
+      case NotificationAction.pause:
+        unawaited(pauseSession());
+      case NotificationAction.resume:
+        if (_suspendedForManualRecording) return;
+        unawaited(resumeSession());
+      case NotificationAction.stop:
+        unawaited(stopSession());
+    }
   }
 
   /// Engagement-layer state (testability hook). Exposes the underlying
@@ -656,10 +745,13 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // ADR-PLATFORM-006).
     final bg = _ref.read(backgroundServiceProvider);
     await bg.startService();
-    unawaited(bg.updateNotification(
-      title: 'Voice Agent',
-      body: 'Recording session active',
-    ));
+    // Android: the mode's own notification comes with entering Listening.
+    if (!_micModes) {
+      unawaited(bg.updateNotification(
+        title: notificationTitle,
+        body: 'Recording session active',
+      ));
+    }
 
     if (_jobs.isEmpty) {
       _jobCounter = 0;
@@ -743,6 +835,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       }
       if (micMode != MicMode.off) _applyMicEvent(MicModeEvent.stop);
       _abandonFocus();
+      // In Off the headset button goes to the last app that played.
+      unawaited(_ref.read(mediaButtonProvider).deactivate());
       // The mode and the state agree from the first moment: Off, with the
       // queue still shown while it drains.
       _modeGeneration++;
@@ -754,6 +848,11 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     // Flip the session-active flag early so SyncWorker stops draining in the
     // background while we tear down (P027, ADR-NET-002).
     _ref.read(sessionActiveProvider.notifier).state = false;
+
+    // Android: a notification update still queued must not reach the
+    // plugin after its stop, or it would bring the service back.
+    final notificationUpdate = _notificationUpdate;
+    if (notificationUpdate != null) await notificationUpdate;
 
     // P037 v2: stopService now defaults to AudioSessionTarget.playback so
     // the app keeps the media-participant slot and AirPods buttons remain
@@ -826,6 +925,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     WidgetsBinding.instance.removeObserver(this);
     _ttsListenerCleanup?.call();
     unawaited(_focusLossSub?.cancel());
+    unawaited(_notificationActionSub?.cancel());
     unawaited(_engagementSub?.cancel());
     unawaited(_engagement.dispose());
     // Clean up WAV files for any remaining unprocessed jobs.
