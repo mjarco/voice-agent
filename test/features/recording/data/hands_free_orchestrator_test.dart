@@ -16,6 +16,7 @@ import 'vad_service_stub.dart';
 class FakeAudioRecorder implements AudioRecorder {
   bool permissionGranted = true;
   bool started = false;
+  final List<RecordConfig> configs = [];
   StreamController<Uint8List>? _controller;
 
   void push(Uint8List bytes) => _controller?.add(bytes);
@@ -25,6 +26,7 @@ class FakeAudioRecorder implements AudioRecorder {
 
   @override
   Future<Stream<Uint8List>> startStream(RecordConfig config) async {
+    configs.add(config);
     started = true;
     _controller = StreamController<Uint8List>();
     return _controller!.stream;
@@ -171,6 +173,39 @@ void main() {
       await stop;
       expect(stopped, isTrue);
       await sub.cancel();
+    });
+
+    // ADR-AUDIO-014: on Android the app holds its own focus, so the plugin
+    // must take none; the default keeps iOS's interruption handling.
+    test('the recorder takes the focus mode it is given', () async {
+      recorder = FakeAudioRecorder();
+      orch = HandsFreeOrchestrator(
+        recorder,
+        FakeVadService([]),
+        watchdogInterval: const Duration(hours: 1),
+        audioInterruption: AudioInterruptionMode.none,
+      );
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+      await orch.stop();
+      await sub.cancel();
+
+      expect(recorder.configs.single.audioInterruption,
+          AudioInterruptionMode.none);
+    });
+
+    test('by default the recorder keeps the plugin pausing on a loss',
+        () async {
+      orch = make([]);
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+      await orch.stop();
+      await sub.cancel();
+
+      expect(recorder.configs.single.audioInterruption,
+          AudioInterruptionMode.pause);
     });
 
     test('start() emits EngineListening', () async {

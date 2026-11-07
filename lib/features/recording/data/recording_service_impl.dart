@@ -10,18 +10,26 @@ import 'package:voice_agent/features/recording/domain/recording_service.dart';
 /// Audio configuration is hardcoded to match Whisper's expected input:
 /// 16 kHz, mono, PCM 16-bit, WAV container (AudioEncoder.wav).
 class RecordingServiceImpl implements RecordingService {
-  RecordingServiceImpl({AudioRecorder? recorder})
-      : _recorder = recorder ?? AudioRecorder();
+  RecordingServiceImpl({
+    AudioRecorder? recorder,
+    AudioInterruptionMode audioInterruption = AudioInterruptionMode.pause,
+  })  : _recorder = recorder ?? AudioRecorder(),
+        _config = RecordConfig(
+          encoder: AudioEncoder.wav,
+          sampleRate: _sampleRate,
+          numChannels: 1,
+          bitRate: 256000,
+          audioInterruption: audioInterruption,
+        );
 
   final AudioRecorder _recorder;
 
   static const _sampleRate = 16000;
-  static const _config = RecordConfig(
-    encoder: AudioEncoder.wav,
-    sampleRate: _sampleRate,
-    numChannels: 1,
-    bitRate: 256000,
-  );
+
+  /// [AudioInterruptionMode.none] on Android: push-to-talk holds the app's
+  /// own transient focus instead of the plugin's permanent one
+  /// (ADR-AUDIO-014).
+  final RecordConfig _config;
 
   @override
   Future<bool> requestPermission() => _recorder.hasPermission();

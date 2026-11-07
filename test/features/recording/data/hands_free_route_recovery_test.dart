@@ -27,6 +27,7 @@ class _FakeRouteService implements AudioRouteService {
 class _CountingRecorder implements AudioRecorder {
   int startStreamCount = 0;
   int stopCount = 0;
+  final List<RecordConfig> configs = [];
   StreamController<Uint8List>? _controller;
 
   void push(Uint8List bytes) => _controller?.add(bytes);
@@ -37,6 +38,7 @@ class _CountingRecorder implements AudioRecorder {
   @override
   Future<Stream<Uint8List>> startStream(RecordConfig config) async {
     startStreamCount++;
+    configs.add(config);
     await _controller?.close();
     _controller = StreamController<Uint8List>();
     return _controller!.stream;
@@ -167,6 +169,25 @@ void main() {
       expect(recorder.startStreamCount, greaterThanOrEqualTo(2),
           reason: 'watchdog re-acquired the dead mic');
       await orch.stop();
+    });
+
+    // ADR-AUDIO-014: a restart keeps the focus mode, so on Android the
+    // plugin never takes the focus behind the app's back.
+    test('a restart keeps the focus mode of the start', () async {
+      final recorder = _CountingRecorder();
+      final orch = HandsFreeOrchestrator(
+        recorder,
+        FakeVadService(const []),
+        watchdogInterval: const Duration(milliseconds: 50),
+        audioInterruption: AudioInterruptionMode.none,
+      );
+      orch.start(config: const VadConfig.defaults()).listen((_) {});
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await orch.stop();
+
+      expect(recorder.configs.length, greaterThanOrEqualTo(2));
+      expect(recorder.configs.map((c) => c.audioInterruption).toSet(),
+          {AudioInterruptionMode.none});
     });
 
     test('does not restart while audio chunks keep arriving', () async {
