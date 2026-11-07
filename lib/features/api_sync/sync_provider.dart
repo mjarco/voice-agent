@@ -7,6 +7,7 @@ import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
+import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
@@ -28,7 +29,11 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     apiConfig: ref.watch(apiConfigProvider),
     connectivityService: ref.watch(connectivityServiceProvider),
     ttsService: ref.watch(ttsServiceProvider),
-    getTtsEnabled: () => ref.read(appConfigProvider).ttsEnabled,
+    // ADR-AUDIO-013: a reply that arrives in Standby is not spoken; it
+    // waits in the chat. Pause means quiet.
+    getTtsEnabled: () =>
+        ref.read(appConfigProvider).ttsEnabled &&
+        ref.read(micModeProvider) != MicMode.standby,
     audioFeedbackService: ref.watch(audioFeedbackServiceProvider),
     // P027 / ADR-NET-002: drain while foregrounded OR while a hands-free
     // session is active. P028: TTS no longer needs a separate foreground
