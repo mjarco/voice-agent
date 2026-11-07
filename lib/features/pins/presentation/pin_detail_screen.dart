@@ -3,13 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/core/links/link_opener.dart';
 import 'package:voice_agent/core/models/pin.dart';
+import 'package:voice_agent/core/widgets/agent_markdown_style.dart';
 import 'package:voice_agent/features/pins/domain/pins_state.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 
 /// Full verbatim view of a single saved reference (proposal 045).
-/// Renders the markdown body with `flutter_markdown_plus`, mirroring how the
-/// Chat thread screen renders agent messages.
+/// Renders the markdown body with `flutter_markdown_plus` in the chat's style;
+/// links open in the browser, tables scroll sideways, images fit the width.
 ///
 /// An edit gives the pin a new `record_id` (ADR-CORE-111 of personal-agent), so
 /// the screen keeps the current id itself and follows it.
@@ -147,13 +149,17 @@ class _PinDetailScreenState extends ConsumerState<PinDetailScreen> {
   }
 }
 
-class _Body extends StatelessWidget {
+class _Body extends ConsumerWidget {
   const _Body({required this.pin});
 
   final PinDetail pin;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // A table keeps its columns' widths and scrolls sideways, as code does.
+    final style = agentMarkdownStyle(Theme.of(context)).copyWith(
+      tableColumnWidth: const IntrinsicColumnWidth(),
+    );
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: MarkdownBody(
@@ -161,7 +167,78 @@ class _Body extends StatelessWidget {
         data: pin.text,
         selectable: true,
         softLineBreak: true,
+        styleSheet: style,
+        onTapLink: (text, href, title) => _openLink(context, ref, href),
+        imageBuilder: (uri, title, alt) => _PinImage(uri: uri, alt: alt),
       ),
+    );
+  }
+
+  Future<void> _openLink(
+    BuildContext context,
+    WidgetRef ref,
+    String? href,
+  ) async {
+    final uri = href == null ? null : Uri.tryParse(href);
+    final opened =
+        uri != null && await ref.read(linkOpenerProvider).open(uri);
+    if (opened || !context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text('Cannot open the link: ${href ?? ''}')),
+      );
+  }
+}
+
+/// An image of a pin, loaded from the web and fitted to the width. One that
+/// fails, or is not on the web, shows its description instead.
+class _PinImage extends StatelessWidget {
+  const _PinImage({required this.uri, required this.alt});
+
+  final Uri uri;
+  final String? alt;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = _ImageFallback(alt: alt);
+    if (uri.scheme != 'http' && uri.scheme != 'https') return fallback;
+    return Image.network(
+      uri.toString(),
+      key: const Key('pin-detail-image'),
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stack) => fallback,
+    );
+  }
+}
+
+class _ImageFallback extends StatelessWidget {
+  const _ImageFallback({required this.alt});
+
+  final String? alt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = (alt == null || alt!.trim().isEmpty) ? 'Image' : alt!.trim();
+    return Row(
+      key: const Key('pin-detail-image-fallback'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.broken_image_outlined,
+          size: 18,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+      ],
     );
   }
 }
