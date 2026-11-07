@@ -1,6 +1,6 @@
 # ADR-AUDIO-011: Always-on audio capture with engagement gate, volume-button gesture
 
-Status: Accepted
+Status: Accepted. Superseded on Android only by [ADR-AUDIO-013](./ADR-AUDIO-013-android-three-microphone-modes.md); iOS keeps this ADR.
 Proposed in: P038
 
 Supersedes the lifecycle portion of ADR-AUDIO-009. ADR-AUDIO-009's runtime category-switching framing reflected the pre-P037 model where the audio session was created on demand. P037 v2 already pinned the session to `.playAndRecord` for hardware-button routing; P038 takes the next step and pins the recorder itself.

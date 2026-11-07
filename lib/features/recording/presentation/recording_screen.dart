@@ -13,6 +13,7 @@ import 'package:voice_agent/core/volume_button/volume_button_port.dart';
 import 'package:voice_agent/core/volume_button/volume_button_provider.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
+import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
@@ -144,6 +145,11 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     );
     if (event != MediaButtonEvent.togglePlayPause) return;
 
+    if (ref.read(micModesEnabledProvider)) {
+      _onMediaButtonToggleMicModes(ttsPlaying: ttsPlaying);
+      return;
+    }
+
     if (ttsPlaying) {
       debugPrint('[MediaButtonDbg] branch=stopTts');
       unawaited(ref.read(ttsServiceProvider).stop());
@@ -178,6 +184,38 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       debugPrint('[MediaButtonDbg] branch=listening-noop (iOS-blocked path)');
     } else {
       debugPrint('[MediaButtonDbg] branch=noop');
+    }
+  }
+
+  /// Android (ADR-AUDIO-013): the headset toggles Listening ↔ Standby, like
+  /// play/pause in a media player. A manual recording keeps its own
+  /// pause/resume. In Off the press only stops a reply being spoken: the
+  /// session starts from the mic button alone.
+  void _onMediaButtonToggleMicModes({required bool ttsPlaying}) {
+    final recState = ref.read(recordingControllerProvider);
+    final recCtrl = ref.read(recordingControllerProvider.notifier);
+    final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
+    if (recState is RecordingActive) {
+      unawaited(recCtrl.pauseRecording());
+      return;
+    }
+    if (recState is RecordingPaused) {
+      unawaited(recCtrl.resumeRecording());
+      return;
+    }
+    switch (ref.read(micModeProvider)) {
+      case MicMode.listening:
+        unawaited(hfCtrl.pauseSession().then((_) {
+          ref.read(toasterProvider).show('Standby');
+          ref.read(hapticServiceProvider).lightImpact();
+        }));
+      case MicMode.standby:
+        unawaited(hfCtrl.resumeSession().then((_) {
+          ref.read(toasterProvider).show('Listening');
+          ref.read(hapticServiceProvider).lightImpact();
+        }));
+      case MicMode.off:
+        if (ttsPlaying) unawaited(ref.read(ttsServiceProvider).stop());
     }
   }
 
@@ -324,7 +362,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           ),
           _HandsFreeSection(
             hfState: hfState,
-            onRetry: () => hfCtrl.startSession(),
+            onRetry: () => ref.read(micModeProvider) == MicMode.standby
+                ? hfCtrl.resumeSession()
+                : hfCtrl.startSession(),
           ),
         ],
       ),
@@ -628,7 +668,24 @@ class _MicButtonState extends ConsumerState<_MicButton> {
     // legacy push-to-talk path stays on long-press; tapping here used
     // to start manual recording, but with always-on capture in place
     // long-press is the cleaner gesture for that intent.
-    if (recState is RecordingIdle) {
+    if (recState is RecordingIdle && ref.read(micModesEnabledProvider)) {
+      // Android (ADR-AUDIO-013): the tap follows the mode.
+      switch (ref.read(micModeProvider)) {
+        case MicMode.off:
+          ref.read(latestAgentReplyProvider.notifier).state = null;
+          await ref.read(ttsServiceProvider).stop();
+          await hfCtrl.startSession();
+        case MicMode.listening:
+          // Let a segment being written finish first; it is short.
+          if (hfState is HandsFreeListening &&
+              hfState.phase == HandsFreeListeningPhase.stopping) {
+            return;
+          }
+          await hfCtrl.pauseSession();
+        case MicMode.standby:
+          await hfCtrl.resumeSession();
+      }
+    } else if (recState is RecordingIdle) {
       if (hfState is HandsFreeListening) {
         if (hfState.phase == HandsFreeListeningPhase.stopping) return;
         await hfCtrl.suspendByUser();
@@ -691,6 +748,10 @@ class _MicButtonState extends ConsumerState<_MicButton> {
         hfState.phase == HandsFreeListeningPhase.capturing;
     final isHfListeningQuiet = hfState is HandsFreeListening &&
         hfState.phase == HandsFreeListeningPhase.listening;
+    final micModes = ref.watch(micModesEnabledProvider);
+    final micMode = ref.watch(micModeProvider);
+    final isStandby = micModes && micMode == MicMode.standby;
+    final isModeListening = micModes && micMode == MicMode.listening;
 
     // Clear press-and-hold flag when recording returns to idle or errors out.
     ref.listen<RecordingState>(recordingControllerProvider, (_, next) {
@@ -713,9 +774,11 @@ class _MicButtonState extends ConsumerState<_MicButton> {
                 ? Colors.orange
                 : (isRecording || isHfCapturing)
                     ? Colors.red
-                    : isHfListeningQuiet
+                    : (isHfListeningQuiet || isModeListening)
                         ? Colors.orange
-                        : Colors.green;
+                        : isStandby
+                            ? Colors.blueGrey
+                            : Colors.green;
 
     final label = isPaused
         ? 'Paused — tap to resume'
@@ -723,11 +786,15 @@ class _MicButtonState extends ConsumerState<_MicButton> {
             ? (_isPressAndHold ? 'Release to stop' : 'Tap to stop')
             : isTranscribing
                 ? 'Transcribing...'
-                : isHfListeningQuiet
-                    ? 'Listening — tap to suspend'
-                    : 'Tap to start listening';
+                : isModeListening
+                    ? 'Listening — tap to pause'
+                    : isStandby
+                        ? 'Standby — tap to resume'
+                        : isHfListeningQuiet
+                            ? 'Listening — tap to suspend'
+                            : 'Tap to start listening';
 
-    return GestureDetector(
+    final micButton = GestureDetector(
       onTap: _onTap,
       onLongPressStart: _onLongPressStart,
       onLongPressEnd: _onLongPressEnd,
@@ -751,17 +818,39 @@ class _MicButtonState extends ConsumerState<_MicButton> {
                       strokeWidth: 3,
                     ),
                   )
-                : isPaused
+                : (isPaused || (isStandby && !isRecording))
                     ? const Icon(Icons.pause, color: Colors.white, size: 48)
                     : const Icon(Icons.mic, color: Colors.white, size: 48),
           ),
           const SizedBox(height: 16),
           Text(
             label,
+            key: const Key('record-button-label'),
             style: Theme.of(context).textTheme.bodyLarge,
           ),
         ],
       ),
+    );
+
+    // Android (ADR-AUDIO-013): Off from the app is a separate Stop, shown
+    // whenever the mode is not Off. It sits outside the mic's gesture
+    // detector so a long press on it is not push-to-talk.
+    if (!micModes || micMode == MicMode.off) return micButton;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        micButton,
+        const SizedBox(height: 8),
+        TextButton(
+          key: const Key('hf-stop-button'),
+          onPressed: () async {
+            await ref.read(handsFreeControllerProvider.notifier).stopSession();
+            ref.read(toasterProvider).show('Session ended');
+            await ref.read(hapticServiceProvider).lightImpact();
+          },
+          child: const Text('Stop'),
+        ),
+      ],
     );
   }
 }

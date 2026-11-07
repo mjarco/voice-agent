@@ -146,9 +146,26 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     _controller = null;
   }
 
+  /// The stop that is running, if any. The orchestrator stops itself on a
+  /// stream error ([_emitError]); a caller's stop during that one must wait
+  /// for it, or a start right after would have its recorder stopped and its
+  /// stream closed by the earlier stop (ADR-AUDIO-013: Standby, then resume).
+  Future<void>? _stopInFlight;
+
   @override
-  Future<void> stop() async {
-    if (_phase == _Phase.idle) return;
+  Future<void> stop() {
+    final inFlight = _stopInFlight;
+    if (inFlight != null) return inFlight;
+    if (_phase == _Phase.idle) return Future<void>.value();
+    final stopping = _stop();
+    final done = stopping.whenComplete(() {
+      if (identical(_stopInFlight, stopping)) _stopInFlight = null;
+    });
+    _stopInFlight = stopping;
+    return done;
+  }
+
+  Future<void> _stop() async {
     _phase = _Phase.idle;
     _cooldownTimer?.cancel();
     _cooldownTimer = null;

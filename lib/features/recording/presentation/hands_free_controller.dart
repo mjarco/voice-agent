@@ -7,17 +7,20 @@ import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/session_control/hands_free_control_port.dart';
+import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/engagement_controller.dart';
 import 'package:voice_agent/features/recording/domain/engagement_state.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
+import 'package:voice_agent/features/recording/domain/mic_mode_machine.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
@@ -43,6 +46,15 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 /// of scope for this PR. The legacy session-start path
 /// ([startSession]) preserves the old "auto-start when the screen mounts"
 /// behaviour by internally calling [engage] so existing UI keeps working.
+///
+/// **Android (ADR-AUDIO-013):** the controller runs the three microphone
+/// modes of [MicMode] instead of the engagement gate. [startSession] goes
+/// Off → Listening, [pauseSession] Listening → Standby (the recorder stops
+/// and releases the mic; the foreground service and the job queue stay),
+/// [resumeSession] Standby → Listening (a cold recorder start), and
+/// [stopSession] → Off. An utterance does not close anything; the gate
+/// closes only while TTS speaks. Every change goes through
+/// [nextMicMode]. iOS keeps the ADR-AUDIO-011 path below unchanged.
 class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     with WidgetsBindingObserver
     implements HandsFreeControlPort {
@@ -59,6 +71,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       // Guard against the controller being disposed mid-flight; stream
       // events may still arrive on the same microtask.
       if (!mounted) return;
+      // Android modes never close a session from the engagement layer.
+      if (_micModes) return;
       // Re-read the current engagement state instead of trusting the
       // emitted event: the event may be stale (e.g. a disengage→engage
       // pair issued synchronously by suspend+resume produces two
@@ -134,6 +148,116 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   @override
   bool get isSuspendedForManualRecording => _suspendedForManualRecording;
 
+  // ── Android: three microphone modes (ADR-AUDIO-013) ──────────────────────
+
+  bool get _micModes => _ref.read(micModesEnabledProvider);
+
+  /// The current microphone mode (always [MicMode.off] on iOS).
+  MicMode get micMode => _ref.read(micModeProvider);
+
+  /// Set when push-to-talk put Listening into Standby, so the end of the
+  /// recording knows to return to Listening.
+  bool _resumeAfterPtt = false;
+
+  /// The error that put Listening into Standby, shown until the next
+  /// resume or stop.
+  HandsFreeSessionError? _standbyError;
+
+  /// The recorder stops of Standby, chained, while they run. The engine is
+  /// one long-lived orchestrator: a start before an earlier stop has
+  /// finished would be stopped, and its stream closed, by that stop.
+  Future<void>? _engineStopping;
+
+  /// Bumped by every entry into Listening or Standby, so only the latest
+  /// entry into Listening starts the recorder once the stops are done.
+  int _modeGeneration = 0;
+
+  /// The running Stop, while it drains. A start waits for it, so a new
+  /// session never runs under the old one's teardown.
+  Future<void>? _sessionStopping;
+
+  /// Applies [event] through the transition table. Returns false (and
+  /// changes nothing) when the table ignores it in the current mode.
+  bool _applyMicEvent(MicModeEvent event) {
+    final from = micMode;
+    final next = nextMicMode(from, event);
+    Telemetry.instance.event('hf.mic_mode', attrs: {
+      'from': from.name,
+      'to': next?.name ?? 'ignored',
+      'event': event.name,
+    });
+    if (next == null) return false;
+    _ref.read(micModeProvider.notifier).state = next;
+    return true;
+  }
+
+  /// Listening → Standby. Stops the recorder (the mic is released) and
+  /// any reply being spoken; keeps the foreground service, the session
+  /// flag and the job queue. Android only; on iOS it is [suspendByUser].
+  Future<void> pauseSession() async {
+    if (!_micModes) return suspendByUser();
+    if (!_applyMicEvent(MicModeEvent.pause)) return;
+    await _enterStandby();
+  }
+
+  /// Standby → Listening: a cold recorder start, without the start-up
+  /// guards (they passed when the session started). Android only; on iOS
+  /// it is [resumeByUser].
+  Future<void> resumeSession() async {
+    if (!_micModes) return resumeByUser();
+    if (!_applyMicEvent(MicModeEvent.resume)) return;
+    await _enterListening();
+  }
+
+  Future<void> _enterListening() async {
+    final generation = ++_modeGeneration;
+    final stopping = _engineStopping;
+    if (stopping != null) {
+      await stopping;
+      // Paused, stopped or resumed again while the recorder was stopping:
+      // only the latest entry goes on.
+      if (generation != _modeGeneration || micMode != MicMode.listening) {
+        return;
+      }
+    }
+    _standbyError = null;
+    _suspendedByUser = false;
+    _suspendedForTts = false;
+    _pendingConversationResume = false;
+    _phase = HandsFreeListeningPhase.listening;
+    _engagement.engage();
+    _startEngine(_ref.read(appConfigProvider).vadConfig);
+    // The engine keeps its gate across a stop and a start; open it unless
+    // a reply is being spoken (then [resumeAfterTts] opens it).
+    final speaking = _ref.read(ttsServiceProvider).isSpeaking.value;
+    unawaited(_engine!.setCaptureGate(open: !speaking));
+    state = _listeningOrBacklog();
+  }
+
+  Future<void> _enterStandby({HandsFreeSessionError? error}) async {
+    _modeGeneration++;
+    unawaited(_ref.read(ttsServiceProvider).stop());
+    _engagement.disengage();
+    final sub = _engineSub;
+    final engine = _engine;
+    _engineSub = null;
+    _engine = null;
+    _phase = HandsFreeListeningPhase.listening;
+    _standbyError = error;
+    state = _listeningOrBacklog();
+    // Chained after any stop still running, so waiting on the last one
+    // waits on them all.
+    final previous = _engineStopping;
+    final stopping = () async {
+      if (previous != null) await previous;
+      await sub?.cancel();
+      await engine?.stop();
+    }();
+    _engineStopping = stopping;
+    await stopping;
+    if (identical(_engineStopping, stopping)) _engineStopping = null;
+  }
+
   /// Engagement-layer state (testability hook). Exposes the underlying
   /// [EngagementController] state without leaking the controller itself.
   EngagementState get engagementState => _engagement.state;
@@ -170,6 +294,15 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   /// to re-engage". Mid-capture, the in-flight segment is discarded via
   /// [HandsFreeEngine.interruptCapture] so the mic releases promptly.
   Future<void> suspendForManualRecording() async {
+    if (_micModes) {
+      // Push-to-talk: Listening → Standby for the length of the recording.
+      if (micMode != MicMode.listening) return;
+      _suspendedForManualRecording = true;
+      if (!_applyMicEvent(MicModeEvent.pause)) return;
+      _resumeAfterPtt = true;
+      await _enterStandby();
+      return;
+    }
     if (state is HandsFreeIdle || state is HandsFreeSessionError) {
       return;
     }
@@ -193,6 +326,14 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   ///
   /// In v2 this maps to engage/disengage on the underlying engagement.
   Future<bool> toggleUserSuspend() async {
+    if (_micModes) {
+      if (micMode == MicMode.standby) {
+        await resumeSession();
+        return false;
+      }
+      await pauseSession();
+      return micMode == MicMode.standby;
+    }
     if (_suspendedByUser) {
       await resumeByUser();
       return false;
@@ -202,6 +343,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   }
 
   Future<void> suspendByUser() async {
+    if (_micModes) return pauseSession();
     if (_suspendedByUser) return;
 
     // Fast path: engine already idle from TTS or manual-recording suspend
@@ -226,6 +368,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   }
 
   Future<void> resumeByUser() async {
+    if (_micModes) return resumeSession();
     if (!_suspendedByUser) return;
     _suspendedByUser = false;
     if (_suspendedForManualRecording) return;
@@ -237,15 +380,23 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   ///
   /// Called when the user changes VAD parameters in Advanced Settings.
   Future<void> reloadVadConfig() async {
+    if (_micModes && micMode != MicMode.listening) return;
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
     if (_suspendedForManualRecording) return;
     if (_suspendedByUser) return;
+    final generation = _modeGeneration;
 
     await _engineSub?.cancel();
     _engineSub = null;
     await _engine?.stop();
     _engine = null;
     if (!mounted) return;
+    // Android: a pause (or a pause and a resume) during the stop above owns
+    // the recorder now.
+    if (_micModes &&
+        (generation != _modeGeneration || micMode != MicMode.listening)) {
+      return;
+    }
 
     _startEngine(_ref.read(appConfigProvider).vadConfig);
     _phase = HandsFreeListeningPhase.listening;
@@ -256,6 +407,15 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   Future<void> resumeAfterManualRecording() async {
     if (!_suspendedForManualRecording) return;
     _suspendedForManualRecording = false;
+    if (_micModes) {
+      if (!_resumeAfterPtt) return;
+      _resumeAfterPtt = false;
+      // Back to Listening only with the app on screen; in the background
+      // the session stays in Standby (ADR-AUDIO-013).
+      if (!_ref.read(appForegroundedProvider)) return;
+      await resumeSession();
+      return;
+    }
     if (_suspendedByUser) return;
     _resumeEngagement();
   }
@@ -277,6 +437,18 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   /// picking up speaker output. In the v2 one-shot model this collapses
   /// to closing the engagement; [resumeAfterTts] re-engages.
   Future<void> suspendForTts() async {
+    if (_micModes) {
+      // The only gate left on Android: ignore the mic while a reply is
+      // spoken in Listening, so the agent does not hear itself.
+      if (micMode != MicMode.listening || _engine == null) return;
+      await _engine!.setCaptureGate(open: false);
+      Telemetry.instance.event('hf.gate_changed',
+          attrs: const {'open': false, 'reason': 'tts_suspend'});
+      // The engine drops a segment in progress and sends no event for it.
+      _phase = HandsFreeListeningPhase.listening;
+      if (mounted) state = _listeningOrBacklog();
+      return;
+    }
     if (_suspendedForTts) return;
     if (_suspendedForManualRecording) return;
     if (state is HandsFreeIdle || state is HandsFreeSessionError) return;
@@ -302,6 +474,13 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   ///   that this TTS is the agent's reply to the user's captured
   ///   utterance, so we open a fresh listening window.
   Future<void> resumeAfterTts() async {
+    if (_micModes) {
+      if (micMode != MicMode.listening || _engine == null) return;
+      await _engine!.setCaptureGate(open: true);
+      Telemetry.instance.event('hf.gate_changed',
+          attrs: const {'open': true, 'reason': 'tts_resume'});
+      return;
+    }
     if (_suspendedForManualRecording || _suspendedByUser) return;
     if (state is! HandsFreeIdle) return;
     // Auto-resume only after a TTS that was the agent's reply to a
@@ -361,6 +540,11 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   /// existing UI auto-start path; T7 will later wire AirPods short-click
   /// here directly.
   Future<void> startSession() async {
+    // Android: a start during a Stop's drain waits for it to end.
+    final sessionStopping = _sessionStopping;
+    if (_micModes && sessionStopping != null) await sessionStopping;
+    // Android: a start exists only from Off; Standby resumes instead.
+    if (_micModes && micMode != MicMode.off) return;
     if (state is! HandsFreeIdle && state is! HandsFreeSessionError) return;
 
     final engine = _ref.read(handsFreeEngineProvider);
@@ -416,6 +600,13 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     if (_jobs.isEmpty) {
       _jobCounter = 0;
     }
+    if (_micModes) {
+      // A second tap during the awaits above starts nothing twice.
+      if (micMode != MicMode.off) return;
+      _applyMicEvent(MicModeEvent.start);
+      await _enterListening();
+      return;
+    }
     // Explicit user-initiated engage cancels any pending TTS-driven
     // auto-resume and clears any prior suspension flags. The user is
     // taking control of the next listening window — `resumeAfterTts`
@@ -464,12 +655,36 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   }
 
   @override
-  Future<void> stopSession() async {
+  Future<void> stopSession() {
+    if (!_micModes) return _stopSession();
+    final running = _sessionStopping;
+    if (running != null) return running;
+    final stopping = _stopSession();
+    _sessionStopping = stopping;
+    return stopping.whenComplete(() {
+      if (identical(_sessionStopping, stopping)) _sessionStopping = null;
+    });
+  }
+
+  Future<void> _stopSession() async {
     // P037 v2 one-shot: when [HandsFreeIdle] is reached via per-segment
     // disengage, [_jobs] may still hold in-flight transcripts. Treat
     // [stopSession] as the explicit "drain everything" entry point —
     // only short-circuit if both the engagement and the queue are quiet.
-    if (state is HandsFreeIdle && _jobs.isEmpty) return;
+    if (_micModes) {
+      // Standby with an empty queue still holds the service: only Off
+      // with nothing queued is already stopped.
+      if (micMode == MicMode.off && state is HandsFreeIdle && _jobs.isEmpty) {
+        return;
+      }
+      if (micMode != MicMode.off) _applyMicEvent(MicModeEvent.stop);
+      // The mode and the state agree from the first moment: Off, with the
+      // queue still shown while it drains.
+      _modeGeneration++;
+      state = _listeningOrBacklog();
+    } else if (state is HandsFreeIdle && _jobs.isEmpty) {
+      return;
+    }
 
     // Flip the session-active flag early so SyncWorker stops draining in the
     // background while we tear down (P027, ADR-NET-002).
@@ -508,6 +723,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _suspendedByUser = false;
     _suspendedForTts = false;
     _pendingConversationResume = false;
+    _resumeAfterPtt = false;
+    _standbyError = null;
     _phase = HandsFreeListeningPhase.listening;
   }
 
@@ -576,6 +793,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
       case EngineSegmentReady(wavPath: final path):
         _onSegmentReady(path);
+        // Android: Listening is meant to continue (ADR-AUDIO-013).
+        if (_micModes) return;
         // P037 v2 one-shot: VAD has emitted an utterance, so close the
         // engagement. STT and persistence continue asynchronously on
         // [_sttSlot]; the public state transitions to [HandsFreeIdle]
@@ -742,6 +961,17 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   /// drive the controller into [HandsFreeListening] correctly.
   HandsFreeSessionState _listeningOrBacklog() {
     final jobs = List<SegmentJob>.unmodifiable(_jobs);
+    if (_micModes) {
+      return switch (micMode) {
+        MicMode.listening => HandsFreeListening(jobs, phase: _phase),
+        MicMode.standby when _standbyError != null => HandsFreeSessionError(
+            message: _standbyError!.message,
+            requiresSettings: _standbyError!.requiresSettings,
+            jobs: jobs,
+          ),
+        MicMode.standby || MicMode.off => HandsFreeIdle(jobs: jobs),
+      };
+    }
     if (_engagement.state is EngagementIdle) {
       return HandsFreeIdle(jobs: jobs);
     }
@@ -752,6 +982,17 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     String message, {
     bool requiresSettings = false,
   }) {
+    // Android: an error after the start is Standby with its message; the
+    // service stays so the session resumes from anywhere.
+    if (_micModes && _applyMicEvent(MicModeEvent.error)) {
+      unawaited(_enterStandby(
+        error: HandsFreeSessionError(
+          message: message,
+          requiresSettings: requiresSettings,
+        ),
+      ));
+      return;
+    }
     // Flip the session-active flag so SyncWorker stops background draining
     // immediately (P027, ADR-NET-002).
     _ref.read(sessionActiveProvider.notifier).state = false;

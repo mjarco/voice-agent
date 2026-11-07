@@ -8,6 +8,7 @@ import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/shopping_list_changes_provider.dart';
+import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
@@ -130,7 +131,12 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
         selectedIndex: widget.navigationShell.currentIndex,
         onDestinationSelected: (index) {
           final currentIndex = widget.navigationShell.currentIndex;
-          if (currentIndex == _recordTabIndex && index != _recordTabIndex) {
+          // ADR-AUDIO-013: on Android the tabs never touch the microphone;
+          // only the mic button, the headset, Stop and a farewell do.
+          final tabsDriveMic = !ref.read(micModesEnabledProvider);
+          if (tabsDriveMic &&
+              currentIndex == _recordTabIndex &&
+              index != _recordTabIndex) {
             final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
             unawaited(
               hfCtrl.stopSession().then((_) {
@@ -145,7 +151,8 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
                 });
               }),
             );
-          } else if (index == _recordTabIndex &&
+          } else if (tabsDriveMic &&
+              index == _recordTabIndex &&
               currentIndex != _recordTabIndex) {
             unawaited(
               ref.read(handsFreeControllerProvider.notifier).startSession(),

@@ -17,6 +17,7 @@ import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
 import 'package:voice_agent/core/notifications/notification_providers.dart';
+import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/models/sync_queue_item.dart';
@@ -338,5 +339,36 @@ void main() {
     await tester.pumpAndSettle(); // frame fires → currentIndex == 2 → startSession
 
     expect(controller.startCalls, 2); // recovery call
+  });
+
+  testWidgets(
+      'Android modes: switching tabs away and back never touches the '
+      'microphone (ADR-AUDIO-013)', (tester) async {
+    late _TrackingHfController controller;
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ..._baseOverrides,
+        micModesEnabledProvider.overrideWithValue(true),
+        handsFreeControllerProvider.overrideWith((ref) {
+          controller = _TrackingHfController(ref);
+          return controller;
+        }),
+      ],
+      child: const App(),
+    ));
+    await tester.pumpAndSettle();
+
+    await controller.startSession();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.calendar_today));
+    await tester.pumpAndSettle();
+    await tester.tap(recordNavIcon);
+    await tester.pumpAndSettle();
+
+    expect(controller.stopCalls, 0);
+    expect(controller.startCalls, 1, reason: 'only the explicit start');
+    expect(controller.state, isA<HandsFreeListening>());
   });
 }

@@ -64,6 +64,21 @@ class FakeAudioRecorder implements AudioRecorder {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// A recorder whose stop waits for [gate], and whose stream can fail.
+class _GatedStopRecorder extends FakeAudioRecorder {
+  Completer<void>? gate;
+  int stops = 0;
+
+  void fail(Object error) => _controller?.addError(error);
+
+  @override
+  Future<String?> stop() async {
+    stops++;
+    if (gate != null) await gate!.future;
+    return super.stop();
+  }
+}
+
 // ── Constants (matching HandsFreeOrchestrator internals) ─────────────────────
 
 const int _frameSize = 1024; // FakeVadService.frameSize
@@ -128,6 +143,36 @@ void main() {
   // ── Lifecycle ────────────────────────────────────────────────────────────
 
   group('lifecycle', () {
+    // ADR-AUDIO-013: after a stream error the orchestrator stops itself; a
+    // resume right after must not start under that stop.
+    test('a stop during the self-stop after an error waits for it', () async {
+      final gated = _GatedStopRecorder();
+      recorder = gated;
+      orch = HandsFreeOrchestrator(
+        gated,
+        FakeVadService([]),
+        watchdogInterval: const Duration(hours: 1),
+      );
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      gated.gate = Completer<void>();
+      gated.fail(Exception('mic lost'));
+      await waitFor<EngineError>(events);
+
+      var stopped = false;
+      final stop = orch.stop().then((_) => stopped = true);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(stopped, isFalse, reason: 'the self-stop is still running');
+      expect(gated.stops, 1, reason: 'one recorder stop, not two');
+
+      gated.gate!.complete();
+      await stop;
+      expect(stopped, isTrue);
+      await sub.cancel();
+    });
+
     test('start() emits EngineListening', () async {
       orch = make([]);
       final events = <HandsFreeEngineEvent>[];
