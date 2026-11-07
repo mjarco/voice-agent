@@ -87,6 +87,23 @@ void main() {
       expect(mockRecorder.lastConfig?.numChannels, 1);
     });
 
+    test('by default the plugin keeps its focus handling', () async {
+      await service.start(outputPath: '/tmp/test.wav');
+      expect(mockRecorder.lastConfig?.audioInterruption,
+          AudioInterruptionMode.pause);
+    });
+
+    // ADR-AUDIO-014: on Android push-to-talk holds the app's own focus.
+    test('takes the focus mode it is given', () async {
+      final androidService = RecordingServiceImpl(
+        recorder: mockRecorder,
+        audioInterruption: AudioInterruptionMode.none,
+      );
+      await androidService.start(outputPath: '/tmp/test.wav');
+      expect(mockRecorder.lastConfig?.audioInterruption,
+          AudioInterruptionMode.none);
+    });
+
     test('stop returns RecordingResult with correct data', () async {
       await service.start(outputPath: '/tmp/test.wav');
 

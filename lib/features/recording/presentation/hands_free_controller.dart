@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
+import 'package:voice_agent/core/audio_focus/audio_focus_port.dart';
+import 'package:voice_agent/core/audio_focus/audio_focus_provider.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
@@ -55,6 +57,12 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 /// [stopSession] → Off. An utterance does not close anything; the gate
 /// closes only while TTS speaks. Every change goes through
 /// [nextMicMode]. iOS keeps the ADR-AUDIO-011 path below unchanged.
+///
+/// **Audio focus (ADR-AUDIO-014):** on Android the controller holds the
+/// app's own transient focus in Listening only. It asks for it before the
+/// recorder starts (a refusal, as during a call, means Standby with a
+/// message), gives it back on leaving Listening, and a permanent or
+/// transient loss moves Listening to Standby.
 class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     with WidgetsBindingObserver
     implements HandsFreeControlPort {
@@ -103,7 +111,11 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     }
     isSpeaking.addListener(ttsListener);
     _ttsListenerCleanup = () => isSpeaking.removeListener(ttsListener);
+    _focusLossSub =
+        _ref.read(audioFocusProvider).losses.listen(_onFocusLoss);
   }
+
+  StreamSubscription<AudioFocusLoss>? _focusLossSub;
 
   void Function()? _ttsListenerCleanup;
 
@@ -220,6 +232,26 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         return;
       }
     }
+    // The focus comes before the recorder: other apps' sound pauses
+    // first, and a refusal (a call) starts no recorder at all. Held from
+    // the moment it is asked for, so a pause during the request still
+    // gives it back.
+    _holdsFocus = true;
+    final granted = await _ref.read(audioFocusProvider).request();
+    if (!mounted) return;
+    if (generation != _modeGeneration || micMode != MicMode.listening) {
+      return;
+    }
+    if (!granted) {
+      _holdsFocus = false;
+      Telemetry.instance.event('hf.focus_refused');
+      if (_applyMicEvent(MicModeEvent.interrupted)) {
+        await _enterStandby(error: const HandsFreeSessionError(
+          message: micBusyMessage,
+        ));
+      }
+      return;
+    }
     _standbyError = null;
     _suspendedByUser = false;
     _suspendedForTts = false;
@@ -236,6 +268,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
 
   Future<void> _enterStandby({HandsFreeSessionError? error}) async {
     _modeGeneration++;
+    _abandonFocus();
     unawaited(_ref.read(ttsServiceProvider).stop());
     _engagement.disengage();
     final sub = _engineSub;
@@ -256,6 +289,37 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _engineStopping = stopping;
     await stopping;
     if (identical(_engineStopping, stopping)) _engineStopping = null;
+  }
+
+  /// Whether the focus is held (or being asked for) by Listening. The
+  /// platform has one focus for the app, shared with push-to-talk: a Stop
+  /// in Standby or Off must not take away the focus a push-to-talk holds.
+  bool _holdsFocus = false;
+
+  /// Gives the focus back at once, before any await of the caller, so a
+  /// later request (a resume) always reaches the platform after it.
+  void _abandonFocus() {
+    if (!_holdsFocus) return;
+    _holdsFocus = false;
+    unawaited(_ref.read(audioFocusProvider).abandon());
+  }
+
+  /// Shown in Standby when the system refuses the focus on entering
+  /// Listening, as it does during a call.
+  static const micBusyMessage = 'The microphone is busy (a call).';
+
+  /// A permanent or transient loss of the focus (another app plays, a
+  /// call) moves Listening to Standby; a "may duck" loss (a chime) is
+  /// ignored. A regained focus does not resume by itself.
+  void _onFocusLoss(AudioFocusLoss loss) {
+    if (!mounted || !_micModes) return;
+    Telemetry.instance.event('hf.focus_lost', attrs: {
+      'loss': loss.name,
+      'mode': micMode.name,
+    });
+    if (loss == AudioFocusLoss.mayDuck) return;
+    if (!_applyMicEvent(MicModeEvent.interrupted)) return;
+    unawaited(_enterStandby());
   }
 
   /// Engagement-layer state (testability hook). Exposes the underlying
@@ -678,6 +742,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         return;
       }
       if (micMode != MicMode.off) _applyMicEvent(MicModeEvent.stop);
+      _abandonFocus();
       // The mode and the state agree from the first moment: Off, with the
       // queue still shown while it drains.
       _modeGeneration++;
@@ -760,6 +825,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ttsListenerCleanup?.call();
+    unawaited(_focusLossSub?.cancel());
     unawaited(_engagementSub?.cancel());
     unawaited(_engagement.dispose());
     // Clean up WAV files for any remaining unprocessed jobs.

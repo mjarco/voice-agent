@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
+import 'package:voice_agent/core/audio_focus/audio_focus_port.dart';
+import 'package:voice_agent/core/audio_focus/audio_focus_provider.dart';
 import 'package:voice_agent/core/background/background_service.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config.dart';
@@ -207,12 +209,46 @@ class _NullStt implements SttService {
       throw SttException('unused');
 }
 
+/// The app's own audio focus (ADR-AUDIO-014). Logs each call with the
+/// number of recorder starts at that moment.
+class _Focus implements AudioFocusPort {
+  _Focus(this.engine);
+  final _Engine engine;
+  final List<String> calls = [];
+  bool granted = true;
+  final StreamController<AudioFocusLoss> _losses =
+      StreamController<AudioFocusLoss>.broadcast();
+
+  /// When set, a request waits for it before answering.
+  Completer<void>? requestGate;
+
+  void lose(AudioFocusLoss loss) => _losses.add(loss);
+
+  @override
+  Future<bool> request() async {
+    calls.add('request@${engine.starts}');
+    if (requestGate != null) await requestGate!.future;
+    return granted;
+  }
+
+  @override
+  Future<void> abandon() async => calls.add('abandon');
+
+  @override
+  Stream<AudioFocusLoss> get losses => _losses.stream;
+}
+
 // ── Harness ──────────────────────────────────────────────────────────────────
 
 class _Harness {
-  _Harness({String? groqApiKey = 'gsk_test', SttService? stt}) {
+  _Harness({
+    String? groqApiKey = 'gsk_test',
+    SttService? stt,
+    bool micModes = true,
+  }) {
     container = ProviderContainer(overrides: [
-      micModesEnabledProvider.overrideWithValue(true),
+      micModesEnabledProvider.overrideWithValue(micModes),
+      audioFocusProvider.overrideWithValue(focus),
       handsFreeEngineProvider.overrideWithValue(engine),
       backgroundServiceProvider.overrideWithValue(service),
       ttsServiceProvider.overrideWithValue(tts),
@@ -230,6 +266,7 @@ class _Harness {
   }
 
   final engine = _Engine();
+  late final focus = _Focus(engine);
   final service = _Service();
   final tts = _Tts();
   late final ProviderContainer container;
@@ -744,6 +781,188 @@ void main() {
       await h.ctrl.reloadVadConfig();
       expect(h.engine.running, isFalse);
       expect(h.mode, MicMode.standby);
+    });
+  });
+
+  group('Audio focus (ADR-AUDIO-014)', () {
+    test('Listening asks for the focus before the recorder starts', () async {
+      final h = _Harness();
+      await h.listening();
+
+      expect(h.focus.calls, ['request@0']);
+      expect(h.engine.starts, 1);
+    });
+
+    test('a pause gives it back and a resume asks again', () async {
+      final h = _Harness();
+      await h.standby();
+      expect(h.focus.calls, ['request@0', 'abandon']);
+
+      await h.ctrl.resumeSession();
+      expect(h.focus.calls, ['request@0', 'abandon', 'request@1']);
+      expect(h.engine.starts, 2);
+    });
+
+    test('Stop from Listening gives it back', () async {
+      final h = _Harness();
+      await h.listening();
+      await h.ctrl.stopSession();
+      expect(h.focus.calls, ['request@0', 'abandon']);
+    });
+
+    // The app has one focus, shared with push-to-talk: a Stop in Standby
+    // must not take away a focus that push-to-talk may hold.
+    test('Stop from Standby gives back nothing more', () async {
+      final h = _Harness();
+      await h.standby();
+      expect(h.focus.calls, ['request@0', 'abandon']);
+
+      await h.ctrl.stopSession();
+      expect(h.focus.calls, ['request@0', 'abandon']);
+      expect(h.mode, MicMode.off);
+    });
+
+    test('an engine error in Listening gives it back', () async {
+      final h = _Harness();
+      await h.listening();
+      h.engine.fail(Exception('mic lost'));
+      await _settle();
+      await _settle();
+
+      expect(h.mode, MicMode.standby);
+      expect(h.focus.calls, ['request@0', 'abandon']);
+    });
+
+    for (final loss in [AudioFocusLoss.permanent, AudioFocusLoss.transient]) {
+      test('a ${loss.name} loss moves Listening to Standby', () async {
+        final h = _Harness();
+        await h.listening();
+
+        h.focus.lose(loss);
+        await _settle();
+        await _settle();
+
+        expect(h.mode, MicMode.standby);
+        expect(h.state, isA<HandsFreeIdle>(), reason: 'Standby, no error');
+        expect(h.engine.running, isFalse, reason: 'the mic is released');
+        expect(h.service.stops, 0, reason: 'the service stays');
+        expect(h.focus.calls.last, 'abandon');
+      });
+    }
+
+    test('a "may duck" loss is ignored', () async {
+      final h = _Harness();
+      await h.listening();
+
+      h.focus.lose(AudioFocusLoss.mayDuck);
+      await _settle();
+
+      expect(h.mode, MicMode.listening);
+      expect(h.engine.running, isTrue);
+      expect(h.focus.calls, ['request@0']);
+    });
+
+    test('a regained focus does not resume by itself', () async {
+      final h = _Harness();
+      await h.listening();
+      h.focus.lose(AudioFocusLoss.transient);
+      await _settle();
+      await _settle();
+
+      expect(h.mode, MicMode.standby);
+      expect(h.engine.starts, 1);
+    });
+
+    test('a loss in Standby or Off is ignored', () async {
+      final h = _Harness();
+      h.focus.lose(AudioFocusLoss.permanent);
+      await _settle();
+      expect(h.mode, MicMode.off);
+
+      await h.standby();
+      final calls = List.of(h.focus.calls);
+      h.focus.lose(AudioFocusLoss.permanent);
+      await _settle();
+      expect(h.mode, MicMode.standby);
+      expect(h.focus.calls, calls);
+    });
+
+    test('a refused focus at the start means Standby with its message',
+        () async {
+      final h = _Harness();
+      h.focus.granted = false;
+      await h.ctrl.startSession();
+
+      expect(h.mode, MicMode.standby);
+      expect(h.engine.starts, 0, reason: 'no recorder during a call');
+      expect(h.service.starts, 1, reason: 'the session can resume');
+      expect(h.state, isA<HandsFreeSessionError>());
+      expect((h.state as HandsFreeSessionError).message,
+          HandsFreeController.micBusyMessage);
+    });
+
+    test('a refused focus on resume keeps Standby with its message',
+        () async {
+      final h = _Harness();
+      await h.standby();
+      h.focus.granted = false;
+      await h.ctrl.resumeSession();
+
+      expect(h.mode, MicMode.standby);
+      expect(h.engine.starts, 1);
+      expect((h.state as HandsFreeSessionError).message,
+          HandsFreeController.micBusyMessage);
+
+      h.focus.granted = true;
+      await h.ctrl.resumeSession();
+      expect(h.mode, MicMode.listening);
+      expect(h.state, isA<HandsFreeListening>(), reason: 'message cleared');
+    });
+
+    test('a pause while the focus request is pending starts no recorder',
+        () async {
+      final h = _Harness();
+      await h.standby();
+      h.focus.requestGate = Completer<void>();
+
+      final resuming = h.ctrl.resumeSession();
+      await _settle();
+      await h.ctrl.pauseSession();
+      h.focus.requestGate!.complete();
+      await resuming;
+
+      expect(h.mode, MicMode.standby);
+      expect(h.engine.starts, 1, reason: 'only the first Listening');
+      expect(h.engine.running, isFalse);
+      expect(h.focus.calls.last, 'abandon',
+          reason: 'the abandon follows the pending request');
+    });
+
+    test('a loss while a resume is starting wins', () async {
+      final h = _Harness();
+      await h.standby();
+      h.focus.requestGate = Completer<void>();
+
+      final resuming = h.ctrl.resumeSession();
+      await _settle();
+      h.focus.lose(AudioFocusLoss.transient);
+      await _settle();
+      h.focus.requestGate!.complete();
+      await resuming;
+
+      expect(h.mode, MicMode.standby);
+      expect(h.engine.running, isFalse);
+    });
+
+    test('iOS never touches the focus', () async {
+      final h = _Harness(micModes: false);
+      await h.ctrl.startSession();
+      h.focus.lose(AudioFocusLoss.permanent);
+      await _settle();
+      await h.ctrl.stopSession();
+
+      expect(h.focus.calls, isEmpty);
+      expect(h.mode, MicMode.off);
     });
   });
 }

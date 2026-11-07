@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
+import 'package:voice_agent/core/audio_focus/audio_focus_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/stt_exception.dart';
@@ -79,9 +81,13 @@ class RecordingController extends StateNotifier<RecordingState>
         _currentElapsed = d;
       });
 
+      // Push-to-talk holds the app's transient focus while the button is
+      // held (ADR-AUDIO-014); a refusal does not stop an explicit press.
+      await _ref.read(audioFocusProvider).request();
       await _service.start(outputPath: path);
       state = const RecordingState.recording();
     } catch (e) {
+      unawaited(_ref.read(audioFocusProvider).abandon());
       _cleanupSubscription();
       state = RecordingState.error('Failed to start recording: $e');
     }
@@ -92,7 +98,14 @@ class RecordingController extends StateNotifier<RecordingState>
   /// emits [RecordingIdle] without an error (used for press-and-hold).
   Future<void> stopAndTranscribe({bool silentOnEmpty = false}) async {
     try {
-      final recordingResult = await _service.stop();
+      final RecordingResult recordingResult;
+      try {
+        recordingResult = await _service.stop();
+      } finally {
+        // Given back even when the stop fails: an error state never
+        // reaches the return to Listening that would ask for it again.
+        unawaited(_ref.read(audioFocusProvider).abandon());
+      }
       _cleanupSubscription();
 
       state = const RecordingState.transcribing();
@@ -172,6 +185,7 @@ class RecordingController extends StateNotifier<RecordingState>
     } catch (_) {
       // Best-effort cleanup
     }
+    unawaited(_ref.read(audioFocusProvider).abandon());
     _cleanupSubscription();
     state = const RecordingState.idle();
   }

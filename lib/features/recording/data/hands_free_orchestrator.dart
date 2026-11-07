@@ -23,7 +23,9 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     AudioRouteService? audioRouteService,
     Duration watchdogInterval = const Duration(seconds: 3),
     Duration routeRestartDebounce = const Duration(milliseconds: 300),
+    AudioInterruptionMode audioInterruption = AudioInterruptionMode.pause,
   })  : _audioRouteService = audioRouteService,
+        _audioInterruption = audioInterruption,
         _watchdogInterval = watchdogInterval,
         _routeRestartDebounce = routeRestartDebounce;
 
@@ -40,6 +42,19 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
   /// Debounce window collapsing a burst of route changes into one restart.
   final Duration _routeRestartDebounce;
+
+  /// What the `record` plugin does about audio focus. Android passes
+  /// [AudioInterruptionMode.none]: the app holds its own transient focus
+  /// in Listening (ADR-AUDIO-014), and a loss no longer pauses the
+  /// recorder behind the watchdog's back.
+  final AudioInterruptionMode _audioInterruption;
+
+  RecordConfig get _recordConfig => RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: _sampleRate,
+        numChannels: 1,
+        audioInterruption: _audioInterruption,
+      );
 
   // ── Tuning constants ────────────────────────────────────────────────────────
   static const _sampleRate = 16000;
@@ -260,13 +275,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
       _preRollCapacity =
           (config.preRollMs + _msPerFrame - 1) ~/ _msPerFrame;
 
-      final audioStream = await _audioRecorder.startStream(
-        const RecordConfig(
-          encoder: AudioEncoder.pcm16bits,
-          sampleRate: _sampleRate,
-          numChannels: 1,
-        ),
-      );
+      final audioStream = await _audioRecorder.startStream(_recordConfig);
 
       if (_phase == _Phase.idle) return; // stop() called during init
 
@@ -360,13 +369,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
       _cooldownTimer = null;
       _inCooldown = false;
       _phase = _Phase.listening;
-      final audioStream = await _audioRecorder.startStream(
-        const RecordConfig(
-          encoder: AudioEncoder.pcm16bits,
-          sampleRate: _sampleRate,
-          numChannels: 1,
-        ),
-      );
+      final audioStream = await _audioRecorder.startStream(_recordConfig);
       if (_phase == _Phase.idle) return; // stopped during restart
       _audioSub = audioStream.listen(
         _enqueueChunk,

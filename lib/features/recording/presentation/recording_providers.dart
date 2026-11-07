@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:record/record.dart';
 import 'package:voice_agent/core/audio/audio_route_provider.dart';
@@ -14,8 +16,16 @@ import 'package:voice_agent/features/recording/domain/vad_service.dart';
 import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 
+/// On Android the app holds its own transient focus (ADR-AUDIO-014), so the
+/// `record` plugin takes none; iOS keeps the plugin's interruption handling.
+AudioInterruptionMode get _pluginAudioInterruption => Platform.isAndroid
+    ? AudioInterruptionMode.none
+    : AudioInterruptionMode.pause;
+
 final recordingServiceProvider = Provider<RecordingService>((ref) {
-  return RecordingServiceImpl();
+  return RecordingServiceImpl(
+    audioInterruption: _pluginAudioInterruption,
+  );
 });
 
 final sttServiceProvider = Provider<SttService>((ref) {
@@ -31,6 +41,7 @@ final handsFreeEngineProvider = Provider<HandsFreeEngine>((ref) {
     AudioRecorder(),
     ref.watch(vadServiceProvider),
     audioRouteService: ref.watch(audioRouteServiceProvider),
+    audioInterruption: _pluginAudioInterruption,
   );
 });
 

@@ -12,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private var mediaButtonBridge: MediaButtonBridge? = null
+    private var audioFocusBridge: AudioFocusBridge? = null
     private var shareBridge: ShareBridge? = null
     private var arrivalTapBridge: ArrivalTapBridge? = null
 
@@ -35,6 +36,13 @@ class MainActivity : FlutterActivity() {
 
         EventChannel(messenger, "com.voiceagent/media_button/events")
             .setStreamHandler(bridge)
+
+        val focus = AudioFocusBridge(this)
+        audioFocusBridge = focus
+        MethodChannel(messenger, "com.voiceagent/audio_focus")
+            .setMethodCallHandler(focus)
+        EventChannel(messenger, "com.voiceagent/audio_focus/events")
+            .setStreamHandler(focus)
 
         MethodChannel(messenger, "com.voiceagent/location_log")
             .setMethodCallHandler(LocationBridge(this))
@@ -64,6 +72,9 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         mediaButtonBridge?.deactivateSession()
         mediaButtonBridge = null
+        // A focus left held by a destroyed engine would keep other apps paused.
+        audioFocusBridge?.abandon()
+        audioFocusBridge = null
         shareBridge = null
         arrivalTapBridge = null
         super.cleanUpFlutterEngine(flutterEngine)
