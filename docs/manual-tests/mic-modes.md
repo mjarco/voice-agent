@@ -15,27 +15,27 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 | # | Case | Status |
 |---|---|---|
-| S1 | Dev build pointed at a test PA | pending |
-| S2 | Reading the microphone state over adb | pending |
-| T1 | Off → Listening from the mic button | pending |
-| T2 | Listening → Standby from a tap releases the microphone | pending |
-| T3 | Standby → Listening from a tap | pending |
-| T4 | Stop from Listening and from Standby ends in Off | pending |
-| T5 | An utterance and its reply keep Listening open | pending |
-| T6 | Tabs do not touch the microphone | pending |
-| T7 | Locked phone: the headset pauses and resumes | pending |
-| T8 | A reply in Standby is not spoken | pending |
-| T9 | Push-to-talk from Listening returns to Listening | pending |
-| T10 | Farewell phrase ends in Off | pending |
-| T11 | Focus held in Listening only, and a reply keeps it | pending |
-| T12 | Another app's sound moves Listening to Standby | pending |
-| T13 | A paused video resumes on Pause and on Stop | pending |
-| T14 | A call means Standby; a start during a call is refused | pending |
-| T15 | The notification shows the mode and its buttons | pending |
-| T16 | Pause, Resume and Stop from the notification | pending |
-| T17 | The headset button is claimed in Listening and released in Off | pending |
-| T18 | A swipe from recents means Off | pending |
-| T19 | The processing sound plays on the media volume | pending |
+| S1 | Dev build pointed at a test PA | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| S2 | Reading the microphone state over adb | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T1 | Off → Listening from the mic button | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T2 | Listening → Standby from a tap releases the microphone | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T3 | Standby → Listening from a tap | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T4 | Stop from Listening and from Standby ends in Off | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T5 | An utterance and its reply keep Listening open | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T6 | Tabs do not touch the microphone | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T7 | Locked phone: the headset pauses and resumes | field check FC-9 (owner, stable 1.24.0+41) |
+| T8 | A reply in Standby is not spoken | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T9 | Push-to-talk from Listening returns to Listening | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); defect D1 found, see the case |
+| T10 | Farewell phrase ends in Off | field check FC-10 (owner, stable 1.24.0+41) |
+| T11 | Focus held in Listening only, and a reply keeps it | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T12 | Another app's sound moves Listening to Standby | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T13 | A paused video resumes on Pause and on Stop | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA), YouTube started over adb |
+| T14 | A call means Standby; a start during a call is refused | field check FC-11 (owner, stable 1.24.0+41) |
+| T15 | The notification shows the mode and its buttons | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T16 | Pause, Resume and Stop from the notification | steps 1–2 passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); step 3 field check FC-12 (owner) |
+| T17 | The headset button is claimed in Listening and released in Off | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); step 4 in part, see the case |
+| T18 | A swipe from recents means Off | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
+| T19 | The processing sound plays on the media volume | usage, focus and no extra segment passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); voice and ear field check FC-13 (owner) |
 
 ---
 
@@ -43,13 +43,13 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### S1. Dev build pointed at a test PA
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:** set up the dev build and the test PA as the workspace skill `ws-device-check` describes (never `.env.mobile`, never `:8888`; `pm clear` after install; read the URL in Settings and tap Test Connection). Grant the microphone and notifications.
 
 ### S2. Reading the microphone state over adb
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:** keep these at hand; T2–T7 read them after each step.
 
@@ -67,7 +67,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T1. Off → Listening from the mic button
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:**
 1. Open the app on Record. The label reads "Tap to start listening"; no Stop button.
@@ -79,7 +79,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T2. Listening → Standby from a tap releases the microphone
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:** in Listening, tap the mic. Wait 5 s and read S2.
 
@@ -89,7 +89,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T3. Standby → Listening from a tap
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:** in Standby, tap the mic. Say a short sentence.
 
@@ -99,7 +99,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T4. Stop from Listening and from Standby ends in Off
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:**
 1. From Listening, tap Stop.
@@ -111,7 +111,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T5. An utterance and its reply keep Listening open
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:** in Listening, ask a question that gets a spoken reply; then say a second sentence without touching anything.
 
@@ -121,7 +121,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T6. Tabs do not touch the microphone
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:**
 1. In Listening, go to Agenda, then Chat, then back to Record. Read S2 on each tab.
@@ -133,7 +133,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T7. Locked phone: the headset pauses and resumes
 
-**Status:** pending (owner: a real headset)
+**Status:** field check FC-9 (owner, stable 1.24.0+41)
 
 **Do:**
 1. In Listening, lock the phone. Press the headset button once.
@@ -145,7 +145,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T8. A reply in Standby is not spoken
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:** in Listening, ask a question with a long answer and pause (tap) before the reply arrives.
 
@@ -155,7 +155,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T9. Push-to-talk from Listening returns to Listening
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); defect D1 found, see the case
 
 **Do:**
 1. In Listening, hold the mic, speak, release.
@@ -164,10 +164,11 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 **Why:** ADR-AUDIO-013, decision 5 (push-to-talk puts Listening into Standby and returns only in the foreground).
 **Expected:** step 1: Standby while held, Listening after the release, one recorder at a time; while held, the focus stack (S2) shows the app's `GAIN_TRANSIENT` and no `AUDIOFOCUS_GAIN` of the plugin (ADR-AUDIO-014, decision 5). Step 2: the session stays in Standby, with no focus entry of the app.
 **On failure:** two recorders listed at once: the hands-free recorder was not stopped for push-to-talk.
+**Note (2026-11-08):** step 2 holds, but afterwards the mic button ignores every tap, also after Stop, until another long press (defect D1). Inferred from `recording_screen.dart`: Home during the hold means `_onLongPressEnd` never runs, so `_longPressActive` stays `true` and `_onTap` returns early. The Stop button and the notification still work.
 
 ### T10. Farewell phrase ends in Off
 
-**Status:** pending
+**Status:** field check FC-10 (owner, stable 1.24.0+41)
 
 **Do:** in Listening, say "dobranoc".
 
@@ -177,7 +178,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T11. Focus held in Listening only, and a reply keeps it
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:**
 1. Off: read the focus stack (S2). Start Listening and read it again.
@@ -190,7 +191,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T12. Another app's sound moves Listening to Standby
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:** in Listening, start a video or music in another app (the agent: `adb shell am start -a android.intent.action.VIEW -d <a video URL>`).
 
@@ -200,7 +201,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T13. A paused video resumes on Pause and on Stop
 
-**Status:** pending (owner: a real video app)
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA), YouTube started over adb
 
 **Do:**
 1. Play a video, open voice-agent, start Listening.
@@ -212,7 +213,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T14. A call means Standby; a start during a call is refused
 
-**Status:** pending (owner: a real call)
+**Status:** field check FC-11 (owner, stable 1.24.0+41)
 
 **Do:**
 1. In Listening, receive a call; answer it; hang up.
@@ -224,7 +225,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T15. The notification shows the mode and its buttons
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:**
 1. Start Listening and read the notification:
@@ -239,7 +240,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T16. Pause, Resume and Stop from the notification
 
-**Status:** pending (the locked screen: owner)
+**Status:** steps 1–2 passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); step 3 field check FC-12 (owner)
 
 **Do:**
 1. Unlocked, in Listening: pull down the shade and tap "Pause"; read the recorders (S2).
@@ -252,7 +253,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T17. The headset button is claimed in Listening and released in Off
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); step 4 in part, see the case
 
 **Do:**
 1. Off: `adb -s <serial> shell dumpsys media_session | grep -i "media button session"`.
@@ -263,10 +264,11 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 **Why:** ADR-AUDIO-015, decision 3 (the session only outside Off, the claim on entering Listening, none on a return to the app).
 **Expected:** step 1: no `VoiceAgentMediaSession`. Step 2: the media button session is `VoiceAgentMediaSession`; the key moves Listening to Standby. Step 3: no `VoiceAgentMediaSession`. Step 4: the key plays the video; voice-agent stays in Standby.
 **On failure:** a session in Off: `deactivate` did not run on Stop. The key goes to voice-agent in step 4: something still claims on resume (`MainActivity.onResume`).
+**Note (2026-11-08):** step 4: after the return the media button session stayed with YouTube and voice-agent stayed in Standby; the video's own play state could not be read (its session reported PLAYING throughout).
 
 ### T18. A swipe from recents means Off
 
-**Status:** pending
+**Status:** passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA)
 
 **Do:** in Listening, open recents and swipe the app away. Then read the recorders, the focus stack, the services (S2) and the media sessions (T17); wait 10 s and read the services again.
 
@@ -278,16 +280,17 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T19. The processing sound plays on the media volume
 
-**Status:** pending
+**Status:** usage, focus and no extra segment passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); voice and ear field check FC-13 (owner)
 
-**Do:** note the ring and media volumes (`adb shell cmd media_session volume --stream 2 --get`, `--stream 3`), set the ring volume to 0 and the media volume to 12 of 15. In Listening, say ten short utterances with a pause after each, and while the first one is processed read `adb shell dumpsys audio`. Count the app's rows in PA afterwards. Restore both volumes.
+**Do:** note the media and ring volumes (`adb shell dumpsys audio`, `- STREAM_MUSIC` and `- STREAM_RING`, the `2 (speaker)` value; the media scale is 0–25). Raise the media volume to about 18 with the volume keys (`adb shell input keyevent KEYCODE_VOLUME_UP`; `cmd media_session volume --set` does not change it on the Pixel). In Listening, say ten short utterances, each after the previous reply has ended, and while the first one is processed read `adb shell dumpsys audio`. Count the app's rows in PA afterwards. Restore the volume with the keys.
 
 **Why:** criterion 9 of the epic (the processing sound as loud as the replies, without focus); task 5.
 **Expected:** while the sound plays, `dumpsys audio` lists a player of the app's uid with `usage=USAGE_MEDIA`, and the focus stack gains no entry for it. Ten utterances give exactly ten rows in PA and no `Rejected`/empty jobs in logcat. The sound is heard with the ring volume at 0. By ear (owner, task 6): the sound is about as loud as a reply.
 **On failure:** `USAGE_ASSISTANCE_SONIFICATION` in the player list: the old build. More than ten rows, or empty transcriptions between them: the loop reached the open microphone, and the plan returns to the owner with options (b) or (c) of task 5's To decide 2.
+**Note (2026-11-08):** two runs with the synthetic voice of the agent's laptop: 20 utterances gave 12 segments, none without an utterance behind it. The missing ones were spoken during or right after a reply (the gate closes while a reply is spoken, T5), except two, unexplained; the synthetic voice is poor, so the owner's own voice settles it.
 
 ---
 
 ## When this plan is done
 
-Must pass: T1–T6, T8–T12, T15–T19 (T16 step 3 and the ear in T19 are the owner's). T7, T13 and T14 need the owner (a headset, a video app, a call); T7 decides whether the media-button claim on entering Listening is enough. Tasks 3–5 add their cases here before task 6 runs the plan.
+Must pass: T1–T6, T8–T12, T15–T19 (T16 step 3 and the ear in T19 are the owner's). T7, T13 and T14 need the owner (a headset, a video app, a call); T7 decides whether the media-button claim on entering Listening is enough. The owner's cases are field checks FC-9 to FC-13 in the workspace's `docs/field-checks/register.md` (owner's decision of 2026-11-08).
