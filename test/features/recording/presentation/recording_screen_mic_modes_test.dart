@@ -171,12 +171,12 @@ class _StubAudioFeedbackService implements AudioFeedbackService {
 // Stop button, the tap and the headset toggle.
 
 Future<(ProviderContainer, StubMediaButtonPort)> _pumpApp(
-    WidgetTester tester) async {
+    WidgetTester tester, {bool micModes = true}) async {
   final mediaButton = StubMediaButtonPort();
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        micModesEnabledProvider.overrideWithValue(true),
+        micModesEnabledProvider.overrideWithValue(micModes),
         storageServiceProvider.overrideWithValue(_StubStorage()),
         connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
         apiUrlConfiguredProvider.overrideWithValue(true),
@@ -321,6 +321,26 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(c.read(micModeProvider), MicMode.off);
+    });
+
+    // ADR-AUDIO-015: the controller owns the media session on Android.
+    testWidgets('opening the app claims nothing; Listening does, Stop releases',
+        (tester) async {
+      final (_, button) = await _pumpApp(tester);
+      expect(button.calls, isEmpty);
+
+      await _tapMic(tester);
+      expect(button.calls, ['claim']);
+
+      await tester.tap(_stop);
+      await tester.pumpAndSettle();
+      expect(button.calls, ['claim', 'deactivate']);
+    });
+
+    testWidgets('without the modes (iOS) the screen activates the session',
+        (tester) async {
+      final (_, button) = await _pumpApp(tester, micModes: false);
+      expect(button.calls, ['activate']);
     });
   });
 

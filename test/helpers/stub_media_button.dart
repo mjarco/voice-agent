@@ -9,11 +9,17 @@ class StubMediaButtonPort implements MediaButtonPort {
   @override
   Stream<MediaButtonEvent> get events => _controller.stream;
 
-  @override
-  Future<void> activate() async {}
+  /// Every activate / deactivate / claim, in order.
+  final List<String> calls = [];
 
   @override
-  Future<void> deactivate() async {}
+  Future<void> activate() async => calls.add('activate');
+
+  @override
+  Future<void> deactivate() async => calls.add('deactivate');
+
+  @override
+  Future<void> claim() async => calls.add('claim');
 
   /// Emits an event for testing.
   void emit(MediaButtonEvent event) => _controller.add(event);

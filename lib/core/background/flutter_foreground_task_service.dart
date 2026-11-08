@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:voice_agent/core/background/background_service.dart';
@@ -32,15 +33,32 @@ class FlutterForegroundTaskService implements BackgroundService {
         priority: NotificationPriority.LOW,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
-      foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.nothing(),
-        autoRunOnBoot: false,
-        autoRunOnMyPackageReplaced: false,
-        allowWakeLock: true,
-        allowWifiLock: false,
-      ),
+      foregroundTaskOptions: foregroundTaskOptions,
     );
   }
+
+  /// The service's options. They leave `stopWithTask` unset on purpose
+  /// (ADR-AUDIO-015): the plugin's option stops the service whenever no
+  /// activity is resumed, so listening would end with a locked screen.
+  /// `android:stopWithTask` in `AndroidManifest.xml` makes a swipe from
+  /// recents stop the service instead.
+  @visibleForTesting
+  static final foregroundTaskOptions = ForegroundTaskOptions(
+    eventAction: ForegroundTaskEventAction.nothing(),
+    autoRunOnBoot: false,
+    autoRunOnMyPackageReplaced: false,
+    allowWakeLock: true,
+    allowWifiLock: false,
+  );
+
+  /// The plugin's buttons for [buttons].
+  @visibleForTesting
+  static List<NotificationButton> pluginButtons(
+    List<ServiceNotificationButton> buttons,
+  ) =>
+      [
+        for (final b in buttons) NotificationButton(id: b.id, text: b.text),
+      ];
 
   @override
   Future<void> startService() async {
@@ -113,13 +131,17 @@ class FlutterForegroundTaskService implements BackgroundService {
   Future<void> updateNotification({
     required String title,
     required String body,
+    List<ServiceNotificationButton> buttons = const [],
   }) async {
     if (!_running) return;
     if (Platform.isAndroid) {
-      await FlutterForegroundTask.updateService(
+      final result = await FlutterForegroundTask.updateService(
         notificationTitle: title,
         notificationText: body,
+        notificationButtons: pluginButtons(buttons),
       );
+      // The plugin reports a failure as a result, not as an exception.
+      if (result is ServiceRequestFailure) throw result.error;
     }
   }
 }
