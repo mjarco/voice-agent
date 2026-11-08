@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/agenda.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_state.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_notifier.dart';
@@ -80,11 +79,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     bool isRefreshing = false,
     String? errorMessage,
   }) {
-    final actionItems = response.items;
     final routineItems = response.routineItems;
     final meetings = response.calendarItems;
-    final isEmpty =
-        actionItems.isEmpty && routineItems.isEmpty && meetings.isEmpty;
+    final isEmpty = routineItems.isEmpty && meetings.isEmpty;
 
     return Column(
       children: [
@@ -138,38 +135,22 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                           (m) => _MeetingTile(meeting: m, day: response.date),
                         ),
                       ],
-                      if (actionItems.isNotEmpty) ...[
-                        _SectionHeader(
-                          title: 'Action Items',
-                          count: actionItems.length,
-                        ),
-                        ..._sortedActionItems(actionItems).map(
-                          (item) => _ActionItemTile(
-                            item: item,
-                            onMarkDone: () => _handleMarkDone(item.recordId),
-                          ),
-                        ),
-                      ],
                       if (routineItems.isNotEmpty) ...[
                         _SectionHeader(
-                          title: 'Routines',
+                          title: 'To do',
                           count: routineItems.length,
                         ),
+                        // The server's order: overdue first, then by day,
+                        // hour and name.
                         ...routineItems.map(
                           (item) => _RoutineItemTile(
                             item: item,
-                            onSkip: _tickable(item)
-                                ? () => _handleResolve(
-                                    item,
-                                    OccurrenceStatus.skipped,
-                                  )
-                                : null,
-                            onComplete: _tickable(item)
-                                ? () => _handleResolve(
-                                    item,
-                                    OccurrenceStatus.done,
-                                  )
-                                : null,
+                            onSkip: () => _handleResolve(
+                              item,
+                              OccurrenceStatus.skipped,
+                            ),
+                            onComplete: () =>
+                                _handleResolve(item, OccurrenceStatus.done),
                           ),
                         ),
                       ],
@@ -181,20 +162,6 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           _StaleDataBanner(fetchedAt: staleAt),
       ],
     );
-  }
-
-  List<AgendaItem> _sortedActionItems(List<AgendaItem> items) {
-    final sorted = List<AgendaItem>.from(items);
-    sorted.sort((a, b) {
-      if (a.status == RecordStatus.done && b.status != RecordStatus.done) {
-        return 1;
-      }
-      if (a.status != RecordStatus.done && b.status == RecordStatus.done) {
-        return -1;
-      }
-      return 0;
-    });
-    return sorted;
   }
 
   bool _isRecent(DateTime fetchedAt) =>
@@ -218,33 +185,37 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     );
   }
 
-  Future<void> _handleMarkDone(String recordId) async {
-    final notifier = ref.read(agendaNotifierProvider.notifier);
-    final success = await notifier.markDone(recordId);
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to mark item as done')),
-      );
-    }
-  }
-
-  /// A routine row is ticked off through resolve, with or without a stored
-  /// occurrence (#363); a resolved row and a peer-mirrored one are not.
-  bool _tickable(AgendaRoutineItem item) =>
-      item.peerId == null &&
-      item.status != OccurrenceStatus.done &&
-      item.status != OccurrenceStatus.skipped;
-
+  /// Ticks the row off; a ticked row leaves the agenda, so the snackbar
+  /// offers to undo it.
   Future<void> _handleResolve(
     AgendaRoutineItem item,
     OccurrenceStatus status,
   ) async {
     final notifier = ref.read(agendaNotifierProvider.notifier);
-    final refusal = await notifier.resolveOccurrence(
-      item.routineId,
-      item.scheduledFor,
-      status,
+    final refusal = await notifier.resolveOccurrence(item, status);
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (refusal != null) {
+      messenger.showSnackBar(SnackBar(content: Text(refusal)));
+      return;
+    }
+    final verb = status == OccurrenceStatus.skipped ? 'Skipped' : 'Done';
+    messenger.showSnackBar(
+      SnackBar(
+        key: Key('agenda-ticked-${item.routineId}'),
+        content: Text('$verb: ${item.routineName}'),
+        action: SnackBarAction(
+          key: Key('agenda-undo-${item.routineId}'),
+          label: 'Undo',
+          onPressed: () => _handleUndo(item),
+        ),
+      ),
     );
+  }
+
+  Future<void> _handleUndo(AgendaRoutineItem item) async {
+    final notifier = ref.read(agendaNotifierProvider.notifier);
+    final refusal = await notifier.undoOccurrence(item);
     if (refusal != null && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -375,45 +346,24 @@ class _MeetingTile extends StatelessWidget {
   }
 }
 
-class _ActionItemTile extends StatelessWidget {
-  const _ActionItemTile({required this.item, required this.onMarkDone});
-  final AgendaItem item;
-  final VoidCallback onMarkDone;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDone = item.status == RecordStatus.done;
-    return ListTile(
-      key: Key('action-item-${item.recordId}'),
-      leading: Checkbox(
-        value: isDone,
-        onChanged: isDone ? null : (_) => onMarkDone(),
-      ),
-      title: Text(
-        item.text,
-        style: isDone
-            ? const TextStyle(decoration: TextDecoration.lineThrough)
-            : null,
-      ),
-      subtitle: item.topicRef != null ? Text(item.topicRef!) : null,
-      trailing: _StatusBadge(label: item.status.name),
-    );
-  }
-}
-
+/// A routine due: a recurring one's day or a one-off task in its window.
+/// Swiping skips it; the expanded row lists its steps and ticks it off.
 class _RoutineItemTile extends StatelessWidget {
-  const _RoutineItemTile({required this.item, this.onSkip, this.onComplete});
+  const _RoutineItemTile({
+    required this.item,
+    required this.onSkip,
+    required this.onComplete,
+  });
   final AgendaRoutineItem item;
-  final VoidCallback? onSkip;
-  final VoidCallback? onComplete;
+  final VoidCallback onSkip;
+  final VoidCallback onComplete;
 
   @override
   Widget build(BuildContext context) {
+    final window = item.dueWindow;
     return Dismissible(
       key: Key('routine-dismiss-${item.routineId}'),
-      direction: onSkip != null
-          ? DismissDirection.endToStart
-          : DismissDirection.none,
+      direction: DismissDirection.endToStart,
       background: Container(
         color: Colors.orange,
         alignment: Alignment.centerRight,
@@ -421,75 +371,67 @@ class _RoutineItemTile extends StatelessWidget {
         child: const Text('Skip', style: TextStyle(color: Colors.white)),
       ),
       confirmDismiss: (_) async {
-        onSkip?.call();
+        onSkip();
         return false;
       },
       child: ExpansionTile(
         key: Key('routine-item-${item.routineId}'),
-        leading: _occurrenceStatusIcon(item.status),
+        leading: item.overdue
+            ? const Icon(Icons.warning, color: Colors.orange)
+            : Icon(
+                item.isOneOff ? Icons.task_alt : Icons.repeat,
+                color: Colors.grey,
+              ),
         title: Text(item.routineName),
-        subtitle: Row(
+        subtitle: Wrap(
+          spacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            if (item.startTime != null) ...[
-              Text(item.startTime!),
-              const SizedBox(width: 8),
-            ],
-            _StatusBadge(label: item.status.toJson()),
-            if (item.overdue) ...[
-              const SizedBox(width: 8),
-              const Icon(Icons.warning, size: 16, color: Colors.orange),
-              const SizedBox(width: 4),
+            if (item.startTime != null) Text(item.startTime!),
+            _StatusBadge(label: item.isOneOff ? 'task' : 'routine'),
+            if (item.isOneOff && window != null)
+              Text(
+                window.describeFrom(item.scheduledFor),
+                key: Key('routine-window-${item.routineId}'),
+              )
+            else if (item.overdue)
               Text(
                 'since ${item.scheduledFor}',
                 key: Key('routine-since-${item.routineId}'),
               ),
-            ],
           ],
         ),
         children: [
-          ...item.templates.map(
+          ...item.steps.map(
             (t) => ListTile(
               dense: true,
               leading: const Icon(Icons.subdirectory_arrow_right, size: 16),
               title: Text(t.text),
             ),
           ),
-          if (onComplete != null &&
-              item.status != OccurrenceStatus.done &&
-              item.status != OccurrenceStatus.skipped)
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: ElevatedButton.icon(
-                key: Key('routine-complete-${item.routineId}'),
-                onPressed: onComplete,
-                icon: const Icon(Icons.check),
-                label: const Text('Done'),
-              ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                ElevatedButton.icon(
+                  key: Key('routine-complete-${item.routineId}'),
+                  onPressed: onComplete,
+                  icon: const Icon(Icons.check),
+                  label: const Text('Done'),
+                ),
+                OutlinedButton.icon(
+                  key: Key('routine-skip-${item.routineId}'),
+                  onPressed: onSkip,
+                  icon: const Icon(Icons.skip_next),
+                  label: const Text('Skip'),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
-  }
-
-  Widget _occurrenceStatusIcon(OccurrenceStatus status) {
-    return switch (status) {
-      OccurrenceStatus.done => const Icon(
-        Icons.check_circle,
-        color: Colors.green,
-      ),
-      OccurrenceStatus.skipped => const Icon(
-        Icons.skip_next,
-        color: Colors.orange,
-      ),
-      OccurrenceStatus.inProgress => const Icon(
-        Icons.play_circle,
-        color: Colors.blue,
-      ),
-      OccurrenceStatus.pending => const Icon(
-        Icons.schedule,
-        color: Colors.grey,
-      ),
-    };
   }
 }
 

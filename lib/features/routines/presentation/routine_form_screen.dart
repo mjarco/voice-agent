@@ -9,8 +9,10 @@ import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
 
 /// Creates a routine ([editId] null) or edits one (#365): the same form as
-/// the web UI's (thought-agent#564). The client builds the RRULE from the
-/// four schedules; saving pops with the routine the server wrote.
+/// the web UI's. A routine is recurring, once (a day with a window) or some
+/// day (ADR-CORE-116 of personal-agent); for a recurring one the client
+/// builds the RRULE from the four schedules. Saving pops with the routine
+/// the server wrote.
 class RoutineFormScreen extends ConsumerStatefulWidget {
   const RoutineFormScreen({super.key, this.editId});
   final String? editId;
@@ -26,12 +28,14 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
   final List<TextEditingController> _steps = [];
 
   bool _filled = false;
+  RoutineKind _type = RoutineKind.recurring;
   String? _unknownRRule;
   RoutineScheduleKind? _kind = RoutineScheduleKind.daily;
   final Set<String> _days = {};
+  DateTime? _dueOn;
+  TimeWindow _dueWindow = TimeWindow.day;
   TimeOfDay? _time;
   DateTime? _lastDay;
-  late DateTime _startsOn;
   RoutineMissed _missed = RoutineMissed.lapses;
   bool _missedTouched = false;
   String? _validation;
@@ -51,7 +55,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
   @override
   void initState() {
     super.initState();
-    _startsOn = _today;
     if (!_isEdit) {
       _steps.add(TextEditingController());
       _filled = true;
@@ -73,8 +76,14 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
   void _fill(Routine r) {
     _filled = true;
     _name.text = r.name;
+    _type = r.kind;
+    _dueOn = parseRoutineDay(r.dueOn);
+    _dueWindow = r.dueWindow ?? TimeWindow.day;
     final schedule = RoutineSchedule.parse(r.rrule);
-    if (schedule == null) {
+    if (!r.isRecurring) {
+      // Kept for a switch to recurring.
+      _kind = RoutineScheduleKind.daily;
+    } else if (schedule == null) {
       _kind = null;
       _unknownRRule = r.rrule;
     } else {
@@ -88,13 +97,15 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
       if (schedule.monthday != null) _monthday.text = '${schedule.monthday}';
     }
     _time = _parseTime(r.startTime);
-    // A last day already past (an ended routine) is not offered again: the
-    // new version cannot end before it starts.
-    final last = parseRoutineDay(r.lastDay);
+    // A last day already past (an ended routine) is not offered again: an
+    // edit cannot end it before today.
+    final last = r.isRecurring ? parseRoutineDay(r.lastDay) : null;
     _lastDay = last != null && !last.isBefore(_today) ? last : null;
-    _missed = r.missed;
-    _missedTouched = true;
-    final templates = [...r.templates]
+    if (r.isRecurring) {
+      _missed = r.missed;
+      _missedTouched = true;
+    }
+    final templates = [...r.steps]
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     for (final c in _steps) {
       c.dispose();
@@ -117,6 +128,7 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
   void _setKind(RoutineScheduleKind? kind) {
     setState(() {
       _kind = kind;
+      _touched(RoutineFormField.schedule);
       _touched(RoutineFormField.days);
       _touched(RoutineFormField.interval);
       _touched(RoutineFormField.monthday);
@@ -154,8 +166,43 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
     if (name.isEmpty) {
       return _refuse(RoutineFormField.name, 'Give the routine a name.');
     }
+    final startTime = _time == null ? null : _formatTime(_time!);
+    final steps = _steps
+        .map((c) => c.text.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    switch (_type) {
+      case RoutineKind.oneOff:
+        final due = _dueOn;
+        if (due == null) {
+          return _refuse(RoutineFormField.dueOn, 'Choose the day.');
+        }
+        return (
+          RoutineInput(
+            name: name,
+            term: OneOffTerm(formatRoutineDay(due), _dueWindow),
+            startTime: startTime,
+            steps: steps,
+          ),
+          null
+        );
+      case RoutineKind.someday:
+        return (
+          RoutineInput(
+            name: name,
+            term: const SomedayTerm(),
+            startTime: startTime,
+            steps: steps,
+          ),
+          null
+        );
+      case RoutineKind.recurring:
+        break;
+    }
     final kind = _kind;
-    if (kind == null) return (null, 'Choose a schedule.');
+    if (kind == null) {
+      return _refuse(RoutineFormField.schedule, 'Choose a schedule.');
+    }
     final days = routineWeekdays.where(_days.contains).toList();
     RoutineSchedule schedule;
     switch (kind) {
@@ -186,17 +233,12 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
         }
         schedule = RoutineSchedule.monthly(d);
     }
-    // The picker starts at today, but a form left open overnight keeps
-    // yesterday's day.
-    if (_isEdit && _startsOn.isBefore(_today)) {
-      return _refuse(RoutineFormField.startsOn,
-          'Changes can start today at the earliest.');
-    }
-    final from = _isEdit ? _startsOn : _today;
+    // A new rule counts from today.
+    final from = _today;
     final last = _lastDay;
     if (last != null && last.isBefore(from)) {
       return _refuse(RoutineFormField.lastDay,
-          'The last day cannot be before the start day.');
+          'The last day cannot be before today.');
     }
     if (last != null && !schedule.occursBetween(from, last)) {
       return _refuse(
@@ -207,14 +249,11 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
     return (
       RoutineInput(
         name: name,
-        rrule: schedule.toRRule(),
-        startTime: _time == null ? null : _formatTime(_time!),
+        term: RecurringTerm(schedule.toRRule()),
+        startTime: startTime,
         lastDay: _lastDay == null ? null : formatRoutineDay(_lastDay!),
         missed: _missed,
-        items: _steps
-            .map((c) => c.text.trim())
-            .where((t) => t.isNotEmpty)
-            .toList(),
+        steps: steps,
       ),
       null
     );
@@ -226,17 +265,14 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
     if (input == null) return;
     await ref
         .read(routineFormNotifierProvider(widget.editId).notifier)
-        .save(input, startsOn: _isEdit ? formatRoutineDay(_startsOn) : null);
+        .save(input);
   }
 
-  Future<void> _askOverdue(String day, int? openDays) async {
+  Future<void> _askOverdue(String day) async {
     final notifier =
         ref.read(routineFormNotifierProvider(widget.editId).notifier);
-    // open_days (ADR-API-096): resolving the earliest day brings up the
-    // next.
-    final open = openDays != null && openDays > 1
-        ? '$openDays days are still open, the earliest $day.'
-        : 'The occurrence of $day is still open.';
+    // Resolving the earliest owed day brings up the next, if any.
+    final open = 'The occurrence of $day is still open.';
     final status = await showDialog<OccurrenceStatus>(
       context: context,
       barrierDismissible: false,
@@ -273,23 +309,26 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
     }
   }
 
-  Future<void> _pickStartsOn() async {
+  /// A one-off's day: from today, or from its day already past on an edit.
+  Future<void> _pickDueOn() async {
+    final due = _dueOn;
+    final first = due != null && due.isBefore(_today) ? due : _today;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _startsOn,
-      firstDate: _today,
+      initialDate: due ?? _today,
+      firstDate: first,
       lastDate: _today.add(const Duration(days: 3650)),
     );
     if (picked != null) {
       setState(() {
-        _startsOn = picked;
-        _touched(RoutineFormField.startsOn);
+        _dueOn = picked;
+        _touched(RoutineFormField.dueOn);
       });
     }
   }
 
   Future<void> _pickLastDay() async {
-    final first = _isEdit && _startsOn.isAfter(_today) ? _startsOn : _today;
+    final first = _today;
     final initial =
         _lastDay != null && !_lastDay!.isBefore(first) ? _lastDay! : first;
     final picked = await showDatePicker(
@@ -322,23 +361,16 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
     ref.listen<RoutineFormState>(provider, (prev, next) {
       if (next.saved != null && prev?.saved == null) {
         context.pop(next.saved);
-      } else if (next.newer != null && prev?.newer == null) {
-        // A stale edit: the newer version opens in place of this one.
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'This routine was changed meanwhile: this is its newer version.')));
-        context.pop(next.newer);
       } else if (next.overdueDay != null &&
           next.overdueDay != prev?.overdueDay) {
-        _askOverdue(next.overdueDay!, next.overdueOpenDays);
+        _askOverdue(next.overdueDay!);
       }
     });
 
     if (!_filled && state.routine != null) _fill(state.routine!);
 
     final error = _validation ?? state.error;
-    final canSave =
-        _filled && !state.saving && !state.loading && !state.stale;
+    final canSave = _filled && !state.saving && !state.loading;
     final marked = _invalid ?? state.errorField;
 
     return Scaffold(
@@ -376,21 +408,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (_isEdit) ...[
-                  _DateTile(
-                    tileKey: const Key('routine-form-starts-on'),
-                    label: 'Changes from',
-                    value: formatRoutineDay(_startsOn),
-                    onTap: _pickStartsOn,
-                    invalid: marked == RoutineFormField.startsOn,
-                  ),
-                  const Text(
-                    'The current version ends the day before; '
-                    'the new one starts that day.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 TextField(
                   key: const Key('routine-form-name'),
                   controller: _name,
@@ -406,7 +423,34 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                ..._buildSchedule(marked),
+                SegmentedButton<RoutineKind>(
+                  key: const Key('routine-form-type'),
+                  segments: const [
+                    ButtonSegment(
+                        value: RoutineKind.recurring,
+                        label: Text('Recurring')),
+                    ButtonSegment(
+                        value: RoutineKind.oneOff, label: Text('Once')),
+                    ButtonSegment(
+                        value: RoutineKind.someday, label: Text('Some day')),
+                  ],
+                  selected: {_type},
+                  onSelectionChanged: (v) => setState(() {
+                    _type = v.first;
+                    _touched(RoutineFormField.schedule);
+                    _touched(RoutineFormField.dueOn);
+                  }),
+                ),
+                const SizedBox(height: 16),
+                if (_type == RoutineKind.recurring) ..._buildSchedule(marked),
+                if (_type == RoutineKind.oneOff) ..._buildDue(marked),
+                if (_type == RoutineKind.someday)
+                  const Text(
+                    'No day: it is not on the agenda. Tick it off from here '
+                    'when it is done.',
+                    key: Key('routine-form-someday-note'),
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 const SizedBox(height: 8),
                 _DateTile(
                   tileKey: const Key('routine-form-time'),
@@ -416,6 +460,7 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                   onClear:
                       _time == null ? null : () => setState(() => _time = null),
                 ),
+                if (_type == RoutineKind.recurring) ...[
                 _DateTile(
                   tileKey: const Key('routine-form-last-day'),
                   label: 'Last day',
@@ -449,6 +494,7 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                     _missedTouched = true;
                   }),
                 ),
+                ],
                 const SizedBox(height: 16),
                 ..._buildSteps(),
               ],
@@ -496,9 +542,10 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
       DropdownButtonFormField<RoutineScheduleKind>(
         key: const Key('routine-form-kind'),
         initialValue: _kind,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'Schedule',
-          border: OutlineInputBorder(),
+          border: const OutlineInputBorder(),
+          error: _mark(marked == RoutineFormField.schedule),
         ),
         items: const [
           DropdownMenuItem(
@@ -569,6 +616,41 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
           ),
         ),
       ],
+    ];
+  }
+
+  /// A one-off's day and window: due that day, or within a week or a month
+  /// from it.
+  List<Widget> _buildDue(RoutineFormField? marked) {
+    return [
+      _DateTile(
+        tileKey: const Key('routine-form-due-on'),
+        label: 'Day',
+        value: _dueOn == null ? 'Choose' : formatRoutineDay(_dueOn!),
+        onTap: _pickDueOn,
+        invalid: marked == RoutineFormField.dueOn,
+      ),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<TimeWindow>(
+        key: const Key('routine-form-due-window'),
+        initialValue: _dueWindow,
+        decoration: const InputDecoration(
+          labelText: 'Due',
+          border: OutlineInputBorder(),
+        ),
+        items: const [
+          DropdownMenuItem(value: TimeWindow.day, child: Text('That day')),
+          DropdownMenuItem(
+              value: TimeWindow.week, child: Text('Within a week from it')),
+          DropdownMenuItem(
+              value: TimeWindow.month, child: Text('Within a month from it')),
+        ],
+        onChanged: (w) => setState(() => _dueWindow = w ?? TimeWindow.day),
+      ),
+      const Text(
+        'A task not done in time waits on the agenda until ticked off.',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
     ];
   }
 

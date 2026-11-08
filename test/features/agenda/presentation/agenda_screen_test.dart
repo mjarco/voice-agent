@@ -8,7 +8,6 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/models/agenda.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
@@ -39,7 +38,6 @@ class _StubNotificationService implements NotificationService {
 
 class _StubRepository implements AgendaRepository {
   AgendaResponse? response;
-  bool markDoneSuccess = true;
   bool updateStatusSuccess = true;
 
   _StubRepository({this.response});
@@ -52,7 +50,6 @@ class _StubRepository implements AgendaRepository {
         granularity: 'day',
         from: date,
         to: date,
-        items: [],
         routineItems: [],
       );
 
@@ -67,23 +64,28 @@ class _StubRepository implements AgendaRepository {
   @override
   Future<void> cacheAgenda(String date, AgendaResponse response) async {}
 
-  @override
-  Future<void> markActionItemDone(String recordId) async {
-    if (!markDoneSuccess) throw Exception('Failed');
-  }
-
   final resolved = <String>[];
   AgendaException? resolveError;
 
   @override
   Future<void> resolveOccurrence(
     String routineId,
-    String scheduledFor,
-    OccurrenceStatus status,
-  ) async {
+    OccurrenceStatus status, {
+    String? scheduledFor,
+  }) async {
     if (!updateStatusSuccess) throw Exception('Failed');
     if (resolveError != null) throw resolveError!;
     resolved.add('$routineId $scheduledFor ${status.toJson()}');
+  }
+
+  final undone = <String>[];
+
+  @override
+  Future<void> unresolveOccurrence(
+    String routineId, {
+    String? scheduledFor,
+  }) async {
+    undone.add('$routineId $scheduledFor');
   }
 }
 
@@ -188,35 +190,6 @@ void main() {
       expect(find.text('No items for this date'), findsOneWidget);
     });
 
-    testWidgets('renders action items', (tester) async {
-      final repo = _StubRepository(
-        response: AgendaResponse(
-          date: '2026-04-19',
-          granularity: 'day',
-          from: '2026-04-19',
-          to: '2026-04-19',
-          items: [
-            const AgendaItem(
-              recordId: 'rec-1',
-              text: 'Buy groceries',
-              scheduledFor: '2026-04-19',
-              timeWindow: TimeWindow.day,
-              originRole: OriginRole.agent,
-              status: RecordStatus.active,
-              linkedConversationCount: 0,
-            ),
-          ],
-          routineItems: [],
-        ),
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.text('Action Items'), findsOneWidget);
-      expect(find.text('Buy groceries'), findsOneWidget);
-      expect(find.byKey(const Key('action-item-rec-1')), findsOneWidget);
-    });
-
     testWidgets('renders meetings first, without a checkbox', (tester) async {
       final repo = _StubRepository(
         response: const AgendaResponse(
@@ -224,7 +197,6 @@ void main() {
           granularity: 'day',
           from: '2026-04-19',
           to: '2026-04-19',
-          items: [],
           routineItems: [],
           calendarItems: [
             AgendaCalendarItem(
@@ -265,17 +237,15 @@ void main() {
           granularity: 'day',
           from: '2026-04-19',
           to: '2026-04-19',
-          items: [],
           routineItems: [
             const AgendaRoutineItem(
               routineId: 'rtn-1',
               routineName: 'Morning routine',
+              kind: RoutineKind.recurring,
               scheduledFor: '2026-04-19',
               startTime: '08:00',
               overdue: false,
-              status: OccurrenceStatus.pending,
-              occurrenceId: 'occ-1',
-              templates: [RoutineTemplate(text: 'Meditate', sortOrder: 0)],
+              steps: [RoutineStep(text: 'Meditate', sortOrder: 0)],
             ),
           ],
         ),
@@ -283,8 +253,9 @@ void main() {
 
       await _pumpScreen(tester, repository: repo);
 
-      expect(find.text('Routines'), findsOneWidget);
+      expect(find.text('To do'), findsOneWidget);
       expect(find.text('Morning routine'), findsOneWidget);
+      expect(find.text('routine'), findsOneWidget);
       expect(find.text('08:00'), findsOneWidget);
 
       // Expand to see templates
@@ -292,34 +263,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Meditate'), findsOneWidget);
-    });
-
-    testWidgets('done items show strikethrough', (tester) async {
-      final repo = _StubRepository(
-        response: AgendaResponse(
-          date: '2026-04-19',
-          granularity: 'day',
-          from: '2026-04-19',
-          to: '2026-04-19',
-          items: [
-            const AgendaItem(
-              recordId: 'rec-1',
-              text: 'Done task',
-              scheduledFor: '2026-04-19',
-              timeWindow: TimeWindow.day,
-              originRole: OriginRole.user,
-              status: RecordStatus.done,
-              linkedConversationCount: 0,
-            ),
-          ],
-          routineItems: [],
-        ),
-      );
-
-      await _pumpScreen(tester, repository: repo);
-
-      final textWidget = tester.widget<Text>(find.text('Done task'));
-      expect(textWidget.style?.decoration, TextDecoration.lineThrough);
     });
 
     testWidgets('tapping previous day changes date', (tester) async {
@@ -362,21 +305,28 @@ void main() {
           granularity: 'day',
           from: '2026-10-26',
           to: '2026-10-26',
-          items: [],
           routineItems: items,
         );
 
     const waiting = AgendaRoutineItem(
       routineId: 'rtn-inv',
       routineName: 'Invoice',
+      kind: RoutineKind.recurring,
       scheduledFor: '2026-09-10',
       overdue: true,
-      status: OccurrenceStatus.pending,
-      templates: [],
+    );
+
+    const task = AgendaRoutineItem(
+      routineId: 'rtn-task',
+      routineName: 'Call the plumber',
+      kind: RoutineKind.oneOff,
+      scheduledFor: '2026-10-24',
+      dueWindow: TimeWindow.week,
+      overdue: false,
     );
 
     testWidgets(
-      'a routine row without a stored occurrence is ticked off through resolve (#363)',
+      'an overdue recurring row is ticked off on its day',
       (tester) async {
         final repo = _StubRepository(response: routineAgenda([waiting]));
         await _pumpScreen(tester, repository: repo);
@@ -403,29 +353,57 @@ void main() {
       await tester.tap(find.byKey(const Key('routine-complete-rtn-inv')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Already done'), findsOneWidget);
+      expect(find.text('Already ticked off'), findsOneWidget);
     });
 
-    testWidgets('a peer-mirrored row and a today row', (tester) async {
-      final repo = _StubRepository(
-        response: routineAgenda([
-          const AgendaRoutineItem(
-            routineId: 'rtn-peer',
-            routineName: 'Upstream walk',
-            scheduledFor: '2026-10-26',
-            overdue: false,
-            status: OccurrenceStatus.pending,
-            templates: [],
-            peerId: 'upstream',
-          ),
-        ]),
-      );
+    testWidgets('a one-off row shows its window and is ticked off without '
+        'a day', (tester) async {
+      final repo = _StubRepository(response: routineAgenda([task]));
       await _pumpScreen(tester, repository: repo);
 
+      expect(find.text('task'), findsOneWidget);
+      expect(find.byKey(const Key('routine-window-rtn-task')), findsOneWidget);
+      expect(find.text('within a week from 2026-10-24'), findsOneWidget);
       expect(find.textContaining('since'), findsNothing);
-      await tester.tap(find.text('Upstream walk'));
+
+      await tester.tap(find.text('Call the plumber'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('routine-complete-rtn-peer')), findsNothing);
+      await tester.tap(find.byKey(const Key('routine-skip-rtn-task')));
+      await tester.pumpAndSettle();
+
+      expect(repo.resolved, ['rtn-task null skipped']);
+    });
+
+    testWidgets('a tick offers Undo, which deletes it', (tester) async {
+      final repo = _StubRepository(response: routineAgenda([waiting]));
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.text('Invoice'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-complete-rtn-inv')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Done: Invoice'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('agenda-undo-rtn-inv')));
+      await tester.pumpAndSettle();
+
+      expect(repo.undone, ['rtn-inv 2026-09-10']);
+    });
+
+    testWidgets('every row can be ticked off; no action-item checkbox',
+        (tester) async {
+      final repo = _StubRepository(response: routineAgenda([waiting, task]));
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.byType(Checkbox), findsNothing);
+      expect(find.text('Action Items'), findsNothing);
+      for (final name in ['Invoice', 'Call the plumber']) {
+        await tester.tap(find.text(name));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byKey(const Key('routine-complete-rtn-inv')), findsOneWidget);
+      expect(
+          find.byKey(const Key('routine-complete-rtn-task')), findsOneWidget);
     });
   });
 }

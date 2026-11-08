@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/models/agenda.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
-import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
 import 'package:voice_agent/core/observability/telemetry.dart';
 
@@ -53,7 +51,6 @@ class AgendaNotificationScheduler {
     final span = Telemetry.instance.span('agenda.reconcile', attrs: {
       'session_active': sessionActive,
       'response_date': response.date,
-      'items_count': response.items.length,
       'routines_count': response.routineItems.length,
     });
     try {
@@ -122,7 +119,7 @@ class AgendaNotificationScheduler {
     final out = <ScheduledNotification>[];
 
     // Four daily summaries — always scheduled, even during active session.
-    final counts = _SummaryCounts.from(response.items);
+    final counts = _SummaryCounts.from(response.routineItems);
     for (final slot in _SummarySlot.values) {
       final fireAt = _nextSlotFireTime(now, slot.hour);
       out.add(ScheduledNotification(
@@ -138,10 +135,6 @@ class AgendaNotificationScheduler {
     if (!sessionActive) {
       for (final r in response.routineItems) {
         if (r.startTime == null) continue;
-        if (r.status == OccurrenceStatus.skipped ||
-            r.status == OccurrenceStatus.done) {
-          continue;
-        }
         final fireAt = _parseRoutineFireTime(r.scheduledFor, r.startTime!);
         if (fireAt == null) continue;
         if (!fireAt.isAfter(now)) continue;
@@ -186,10 +179,8 @@ class AgendaNotificationScheduler {
 
   String _summaryBody(String slotLabel, _SummaryCounts c) {
     if (c.isEmpty) return '$slotLabel: nothing scheduled today';
-    final parts = <String>[];
-    if (c.open > 0) parts.add('${c.open} open');
-    if (c.done > 0) parts.add('${c.done} done');
-    if (c.dismissed > 0) parts.add('${c.dismissed} dismissed');
+    final parts = ['${c.open} open'];
+    if (c.overdue > 0) parts.add('${c.overdue} overdue');
     return '$slotLabel: ${parts.join(', ')}';
   }
 }
@@ -208,36 +199,22 @@ enum _SummarySlot {
 }
 
 class _SummaryCounts {
-  const _SummaryCounts({
-    required this.open,
-    required this.done,
-    required this.dismissed,
-  });
+  const _SummaryCounts({required this.open, required this.overdue});
 
   final int open;
-  final int done;
-  final int dismissed;
+  final int overdue;
 
-  bool get isEmpty => open == 0 && done == 0 && dismissed == 0;
+  bool get isEmpty => open == 0;
 
-  /// Status mapping (ADR-NOTIF-001 + P040 §Time Resolution):
-  ///   open      = active
-  ///   done      = done ∪ promoted (promoted is a positive resolution)
-  ///   dismissed = superseded
-  factory _SummaryCounts.from(List<AgendaItem> items) {
-    var open = 0, done = 0, dismissed = 0;
-    for (final item in items) {
-      switch (item.status) {
-        case RecordStatus.active:
-          open++;
-        case RecordStatus.done:
-        case RecordStatus.promoted:
-          done++;
-        case RecordStatus.superseded:
-          dismissed++;
-      }
-    }
-    return _SummaryCounts(open: open, done: done, dismissed: dismissed);
+  /// The agenda lists only what is still to do (ADR-CORE-116 of
+  /// personal-agent): a ticked-off routine leaves it, so there is no done
+  /// count. open = every routine row, overdue = the rows past their day or
+  /// window, counted among open.
+  factory _SummaryCounts.from(List<AgendaRoutineItem> items) {
+    return _SummaryCounts(
+      open: items.length,
+      overdue: items.where((i) => i.overdue).length,
+    );
   }
 }
 

@@ -65,7 +65,6 @@ void main() {
         granularity: 'day',
         from: '2026-05-18T00:00:00Z',
         to: '2026-05-18T23:59:59Z',
-        items: const [],
         routineItems: const [],
       );
 
@@ -78,7 +77,7 @@ void main() {
     final span = spans.single;
     expect(span.attrs['session_active'], false);
     expect(span.attrs['response_date'], '2026-05-18');
-    expect(span.attrs['items_count'], 0);
+    expect(span.attrs.containsKey('items_count'), isFalse);
     expect(span.attrs['routines_count'], 0);
     expect(span.endedStatus, SpanStatus.ok);
   });

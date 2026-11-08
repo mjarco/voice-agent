@@ -164,18 +164,35 @@ DateTime? parseRoutineDay(String? day) {
   return parsed == null ? null : DateTime(parsed.year, parsed.month, parsed.day);
 }
 
-/// The routine's schedule in one line, as the web UI shows it: the schedule
-/// in words, the hour, a start still ahead, the last day, and whether an
-/// edit replaced it. [today] is `YYYY-MM-DD`.
+/// The routine's term in one line, as the web UI shows it: the schedule in
+/// words (recurring), the due day and window (one-off) or "some day", the
+/// hour, a start still ahead, and the last day. [today] is `YYYY-MM-DD`.
 String describeRoutine(Routine r, {required String today}) {
-  final parts = [RoutineSchedule.describeRRule(r.rrule)];
+  final parts = <String>[
+    switch (r.kind) {
+      RoutineKind.recurring => RoutineSchedule.describeRRule(r.rrule),
+      RoutineKind.oneOff =>
+        (r.dueWindow ?? TimeWindow.day).describeFrom(r.dueOn ?? '?'),
+      RoutineKind.someday => 'some day',
+    },
+  ];
   if (r.startTime != null) parts.add('at ${r.startTime}');
-  if (r.activeSince != null && r.activeSince!.compareTo(today) > 0) {
+  if (r.isRecurring &&
+      r.activeSince != null &&
+      r.activeSince!.compareTo(today) > 0) {
     parts.add('from ${r.activeSince}');
   }
-  if (r.lastDay != null) {
+  if (r.isRecurring && r.lastDay != null) {
     parts.add('${r.ended ? 'ended after' : 'until'} ${r.lastDay}');
   }
-  if (r.nextRoutineId != null) parts.add('replaced by a newer version');
   return parts.join(' · ');
+}
+
+/// The badge of a routine that is no longer live: archived, a recurring one
+/// ended, a one-off or someday one done or skipped; null for a live one.
+String? routineEndBadge(Routine r) {
+  if (r.status == RoutineStatus.archived) return 'archived';
+  if (!r.ended) return null;
+  if (r.isRecurring) return 'ended';
+  return r.resolved?.status == OccurrenceStatus.skipped ? 'skipped' : 'done';
 }

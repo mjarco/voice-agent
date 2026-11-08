@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 import 'package:voice_agent/features/routines/domain/routines_state.dart';
 
@@ -9,32 +8,24 @@ class RoutinesNotifier extends StateNotifier<RoutinesState> {
   }
 
   final RoutinesRepository _repository;
-  RoutinesTab _selectedTab = RoutinesTab.active;
   int _generation = 0;
   String? lastActionError;
 
-  RoutinesTab get selectedTab => _selectedTab;
-
+  /// Loads every routine; the screen shows them in [RoutineSections].
   Future<void> loadRoutines() async {
     final generation = ++_generation;
-    final tab = _selectedTab;
     state = const RoutinesLoading();
     lastActionError = null;
 
     try {
-      final routines = await _fetchTab(tab);
-      // A tab switched meanwhile has its own load; this answer is stale.
+      final routines = await _repository.fetchRoutines();
+      // A later load is under way; this answer is stale.
       if (generation != _generation) return;
       state = RoutinesLoaded(routines: routines);
     } catch (e) {
       if (generation != _generation) return;
       state = RoutinesError(message: e.toString());
     }
-  }
-
-  Future<void> selectTab(RoutinesTab tab) {
-    _selectedTab = tab;
-    return loadRoutines();
   }
 
   Future<void> refresh() => loadRoutines();
@@ -54,31 +45,6 @@ class RoutinesNotifier extends StateNotifier<RoutinesState> {
     } on RoutinesException catch (e) {
       lastActionError = e.message;
       return false;
-    }
-  }
-
-  /// The routines of [tab]. Active and Paused leave out ended routines;
-  /// Ended lists ended and archived ones, without the versions an edit
-  /// replaced (the newer version links to them).
-  Future<List<Routine>> _fetchTab(RoutinesTab tab) async {
-    switch (tab) {
-      case RoutinesTab.active:
-        final lists = await Future.wait([
-          _repository.fetchRoutines(RoutineStatus.active),
-          _repository.fetchRoutines(RoutineStatus.draft),
-        ]);
-        return lists.expand((l) => l).where((r) => !r.ended).toList();
-      case RoutinesTab.paused:
-        final paused = await _repository.fetchRoutines(RoutineStatus.paused);
-        return paused.where((r) => !r.ended).toList();
-      case RoutinesTab.ended:
-        final lists = await Future.wait(
-            RoutineStatus.values.map(_repository.fetchRoutines));
-        return lists
-            .expand((l) => l)
-            .where((r) => r.ended || r.status == RoutineStatus.archived)
-            .where((r) => r.nextRoutineId == null)
-            .toList();
     }
   }
 }

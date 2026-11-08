@@ -3,197 +3,204 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/models/routine.dart';
 
+/// A routine as personal-agent's API sends it since ADR-CORE-116.
+Map<String, dynamic> _oneOffMap() => {
+      'id': 'rtn-1',
+      'name': 'Zadzwonić do hydraulika',
+      'kind': 'one_off',
+      'rrule': '',
+      'due_on': '2026-11-10',
+      'due_window': 'day',
+      'start_time': '09:30',
+      'status': 'active',
+      'missed': 'waits',
+      'active_since': '2026-11-09',
+      'steps': [
+        {'text': 'Find the number', 'sort_order': 0},
+      ],
+      'ended': false,
+      'last_day': null,
+      'next_due': '2026-11-10',
+      'resolved': null,
+      'source': 'chat',
+      'conversation_id': 'conv-1',
+      'event_id': 'ev-1',
+      'created_at': '2026-11-09T08:00:00Z',
+      'updated_at': '2026-11-09T08:00:00Z',
+    };
+
 void main() {
-  group('OccurrenceStatus', () {
-    test('fromString parses snake_case', () {
-      expect(
-          OccurrenceStatus.fromString('in_progress'), OccurrenceStatus.inProgress);
+  group('enums read tolerantly', () {
+    test('OccurrenceStatus: known values, unknown → pending', () {
       expect(OccurrenceStatus.fromString('done'), OccurrenceStatus.done);
+      expect(OccurrenceStatus.fromString('skipped'), OccurrenceStatus.skipped);
+      expect(OccurrenceStatus.fromString('in_progress'),
+          OccurrenceStatus.pending);
+      expect(OccurrenceStatus.fromString(null), OccurrenceStatus.pending);
+      expect(OccurrenceStatus.done.toJson(), 'done');
     });
 
-    test('toJson returns snake_case', () {
-      expect(OccurrenceStatus.inProgress.toJson(), 'in_progress');
-    });
-  });
-
-  group('TimeWindow', () {
-    test('fromString parses ad_hoc', () {
-      expect(TimeWindow.fromString('ad_hoc'), TimeWindow.adHoc);
-      expect(TimeWindow.fromString('day'), TimeWindow.day);
+    test('RoutineStatus: draft and unknown read as paused', () {
+      expect(RoutineStatus.fromString('active'), RoutineStatus.active);
+      expect(RoutineStatus.fromString('archived'), RoutineStatus.archived);
+      expect(RoutineStatus.fromString('draft'), RoutineStatus.paused);
+      expect(RoutineStatus.fromString(42), RoutineStatus.paused);
     });
 
-    test('toJson returns snake_case', () {
-      expect(TimeWindow.adHoc.toJson(), 'ad_hoc');
+    test('TimeWindow: ad_hoc, empty and unknown are no window', () {
+      expect(TimeWindow.tryParse('week'), TimeWindow.week);
+      expect(TimeWindow.tryParse('ad_hoc'), isNull);
+      expect(TimeWindow.tryParse(''), isNull);
+      expect(TimeWindow.tryParse(null), isNull);
+    });
+
+    test('RoutineMissed and RoutineKind', () {
+      expect(RoutineMissed.fromString('waits'), RoutineMissed.waits);
+      expect(RoutineMissed.fromString('sometimes'), RoutineMissed.lapses);
+      expect(RoutineKind.tryParse('one_off'), RoutineKind.oneOff);
+      expect(RoutineKind.tryParse('weekly'), isNull);
+      expect(RoutineKind.oneOff.toJson(), 'one_off');
+    });
+
+    test('TimeWindow describes a term from its day', () {
+      expect(TimeWindow.day.describeFrom('2026-11-10'), 'on 2026-11-10');
+      expect(TimeWindow.week.describeFrom('2026-11-10'),
+          'within a week from 2026-11-10');
     });
   });
 
   group('Routine', () {
-    final sampleMap = {
-      'id': 'rt-1',
-      'source_record_id': 'rec-1',
-      'name': 'Morning exercise',
-      'rrule': 'FREQ=DAILY',
-      'cadence': 'daily',
-      'start_time': '07:00',
-      'status': 'active',
-      'templates': [
-        {'id': 'tmpl-1', 'text': 'Stretch', 'sort_order': 0},
-        {'id': 'tmpl-2', 'text': 'Run', 'sort_order': 1},
-      ],
-      'next_occurrence': {
-        'date': '2026-04-19',
-        'time_window': 'day',
-      },
-      'created_at': '2026-01-01T00:00:00.000Z',
-      'updated_at': '2026-04-18T12:00:00.000Z',
-    };
+    test('reads a one-off with every new field', () {
+      final r = Routine.fromMap(_oneOffMap());
 
-    test('fromMap creates correct instance', () {
-      final routine = Routine.fromMap(sampleMap);
-
-      expect(routine.id, 'rt-1');
-      expect(routine.sourceRecordId, 'rec-1');
-      expect(routine.name, 'Morning exercise');
-      expect(routine.rrule, 'FREQ=DAILY');
-      expect(routine.cadence, 'daily');
-      expect(routine.startTime, '07:00');
-      expect(routine.status, RoutineStatus.active);
-      expect(routine.templates, hasLength(2));
-      expect(routine.templates[0].text, 'Stretch');
-      expect(routine.templates[1].sortOrder, 1);
-      expect(routine.nextOccurrence, isNotNull);
-      expect(routine.nextOccurrence!.date, '2026-04-19');
-      expect(routine.nextOccurrence!.timeWindow, TimeWindow.day);
+      expect(r.kind, RoutineKind.oneOff);
+      expect(r.isRecurring, isFalse);
+      expect(r.rrule, '');
+      expect(r.dueOn, '2026-11-10');
+      expect(r.dueWindow, TimeWindow.day);
+      expect(r.startTime, '09:30');
+      expect(r.status, RoutineStatus.active);
+      expect(r.missed, RoutineMissed.waits);
+      expect(r.steps.single.text, 'Find the number');
+      expect(r.nextDue, '2026-11-10');
+      expect(r.resolved, isNull);
+      expect(r.source, 'chat');
+      expect(r.conversationId, 'conv-1');
+      expect(r.eventId, 'ev-1');
+      expect(r.existing, isFalse);
+      expect(r.createdAt, DateTime.utc(2026, 11, 9, 8));
     });
 
-    test('round-trip preserves all fields', () {
-      final routine = Routine.fromMap(sampleMap);
-      final roundTripped = Routine.fromMap(routine.toMap());
-
-      expect(roundTripped.id, routine.id);
-      expect(roundTripped.name, routine.name);
-      expect(roundTripped.status, routine.status);
-      expect(roundTripped.templates.length, routine.templates.length);
-      expect(roundTripped.nextOccurrence?.date, routine.nextOccurrence?.date);
-    });
-
-    test('templates default to empty list when absent', () {
-      final map = Map<String, dynamic>.from(sampleMap);
-      map.remove('templates');
-      final routine = Routine.fromMap(map);
-
-      expect(routine.templates, isEmpty);
-    });
-
-    test('nextOccurrence is null when absent', () {
-      final map = Map<String, dynamic>.from(sampleMap);
-      map.remove('next_occurrence');
-      final routine = Routine.fromMap(map);
-
-      expect(routine.nextOccurrence, isNull);
-    });
-
-    test('startTime is null when absent', () {
-      final map = Map<String, dynamic>.from(sampleMap);
-      map.remove('start_time');
-      final routine = Routine.fromMap(map);
-
-      expect(routine.startTime, isNull);
-    });
-
-    test('fromMap reads the version and end fields', () {
-      final routine = Routine.fromMap({
-        ...sampleMap,
-        'missed': 'waits',
-        'active_since': '2026-10-27',
-        'last_day': '2026-12-31',
+    test('reads a resolved someday routine and existing', () {
+      final r = Routine.fromMap({
+        ..._oneOffMap(),
+        'kind': 'someday',
+        'due_on': null,
+        'due_window': null,
         'ended': true,
-        'previous_routine_id': 'rt-0',
-        'next_routine_id': 'rt-2',
+        'resolved': {
+          'id': 'occ-1',
+          'routine_id': 'rtn-1',
+          'scheduled_for': '2026-11-09',
+          'status': 'skipped',
+          'created_at': '2026-11-09T10:00:00Z',
+          'updated_at': '2026-11-09T10:00:00Z',
+        },
+        'existing': true,
       });
 
-      expect(routine.missed, RoutineMissed.waits);
-      expect(routine.activeSince, '2026-10-27');
-      expect(routine.lastDay, '2026-12-31');
-      expect(routine.ended, isTrue);
-      expect(routine.previousRoutineId, 'rt-0');
-      expect(routine.nextRoutineId, 'rt-2');
-
-      final roundTripped = Routine.fromMap(routine.toMap());
-      expect(roundTripped.missed, RoutineMissed.waits);
-      expect(roundTripped.lastDay, '2026-12-31');
-      expect(roundTripped.ended, isTrue);
-      expect(roundTripped.nextRoutineId, 'rt-2');
+      expect(r.kind, RoutineKind.someday);
+      expect(r.dueOn, isNull);
+      expect(r.dueWindow, isNull);
+      expect(r.ended, isTrue);
+      expect(r.resolved!.status, OccurrenceStatus.skipped);
+      expect(r.resolved!.scheduledFor, '2026-11-09');
+      expect(r.existing, isTrue);
     });
 
-    test('version and end fields default when absent', () {
-      final routine = Routine.fromMap(sampleMap);
-
-      expect(routine.missed, RoutineMissed.lapses);
-      expect(routine.activeSince, isNull);
-      expect(routine.lastDay, isNull);
-      expect(routine.ended, isFalse);
-      expect(routine.previousRoutineId, isNull);
-      expect(routine.nextRoutineId, isNull);
-    });
-
-    test('toMap produces valid JSON', () {
-      final routine = Routine.fromMap(sampleMap);
-      final json = jsonEncode(routine.toMap());
-      final decoded = jsonDecode(json) as Map<String, dynamic>;
-
-      expect(decoded['id'], 'rt-1');
-      expect(decoded['status'], 'active');
-    });
-  });
-
-  group('RoutineTemplate', () {
-    test('id is optional', () {
-      final template = RoutineTemplate.fromMap({
-        'text': 'Step one',
-        'sort_order': 0,
+    test('unknown values and missing fields do not throw', () {
+      final r = Routine.fromMap({
+        'id': 'rtn-2',
+        'name': 'Old shape',
+        'kind': 'project',
+        'rrule': null,
+        'status': 'draft',
+        'missed': 'maybe',
+        'due_window': 'ad_hoc',
+        'steps': [
+          {'text': 'kept'},
+          {'sort_order': 1},
+          'junk',
+        ],
+        'resolved': {'status': 'done'},
+        'created_at': 'not a date',
       });
 
-      expect(template.id, isNull);
-      expect(template.text, 'Step one');
+      expect(r.kind, RoutineKind.someday);
+      expect(r.rrule, '');
+      expect(r.status, RoutineStatus.paused);
+      expect(r.missed, RoutineMissed.lapses);
+      expect(r.dueWindow, isNull);
+      expect(r.steps.single.text, 'kept');
+      expect(r.resolved, isNull);
+      expect(r.source, 'web');
+      expect(r.createdAt.millisecondsSinceEpoch, 0);
+    });
 
-      final map = template.toMap();
-      expect(map.containsKey('id'), isFalse);
+    test('a missing kind is derived from the fields', () {
+      final recurring = Routine.fromMap(
+          {'id': 'a', 'name': 'a', 'rrule': 'FREQ=DAILY', 'status': 'active'});
+      final oneOff = Routine.fromMap(
+          {'id': 'b', 'name': 'b', 'due_on': '2026-11-10', 'status': 'active'});
+      expect(recurring.kind, RoutineKind.recurring);
+      expect(oneOff.kind, RoutineKind.oneOff);
+      expect(oneOff.dueWindow, TimeWindow.day);
+    });
+
+    test('ignores the removed fields of the old shape', () {
+      final r = Routine.fromMap({
+        ..._oneOffMap(),
+        'source_record_id': 'src-1',
+        'templates': [
+          {'id': 'tpl-1', 'text': 'Old', 'sort_order': 0},
+        ],
+        'cadence': 'daily',
+        'next_occurrence': {'date': '2026-11-10', 'time_window': 'day'},
+        'previous_routine_id': 'rtn-0',
+      });
+      expect(r.steps.single.text, 'Find the number');
+      expect(r.toMap().containsKey('templates'), isFalse);
+      expect(r.toMap().containsKey('source_record_id'), isFalse);
+    });
+
+    test('round-trip through JSON keeps the fields', () {
+      final r = Routine.fromMap(_oneOffMap());
+      final back = Routine.fromMap(
+          jsonDecode(jsonEncode(r.toMap())) as Map<String, dynamic>);
+
+      expect(back.kind, r.kind);
+      expect(back.dueOn, r.dueOn);
+      expect(back.dueWindow, r.dueWindow);
+      expect(back.steps.single.sortOrder, 0);
+      expect(back.source, r.source);
+      expect(back.updatedAt, r.updatedAt);
     });
   });
 
   group('RoutineOccurrence', () {
-    final sampleMap = {
-      'id': 'occ-1',
-      'routine_id': 'rt-1',
-      'scheduled_for': '2026-04-18',
-      'time_window': 'day',
-      'status': 'pending',
-      'created_at': '2026-04-18T00:00:00.000Z',
-      'updated_at': '2026-04-18T00:00:00.000Z',
-    };
-
-    test('fromMap creates correct instance', () {
-      final occ = RoutineOccurrence.fromMap(sampleMap);
-
-      expect(occ.id, 'occ-1');
-      expect(occ.routineId, 'rt-1');
-      expect(occ.scheduledFor, '2026-04-18');
-      expect(occ.timeWindow, TimeWindow.day);
-      expect(occ.status, OccurrenceStatus.pending);
-      expect(occ.conversationId, isNull);
-    });
-
-    test('round-trip preserves all fields', () {
-      final map = Map<String, dynamic>.from(sampleMap);
-      map['conversation_id'] = 'conv-1';
-      map['status'] = 'in_progress';
-
-      final occ = RoutineOccurrence.fromMap(map);
-      final roundTripped = RoutineOccurrence.fromMap(occ.toMap());
-
-      expect(roundTripped.conversationId, 'conv-1');
-      expect(roundTripped.status, OccurrenceStatus.inProgress);
+    test('reads a tick and round-trips it', () {
+      final o = RoutineOccurrence.fromMap({
+        'id': 'occ-1',
+        'routine_id': 'rtn-1',
+        'scheduled_for': '2026-11-09',
+        'status': 'done',
+        'created_at': '2026-11-09T10:00:00Z',
+        'updated_at': '2026-11-09T10:00:00Z',
+      });
+      expect(o.status, OccurrenceStatus.done);
+      final back = RoutineOccurrence.fromMap(o.toMap());
+      expect(back.scheduledFor, '2026-11-09');
+      expect(back.routineId, 'rtn-1');
     });
   });
 }

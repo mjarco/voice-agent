@@ -10,10 +10,10 @@ class ApiRoutinesRepository implements RoutinesRepository {
   final ApiClient _apiClient;
 
   @override
-  Future<List<Routine>> fetchRoutines(RoutineStatus status) async {
+  Future<List<Routine>> fetchRoutines() async {
     final result = await _apiClient.get(
       '/routines',
-      queryParameters: {'status': status.name},
+      queryParameters: {'status': 'all'},
     );
     return _parseList(result, Routine.fromMap);
   }
@@ -32,42 +32,38 @@ class ApiRoutinesRepository implements RoutinesRepository {
 
   @override
   Future<Routine> createRoutine(RoutineInput input) async {
-    final result = await _apiClient.postJson('/routines', data: input.toMap());
+    final result =
+        await _apiClient.postJson('/routines', data: input.toCreateMap());
     return _parseSingle(result, Routine.fromMap);
   }
 
   @override
-  Future<Routine> editRoutine(
-    String id,
-    RoutineInput input, {
-    required String startsOn,
+  Future<Routine> editRoutine(String id, RoutinePatch patch) async {
+    final result = await _apiClient.patch('/routines/$id', data: patch.toMap());
+    return _parseSingle(result, Routine.fromMap);
+  }
+
+  @override
+  Future<void> resolve(
+    String routineId,
+    OccurrenceStatus status, {
+    String? scheduledFor,
   }) async {
     final result = await _apiClient.postJson(
-      '/routines/$id/edit',
-      data: {...input.toMap(), 'starts_on': startsOn},
-    );
-    return _parseSingle(result, Routine.fromMap);
-  }
-
-  @override
-  Future<void> endRoutine(String id, String lastDay) async {
-    final result = await _apiClient.postJson(
-      '/routines/$id/end',
-      data: {'last_day': lastDay},
+      '/routines/$routineId/resolve',
+      data: {
+        'scheduled_for': ?scheduledFor,
+        'status': status.toJson(),
+      },
     );
     _throwOnFailure(result);
   }
 
   @override
-  Future<void> resolveOccurrence(
-    String routineId,
-    String scheduledFor,
-    OccurrenceStatus status,
-  ) async {
-    final result = await _apiClient.postJson(
-      '/routines/$routineId/resolve',
-      data: {'scheduled_for': scheduledFor, 'status': status.toJson()},
-    );
+  Future<void> unresolve(String routineId, {String? scheduledFor}) async {
+    final query = scheduledFor == null ? '' : '?scheduled_for=$scheduledFor';
+    final result =
+        await _apiClient.delete('/routines/$routineId/resolve$query');
     _throwOnFailure(result);
   }
 
@@ -86,19 +82,6 @@ class ApiRoutinesRepository implements RoutinesRepository {
   @override
   Future<void> archiveRoutine(String id) async {
     final result = await _apiClient.postJson('/routines/$id/archive');
-    _throwOnFailure(result);
-  }
-
-  @override
-  Future<void> updateOccurrenceStatus(
-    String routineId,
-    String occurrenceId,
-    OccurrenceStatus status,
-  ) async {
-    final result = await _apiClient.patch(
-      '/routines/$routineId/occurrences/$occurrenceId',
-      data: {'status': status.toJson()},
-    );
     _throwOnFailure(result);
   }
 
@@ -149,24 +132,12 @@ class ApiRoutinesRepository implements RoutinesRepository {
 
   /// The exception for a failed write. The server's own message is shown
   /// when its error envelope has one (it names what to fix); a
-  /// `409 overdue_occurrence` carries the owed day, and a refusal of a form
-  /// field names that field (#367).
+  /// `409 overdue_occurrence` carries the owed day.
   RoutinesException _failure(ApiResult result) {
     switch (result) {
       case ApiPermanentFailure(statusCode: final code, body: final body):
         final envelope = _errorEnvelope(body);
         final serverMessage = envelope?.message;
-        final field = _fieldOf(envelope?.code);
-        if (field != null) {
-          final data = envelope?.data;
-          final first = data?['first_day'];
-          return RoutineFieldException(
-            serverMessage ?? 'Server error $code: ${result.message}',
-            field: field,
-            firstDay: first is String ? first : null,
-            firstDayKnown: data != null && data.containsKey('first_day'),
-          );
-        }
         if (code == 409) {
           final data = envelope?.data;
           final message = serverMessage ?? 'Operation conflict';
@@ -174,25 +145,23 @@ class ApiRoutinesRepository implements RoutinesRepository {
             case 'overdue_occurrence'
                 when data?['routine_id'] is String &&
                     data?['scheduled_for'] is String:
-              final open = data!['open_days'];
               return RoutineOverdueException(
                 serverMessage ?? 'An overdue occurrence is still open',
-                routineId: data['routine_id'] as String,
+                routineId: data!['routine_id'] as String,
                 scheduledFor: data['scheduled_for'] as String,
-                openDays: open is int ? open : null,
               );
             case 'already_resolved':
               return RoutineAlreadyResolvedException(message);
-            case 'routine_already_edited':
-              return RoutineAlreadyEditedException(message);
             case 'routine_not_active':
               return RoutineNotActiveException(message);
+            case 'name_taken':
+              return RoutineNameTakenException(message);
           }
           return RoutineConflictException(message);
         }
-        if (envelope?.code == 'no_change') {
-          return RoutineNoChangeException(
-              serverMessage ?? 'The edit changes nothing');
+        if (envelope?.code == 'invalid_rrule') {
+          return RoutineInvalidRRuleException(
+              serverMessage ?? 'The schedule has no day left');
         }
         return RoutinesGeneralException(
             serverMessage ?? 'Server error $code: ${result.message}');
@@ -204,13 +173,6 @@ class ApiRoutinesRepository implements RoutinesRepository {
         return RoutinesGeneralException('Unexpected success');
     }
   }
-
-  static RoutineFormField? _fieldOf(String? code) => switch (code) {
-        'invalid_last_day' => RoutineFormField.lastDay,
-        'invalid_starts_on' => RoutineFormField.startsOn,
-        'routine_name_exists' => RoutineFormField.name,
-        _ => null,
-      };
 
   static ({String? code, String? message, Map<String, dynamic>? data})?
       _errorEnvelope(String? body) {

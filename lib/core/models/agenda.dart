@@ -1,13 +1,13 @@
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/routine.dart';
 
+/// `GET /agenda` of personal-agent: the routines due in the window and the
+/// window's meetings (ADR-CORE-116 there retired the action items).
 class AgendaResponse {
   const AgendaResponse({
     required this.date,
     required this.granularity,
     required this.from,
     required this.to,
-    required this.items,
     required this.routineItems,
     this.calendarItems = const [],
   });
@@ -16,7 +16,6 @@ class AgendaResponse {
   final String granularity;
   final String from;
   final String to;
-  final List<AgendaItem> items;
   final List<AgendaRoutineItem> routineItems;
 
   /// Meetings from personal-agent's calendar mirror (ADR-API-101 there);
@@ -29,17 +28,13 @@ class AgendaResponse {
       granularity: map['granularity'] as String,
       from: map['from'] as String,
       to: map['to'] as String,
-      items:
-          (map['items'] as List<dynamic>?)
-              ?.map((e) => AgendaItem.fromMap(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      // A malformed row is dropped rather than losing the agenda with it.
       routineItems:
           (map['routine_items'] as List<dynamic>?)
-              ?.map((e) => AgendaRoutineItem.fromMap(e as Map<String, dynamic>))
+              ?.map(AgendaRoutineItem.tryFromMap)
+              .whereType<AgendaRoutineItem>()
               .toList() ??
           [],
-      // A malformed meeting is dropped rather than losing the agenda with it.
       calendarItems:
           (map['calendar_items'] as List<dynamic>?)
               ?.map(AgendaCalendarItem.tryFromMap)
@@ -55,100 +50,76 @@ class AgendaResponse {
       'granularity': granularity,
       'from': from,
       'to': to,
-      'items': items.map((i) => i.toMap()).toList(),
       'routine_items': routineItems.map((i) => i.toMap()).toList(),
       'calendar_items': calendarItems.map((i) => i.toMap()).toList(),
     };
   }
 }
 
-class AgendaItem {
-  const AgendaItem({
-    required this.recordId,
-    required this.text,
-    this.topicRef,
-    required this.scheduledFor,
-    required this.timeWindow,
-    required this.originRole,
-    required this.status,
-    required this.linkedConversationCount,
-  });
-
-  final String recordId;
-  final String text;
-  final String? topicRef;
-  final String scheduledFor;
-  final TimeWindow timeWindow;
-  final OriginRole originRole;
-  final RecordStatus status;
-  final int linkedConversationCount;
-
-  factory AgendaItem.fromMap(Map<String, dynamic> map) {
-    return AgendaItem(
-      recordId: map['record_id'] as String,
-      text: map['text'] as String,
-      topicRef: map['topic_ref'] as String?,
-      scheduledFor: map['scheduled_for'] as String,
-      timeWindow: TimeWindow.fromString(map['time_window'] as String),
-      originRole: OriginRole.fromString(map['origin_role'] as String),
-      status: RecordStatus.fromString(map['status'] as String),
-      linkedConversationCount: map['linked_conversation_count'] as int,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'record_id': recordId,
-      'text': text,
-      'topic_ref': topicRef,
-      'scheduled_for': scheduledFor,
-      'time_window': timeWindow.toJson(),
-      'origin_role': originRole.name,
-      'status': status.name,
-      'linked_conversation_count': linkedConversationCount,
-    };
-  }
-}
-
+/// A routine due in the agenda's window: a recurring routine's day or a
+/// one-off during (and, overdue, after) its window. A row is never ticked
+/// off yet: a tick takes it off the agenda.
 class AgendaRoutineItem {
   const AgendaRoutineItem({
     required this.routineId,
     required this.routineName,
+    required this.kind,
     required this.scheduledFor,
+    this.dueWindow,
     this.startTime,
     required this.overdue,
-    required this.status,
-    this.occurrenceId,
-    required this.templates,
-    this.peerId,
+    this.steps = const [],
   });
 
   final String routineId;
   final String routineName;
+
+  /// Recurring or one-off; a someday routine is never on the agenda.
+  final RoutineKind kind;
+
+  /// The day the row is for: a recurring routine's day, a one-off's due day.
   final String scheduledFor;
+
+  /// A one-off's window; null for a recurring routine.
+  final TimeWindow? dueWindow;
   final String? startTime;
   final bool overdue;
-  final OccurrenceStatus status;
-  final String? occurrenceId;
-  final List<RoutineTemplate> templates;
 
-  /// Set on a row mirrored from a peer instance; such a row changes only
-  /// through the peer routes (ADR-FED-052), so the app does not tick it off.
-  final String? peerId;
+  /// The routine's steps, sent as `templates`.
+  final List<RoutineStep> steps;
 
+  bool get isOneOff => kind == RoutineKind.oneOff;
+
+  /// [fromMap], or null when the row lacks its routine, name or day.
+  static AgendaRoutineItem? tryFromMap(dynamic e) {
+    if (e is! Map<String, dynamic>) return null;
+    if (e['routine_id'] is! String ||
+        e['routine_name'] is! String ||
+        e['scheduled_for'] is! String) {
+      return null;
+    }
+    return AgendaRoutineItem.fromMap(e);
+  }
+
+  /// An unknown or missing `kind` reads from the fields: a row with a window
+  /// is a one-off, any other recurring.
   factory AgendaRoutineItem.fromMap(Map<String, dynamic> map) {
+    final window = TimeWindow.tryParse(map['due_window']);
+    final kind = switch (RoutineKind.tryParse(map['kind'])) {
+      RoutineKind.oneOff => RoutineKind.oneOff,
+      RoutineKind.recurring => RoutineKind.recurring,
+      _ => window != null ? RoutineKind.oneOff : RoutineKind.recurring,
+    };
+    final start = map['start_time'];
     return AgendaRoutineItem(
       routineId: map['routine_id'] as String,
       routineName: map['routine_name'] as String,
+      kind: kind,
       scheduledFor: map['scheduled_for'] as String,
-      startTime: map['start_time'] as String?,
-      overdue: map['overdue'] as bool,
-      status: OccurrenceStatus.fromString(map['status'] as String),
-      occurrenceId: map['occurrence_id'] as String?,
-      templates: (map['templates'] as List<dynamic>)
-          .map((e) => RoutineTemplate.fromMap(e as Map<String, dynamic>))
-          .toList(),
-      peerId: map['peer_id'] as String?,
+      dueWindow: kind == RoutineKind.oneOff ? window ?? TimeWindow.day : null,
+      startTime: start is String && start.isNotEmpty ? start : null,
+      overdue: map['overdue'] == true,
+      steps: RoutineStep.listFrom(map['templates']),
     );
   }
 
@@ -156,13 +127,12 @@ class AgendaRoutineItem {
     return {
       'routine_id': routineId,
       'routine_name': routineName,
+      'kind': kind.toJson(),
       'scheduled_for': scheduledFor,
+      'due_window': dueWindow?.toJson() ?? '',
       'start_time': startTime,
       'overdue': overdue,
-      'status': status.toJson(),
-      'occurrence_id': occurrenceId,
-      'templates': templates.map((t) => t.toMap()).toList(),
-      if (peerId != null) 'peer_id': peerId,
+      'templates': steps.map((t) => t.toMap()).toList(),
     };
   }
 }

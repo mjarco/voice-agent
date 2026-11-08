@@ -1,4 +1,9 @@
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/features/routines/domain/routine_input.dart';
+import 'package:voice_agent/features/routines/domain/routine_patch.dart';
+
+export 'package:voice_agent/features/routines/domain/routine_input.dart';
+export 'package:voice_agent/features/routines/domain/routine_patch.dart';
 
 sealed class RoutinesException implements Exception {
   String get message;
@@ -19,124 +24,72 @@ class RoutineConflictException extends RoutinesException {
   final String message;
 }
 
-/// `409 overdue_occurrence` of an edit: a waits routine still owes
+/// `409 overdue_occurrence` of an edit: a recurring waits routine still owes
 /// [scheduledFor]; resolve it on [routineId], then edit again (#365).
 class RoutineOverdueException extends RoutineConflictException {
   RoutineOverdueException(
     super.message, {
     required this.routineId,
     required this.scheduledFor,
-    this.openDays,
   });
   final String routineId;
   final String scheduledFor;
-
-  /// How many days are still owed up to yesterday, [scheduledFor] the
-  /// earliest (ADR-API-096 of personal-agent); null from an older server.
-  final int? openDays;
 }
 
-/// `409 already_resolved`: the occurrence was resolved elsewhere meanwhile.
+/// `409 already_resolved`: the day was ticked off elsewhere meanwhile.
 class RoutineAlreadyResolvedException extends RoutineConflictException {
   RoutineAlreadyResolvedException(super.message);
 }
 
-/// `409 routine_already_edited`: another edit replaced this version, so the
-/// one to edit is its newer version (#367).
-class RoutineAlreadyEditedException extends RoutineConflictException {
-  RoutineAlreadyEditedException(super.message);
-}
-
-/// `409 routine_not_active`: only an active routine is edited (#369,
-/// ADR-API-099 of personal-agent).
+/// `409 routine_not_active`: only an active routine is ticked off.
 class RoutineNotActiveException extends RoutineConflictException {
   RoutineNotActiveException(super.message);
 }
 
-/// `422 no_change`: the edit equals the current version (#369).
-class RoutineNoChangeException extends RoutinesGeneralException {
-  RoutineNoChangeException(super.message);
+/// `409 name_taken`: an edit renames the routine to the name of another
+/// live routine.
+class RoutineNameTakenException extends RoutineConflictException {
+  RoutineNameTakenException(super.message);
 }
 
-/// The field of the routine form a server refusal is about (#367).
-enum RoutineFormField { name, days, interval, monthday, startsOn, lastDay }
-
-/// A refusal of the routine form that names its field: `422
-/// invalid_last_day`, `422 invalid_starts_on`, `409 routine_name_exists`.
-class RoutineFieldException extends RoutinesException {
-  RoutineFieldException(
-    this.message, {
-    required this.field,
-    this.firstDay,
-    this.firstDayKnown = false,
-  });
-  @override
-  final String message;
-  final RoutineFormField field;
-
-  /// `invalid_last_day`'s first day of the schedule from the start, without
-  /// the last day; [firstDayKnown] is false when the server sent no
-  /// `first_day` at all (an older server), true with a null [firstDay] when
-  /// the schedule has no day.
-  final String? firstDay;
-  final bool firstDayKnown;
+/// `422 invalid_rrule`: the rule does not parse or, with its last day, has
+/// no day left.
+class RoutineInvalidRRuleException extends RoutinesGeneralException {
+  RoutineInvalidRRuleException(super.message);
 }
 
-/// What the routine form sends to create or edit a routine.
-class RoutineInput {
-  const RoutineInput({
-    required this.name,
-    required this.rrule,
-    this.startTime,
-    this.lastDay,
-    required this.missed,
-    required this.items,
-  });
-
-  final String name;
-  final String rrule;
-  final String? startTime;
-  final String? lastDay;
-  final RoutineMissed missed;
-  final List<String> items;
-
-  Map<String, dynamic> toMap() => {
-        'name': name,
-        'rrule': rrule,
-        'start_time': startTime,
-        'last_day': lastDay,
-        'missed': missed.name,
-        'items': items,
-      };
-}
+/// The field of the routine form a refusal is about (#367).
+enum RoutineFormField { name, schedule, days, interval, monthday, dueOn, lastDay }
 
 abstract class RoutinesRepository {
-  Future<List<Routine>> fetchRoutines(RoutineStatus status);
+  /// Every routine, archived and ended ones too (`status=all`).
+  Future<List<Routine>> fetchRoutines();
   Future<Routine> fetchRoutineDetail(String id);
+
+  /// The routine's ticks, newest first.
   Future<List<RoutineOccurrence>> fetchOccurrences(String id);
+
+  /// Creates the routine; a live routine of the same name comes back with
+  /// [Routine.existing] set and nothing is written.
   Future<Routine> createRoutine(RoutineInput input);
 
-  /// Ends [id] the day before [startsOn] and starts its next version that day.
-  /// Throws [RoutineOverdueException] when the routine still owes a day.
-  Future<Routine> editRoutine(
-    String id,
-    RoutineInput input, {
-    required String startsOn,
+  /// Changes the fields [patch] sets. Throws [RoutineOverdueException] when
+  /// a recurring waits routine still owes a day and the schedule changes.
+  Future<Routine> editRoutine(String id, RoutinePatch patch);
+
+  /// Ticks off (done or skipped) the routine: a recurring one on
+  /// [scheduledFor], a one-off on its due day, a someday one today.
+  Future<void> resolve(
+    String routineId,
+    OccurrenceStatus status, {
+    String? scheduledFor,
   });
 
-  /// Ends [id] after [lastDay], the last day it still occurs.
-  Future<void> endRoutine(String id, String lastDay);
-  Future<void> resolveOccurrence(
-    String routineId,
-    String scheduledFor,
-    OccurrenceStatus status,
-  );
+  /// Undoes a tick: a recurring routine's of [scheduledFor], any other's
+  /// only tick.
+  Future<void> unresolve(String routineId, {String? scheduledFor});
+
   Future<void> activateRoutine(String id);
   Future<void> pauseRoutine(String id);
   Future<void> archiveRoutine(String id);
-  Future<void> updateOccurrenceStatus(
-    String routineId,
-    String occurrenceId,
-    OccurrenceStatus status,
-  );
 }

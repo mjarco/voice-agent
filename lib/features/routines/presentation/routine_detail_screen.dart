@@ -75,18 +75,26 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
           _StatusSection(
             routine: routine,
             today: formatRoutineDay(ref.read(routinesClockProvider)()),
-            onOpen: (id) => context.push('/routines/$id'),
           ),
-          if (routine.templates.isNotEmpty) ...[
+          if (routine.steps.isNotEmpty) ...[
             const Divider(),
-            _TemplatesSection(templates: routine.templates),
+            _StepsSection(steps: routine.steps),
           ],
           const Divider(),
-          _OccurrencesSection(
-            occurrences: occurrences,
-            onUpdateStatus: (occId, status) =>
-                _handleUpdateOccurrence(notifier, occId, status),
-          ),
+          if (routine.isRecurring)
+            _OccurrencesSection(
+              occurrences: occurrences,
+              busyActions: _busyActions,
+              onUndo: (occ) => _handleUndo(notifier, occ),
+            )
+          else
+            _TickSection(
+              routine: routine,
+              busyActions: _busyActions,
+              isAnyBusy: _isAnyBusy,
+              onResolve: (status) => _handleResolve(notifier, status),
+              onUndo: (occ) => _handleUndo(notifier, occ),
+            ),
           const Divider(),
           _ActionsSection(
             routine: routine,
@@ -153,14 +161,15 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
     }
   }
 
-  /// Opens the form; a saved edit shows the new version in place of this one.
+  /// Opens the form; an edit changes the routine in place, so the page
+  /// reloads it.
   Future<void> _handleEdit(Routine routine) async {
     final saved =
         await context.push<Routine>('/routines/${routine.id}/edit');
     if (!mounted || saved == null) return;
-    // replace drops the list's wait for this page, so the list is told here.
-    ref.read(routinesNotifierProvider.notifier).refresh();
-    context.replace('/routines/${saved.id}');
+    ref
+        .read(routineDetailNotifierProvider(widget.routineId).notifier)
+        .refresh();
   }
 
   /// End after…: the last day the routine still occurs, from yesterday
@@ -200,7 +209,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
       builder: (ctx) => AlertDialog(
         title: Text('Archive “${routine.name}”?'),
         content: const Text(
-            'It leaves the agenda and moves to Ended.'),
+            'It leaves the agenda and moves to Done and ended.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -230,92 +239,97 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
   }
 
 
-  Future<void> _handleUpdateOccurrence(
+  Future<void> _handleResolve(
     RoutineDetailNotifier notifier,
-    String occurrenceId,
     OccurrenceStatus status,
   ) async {
-    final success =
-        await notifier.updateOccurrenceStatus(occurrenceId, status);
+    _setBusy('resolve');
+    final success = await notifier.resolve(status);
     if (!mounted) return;
+    _clearBusy('resolve');
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(
-                notifier.lastActionError ?? 'Failed to update status')),
+            content: Text(notifier.lastActionError ??
+                (status == OccurrenceStatus.skipped
+                    ? 'Failed to skip'
+                    : 'Failed to tick off'))),
+      );
+    }
+  }
+
+  Future<void> _handleUndo(
+    RoutineDetailNotifier notifier,
+    RoutineOccurrence occurrence,
+  ) async {
+    final busy = 'undo-${occurrence.id}';
+    _setBusy(busy);
+    final success = await notifier.undo(occurrence);
+    if (!mounted) return;
+    _clearBusy(busy);
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(notifier.lastActionError ?? 'Failed to undo')),
       );
     }
   }
 }
 
 class _StatusSection extends StatelessWidget {
-  const _StatusSection({
-    required this.routine,
-    required this.today,
-    required this.onOpen,
-  });
+  const _StatusSection({required this.routine, required this.today});
   final Routine routine;
   final String today;
-  final void Function(String id) onOpen;
+
+  static String _kindLabel(RoutineKind kind) => switch (kind) {
+        RoutineKind.recurring => 'recurring',
+        RoutineKind.oneOff => 'one-off',
+        RoutineKind.someday => 'some day',
+      };
 
   @override
   Widget build(BuildContext context) {
-    final status = routine.ended && routine.status != RoutineStatus.archived
-        ? 'ended'
-        : routine.status.name;
+    final status = routineEndBadge(routine) ?? routine.status.name;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
             children: [
               Chip(
                 key: const Key('detail-status-chip'),
                 label: Text(status),
               ),
-              const SizedBox(width: 8),
               Chip(
-                key: const Key('detail-missed-chip'),
-                label: Text(routine.missed.name),
+                key: const Key('detail-kind-chip'),
+                label: Text(_kindLabel(routine.kind)),
               ),
+              // A one-off always waits; only a recurring routine chooses.
+              if (routine.isRecurring)
+                Chip(
+                  key: const Key('detail-missed-chip'),
+                  label: Text(routine.missed.name),
+                ),
             ],
           ),
           const SizedBox(height: 8),
           Text(describeRoutine(routine, today: today),
               key: const Key('detail-schedule'),
               style: Theme.of(context).textTheme.bodyMedium),
-          if (routine.nextOccurrence != null && !routine.ended)
-            Text('Next: ${routine.nextOccurrence!.date}',
-                key: const Key('detail-next-occurrence'),
+          if (routine.isRecurring && routine.nextDue != null && !routine.ended)
+            Text('Next: ${routine.nextDue}',
+                key: const Key('detail-next-due'),
                 style: Theme.of(context).textTheme.bodyMedium),
-          if (routine.nextRoutineId != null || routine.previousRoutineId != null)
-            Wrap(
-              spacing: 8,
-              children: [
-                if (routine.previousRoutineId != null)
-                  TextButton(
-                    key: const Key('detail-previous-version'),
-                    onPressed: () => onOpen(routine.previousRoutineId!),
-                    child: const Text('Previous version'),
-                  ),
-                if (routine.nextRoutineId != null)
-                  TextButton(
-                    key: const Key('detail-next-version'),
-                    onPressed: () => onOpen(routine.nextRoutineId!),
-                    child: const Text('Newer version'),
-                  ),
-              ],
-            ),
         ],
       ),
     );
   }
 }
 
-class _TemplatesSection extends StatelessWidget {
-  const _TemplatesSection({required this.templates});
-  final List<RoutineTemplate> templates;
+class _StepsSection extends StatelessWidget {
+  const _StepsSection({required this.steps});
+  final List<RoutineStep> steps;
 
   @override
   Widget build(BuildContext context) {
@@ -329,8 +343,8 @@ class _TemplatesSection extends StatelessWidget {
                     color: Theme.of(context).colorScheme.primary,
                   )),
           const SizedBox(height: 8),
-          ...templates.map((t) => Padding(
-                key: Key('template-${t.sortOrder}'),
+          ...steps.map((t) => Padding(
+                key: Key('step-${t.sortOrder}'),
                 padding: const EdgeInsets.only(left: 8, bottom: 4),
                 child: Text('- ${t.text}',
                     style: Theme.of(context).textTheme.bodyMedium),
@@ -341,13 +355,16 @@ class _TemplatesSection extends StatelessWidget {
   }
 }
 
+/// A recurring routine's ticks, newest first; each can be undone.
 class _OccurrencesSection extends StatelessWidget {
   const _OccurrencesSection({
     required this.occurrences,
-    required this.onUpdateStatus,
+    required this.busyActions,
+    required this.onUndo,
   });
   final List<RoutineOccurrence> occurrences;
-  final void Function(String occId, OccurrenceStatus status) onUpdateStatus;
+  final Set<String> busyActions;
+  final void Function(RoutineOccurrence occ) onUndo;
 
   @override
   Widget build(BuildContext context) {
@@ -356,62 +373,123 @@ class _OccurrencesSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Occurrences',
+          Text('Ticked off',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     color: Theme.of(context).colorScheme.primary,
                   )),
           const SizedBox(height: 8),
           if (occurrences.isEmpty)
-            Text('No occurrences yet',
+            Text('Nothing ticked off yet',
                 key: const Key('detail-no-occurrences'),
                 style: Theme.of(context).textTheme.bodyMedium),
           ...occurrences.map((occ) => Card(
                 key: Key('occurrence-${occ.id}'),
                 child: ListTile(
+                  leading: _tickIcon(occ.status),
                   title: Text(occ.scheduledFor),
                   subtitle: Text(occ.status.toJson()),
-                  trailing: _buildOccurrenceActions(occ),
+                  trailing: busyActions.contains('undo-${occ.id}')
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : TextButton(
+                          key: Key('occurrence-undo-${occ.id}'),
+                          onPressed: () => onUndo(occ),
+                          child: const Text('Undo'),
+                        ),
                 ),
               )),
         ],
       ),
     );
   }
+}
 
-  Widget? _buildOccurrenceActions(RoutineOccurrence occ) {
-    if (occ.status == OccurrenceStatus.done ||
-        occ.status == OccurrenceStatus.skipped) {
-      return null;
+/// A one-off or someday routine is ticked off once: Done or Skip while it is
+/// open, the tick with Undo once it is resolved.
+class _TickSection extends StatelessWidget {
+  const _TickSection({
+    required this.routine,
+    required this.busyActions,
+    required this.isAnyBusy,
+    required this.onResolve,
+    required this.onUndo,
+  });
+  final Routine routine;
+  final Set<String> busyActions;
+  final bool isAnyBusy;
+  final void Function(OccurrenceStatus status) onResolve;
+  final void Function(RoutineOccurrence occ) onUndo;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = routine.resolved;
+    if (resolved != null) {
+      return ListTile(
+        key: const Key('detail-resolved'),
+        leading: _tickIcon(resolved.status),
+        title: Text(resolved.status == OccurrenceStatus.skipped
+            ? 'Skipped'
+            : 'Done'),
+        subtitle: Text(resolved.scheduledFor),
+        trailing: busyActions.contains('undo-${resolved.id}')
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : TextButton(
+                key: const Key('detail-undo-button'),
+                onPressed: isAnyBusy ? null : () => onUndo(resolved),
+                child: const Text('Undo'),
+              ),
+      );
     }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (occ.status == OccurrenceStatus.pending)
-          IconButton(
-            key: Key('occurrence-start-${occ.id}'),
-            icon: const Icon(Icons.play_arrow),
-            tooltip: 'Start',
-            onPressed: () =>
-                onUpdateStatus(occ.id, OccurrenceStatus.inProgress),
+    if (routine.status != RoutineStatus.active) {
+      return const ListTile(
+        key: Key('detail-not-tickable'),
+        title: Text('Resume it to tick it off'),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          _ActionButton(
+            widgetKey: const Key('detail-done-button'),
+            label: 'Done',
+            icon: Icons.check,
+            isBusy: busyActions.contains('resolve'),
+            isDisabled: isAnyBusy,
+            onPressed: () => onResolve(OccurrenceStatus.done),
+            filled: true,
           ),
-        IconButton(
-          key: Key('occurrence-done-${occ.id}'),
-          icon: const Icon(Icons.check),
-          tooltip: 'Done',
-          onPressed: () => onUpdateStatus(occ.id, OccurrenceStatus.done),
-        ),
-        IconButton(
-          key: Key('occurrence-skip-${occ.id}'),
-          icon: const Icon(Icons.skip_next),
-          tooltip: 'Skip',
-          onPressed: () =>
-              onUpdateStatus(occ.id, OccurrenceStatus.skipped),
-        ),
-      ],
+          _ActionButton(
+            widgetKey: const Key('detail-skip-button'),
+            label: 'Skip',
+            icon: Icons.skip_next,
+            isBusy: false,
+            isDisabled: isAnyBusy,
+            onPressed: () => onResolve(OccurrenceStatus.skipped),
+            filled: false,
+          ),
+        ],
+      ),
     );
   }
 }
+
+Widget _tickIcon(OccurrenceStatus status) => switch (status) {
+      OccurrenceStatus.done =>
+        const Icon(Icons.check_circle, color: Colors.green),
+      OccurrenceStatus.skipped =>
+        const Icon(Icons.skip_next, color: Colors.orange),
+      OccurrenceStatus.pending =>
+        const Icon(Icons.schedule, color: Colors.grey),
+    };
 
 class _ActionsSection extends StatelessWidget {
   const _ActionsSection({
@@ -441,11 +519,8 @@ class _ActionsSection extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: [
-          // An edit replaces the newest version of an active routine only
-          // (#369, ADR-API-099 of personal-agent): a paused or archived one is
-          // resumed first.
-          if (routine.nextRoutineId == null &&
-              routine.status == RoutineStatus.active)
+          // An edit changes the routine in place; an archived one is final.
+          if (routine.status != RoutineStatus.archived)
             _ActionButton(
               widgetKey: const Key('detail-edit-button'),
               label: 'Edit',
@@ -455,9 +530,7 @@ class _ActionsSection extends StatelessWidget {
               onPressed: onEdit,
               filled: false,
             ),
-          if (!routine.ended &&
-              (routine.status == RoutineStatus.draft ||
-                  routine.status == RoutineStatus.paused))
+          if (!routine.ended && routine.status == RoutineStatus.paused)
             _ActionButton(
               widgetKey: const Key('detail-activate-button'),
               label: 'Activate',
@@ -477,7 +550,9 @@ class _ActionsSection extends StatelessWidget {
               onPressed: onPause,
               filled: false,
             ),
-          if (!routine.ended && routine.status != RoutineStatus.archived)
+          if (routine.isRecurring &&
+              !routine.ended &&
+              routine.status != RoutineStatus.archived)
             _ActionButton(
               widgetKey: const Key('detail-end-button'),
               label: 'End after…',

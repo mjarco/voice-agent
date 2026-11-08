@@ -77,7 +77,6 @@ class _StubAgendaRepository implements AgendaRepository {
         granularity: 'day',
         from: date,
         to: date,
-        items: [],
         routineItems: [],
       );
   @override
@@ -85,13 +84,14 @@ class _StubAgendaRepository implements AgendaRepository {
   @override
   Future<void> cacheAgenda(String date, AgendaResponse response) async {}
   @override
-  Future<void> markActionItemDone(String recordId) async {}
-  @override
   Future<void> resolveOccurrence(
     String routineId,
-    String scheduledFor,
-    OccurrenceStatus status,
-  ) async {}
+    OccurrenceStatus status, {
+    String? scheduledFor,
+  }) async {}
+  @override
+  Future<void> unresolveOccurrence(String routineId,
+      {String? scheduledFor}) async {}
   @override
   Future<void> refreshCalendars() async {}
 }

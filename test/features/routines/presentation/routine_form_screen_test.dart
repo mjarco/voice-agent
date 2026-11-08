@@ -86,6 +86,13 @@ Future<void> _chooseKind(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _chooseType(WidgetTester tester, String label) async {
+  await tester.tap(find.descendant(
+      of: find.byKey(const Key('routine-form-type')),
+      matching: find.text(label)));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   late FakeRoutinesRepository repo;
 
@@ -116,12 +123,58 @@ void main() {
       expect(repo.calls, ['create']);
       final input = repo.lastInput!;
       expect(input.name, 'Trening');
-      expect(input.rrule, 'FREQ=WEEKLY;BYDAY=MO,WE');
-      expect(input.items, ['rozgrzewka', 'bieg']);
+      expect((input.term as RecurringTerm).rrule, 'FREQ=WEEKLY;BYDAY=MO,WE');
+      expect(input.steps, ['rozgrzewka', 'bieg']);
       expect(input.missed, RoutineMissed.lapses);
       expect(input.startTime, isNull);
       expect(input.lastDay, isNull);
       expect(find.text('popped rtn-new'), findsOneWidget);
+    });
+
+    testWidgets('a task once: a day and a window, no rule fields',
+        (tester) async {
+      await _pumpForm(tester, repo);
+
+      await tester.enterText(
+          find.byKey(const Key('routine-form-name')), 'Hydraulik');
+      await _chooseType(tester, 'Once');
+      expect(find.byKey(const Key('routine-form-kind')), findsNothing);
+      expect(find.byKey(const Key('routine-form-last-day')), findsNothing);
+      expect(find.byKey(const Key('routine-form-missed')), findsNothing);
+
+      await _save(tester);
+      expect(find.text('Choose the day.'), findsOneWidget);
+      expect(repo.calls, isEmpty);
+
+      await tester.tap(find.byKey(const Key('routine-form-due-on')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-form-due-window')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Within a week from it').last);
+      await tester.pumpAndSettle();
+      await _save(tester);
+
+      expect(repo.calls, ['create']);
+      final term = repo.lastInput!.term as OneOffTerm;
+      expect(term.dueOn, '2026-10-27');
+      expect(term.window, TimeWindow.week);
+      expect(repo.lastInput!.toCreateMap().containsKey('missed'), isFalse);
+    });
+
+    testWidgets('a some-day task has no day at all', (tester) async {
+      await _pumpForm(tester, repo);
+
+      await tester.enterText(
+          find.byKey(const Key('routine-form-name')), 'Płot');
+      await _chooseType(tester, 'Some day');
+      expect(find.byKey(const Key('routine-form-someday-note')),
+          findsOneWidget);
+      await _save(tester);
+
+      expect(repo.lastInput!.term, isA<SomedayTerm>());
+      expect(repo.lastInput!.lastDay, isNull);
     });
 
     testWidgets('names what to fix before saving', (tester) async {
@@ -141,6 +194,13 @@ void main() {
       await _save(tester);
       expect(find.text('Choose a day of the month from 1 to 31.'),
           findsOneWidget);
+      expect(
+          tester
+              .widget<TextField>(
+                  find.byKey(const Key('routine-form-monthday')))
+              .decoration!
+              .error,
+          isNotNull);
       expect(repo.calls, isEmpty);
     });
 
@@ -155,28 +215,28 @@ void main() {
           find.byKey(const Key('routine-form-monthday')), '10');
       await _save(tester);
 
-      expect(repo.lastInput!.rrule, 'FREQ=MONTHLY;BYMONTHDAY=10');
+      expect((repo.lastInput!.term as RecurringTerm).rrule,
+          'FREQ=MONTHLY;BYMONTHDAY=10');
       expect(repo.lastInput!.missed, RoutineMissed.waits);
     });
 
     testWidgets('a save error stays in the form with what was typed',
         (tester) async {
-      repo.saveAnswers.add(RoutineConflictException('Nazwa zajęta'));
+      repo.saveAnswers.add(RoutinesGeneralException('name too long'));
       await _pumpForm(tester, repo);
 
       await tester.enterText(
           find.byKey(const Key('routine-form-name')), 'Trening');
       await _save(tester);
 
-      expect(find.text('Nazwa zajęta'), findsOneWidget);
+      expect(find.text('name too long'), findsOneWidget);
       expect(find.text('Trening'), findsOneWidget);
       expect(find.text('New routine'), findsOneWidget);
     });
 
-    testWidgets('a name taken marks Name until it changes', (tester) async {
-      repo.saveAnswers.add(RoutineFieldException(
-          'Rutyna „Trening" już istnieje',
-          field: RoutineFormField.name));
+    testWidgets('a name already on the list marks Name until it changes',
+        (tester) async {
+      repo.saveAnswers.add(sampleRoutine(name: 'Trening', existing: true));
       await _pumpForm(tester, repo);
 
       bool nameMarked() => tester
@@ -189,7 +249,8 @@ void main() {
       expect(nameMarked(), isFalse);
       await _save(tester);
 
-      expect(find.text('Rutyna „Trening" już istnieje'), findsOneWidget);
+      expect(find.textContaining('is already on the list'), findsOneWidget);
+      expect(find.text('popped rtn-new'), findsNothing);
       expect(nameMarked(), isTrue);
 
       await tester.enterText(
@@ -197,32 +258,11 @@ void main() {
       await tester.pump();
       expect(nameMarked(), isFalse);
     });
-
-    testWidgets('a check of the form marks its field', (tester) async {
-      await _pumpForm(tester, repo);
-
-      await tester.enterText(
-          find.byKey(const Key('routine-form-name')), 'Czynsz');
-      await _chooseKind(tester, 'Day of the month');
-      await tester.enterText(
-          find.byKey(const Key('routine-form-monthday')), '40');
-      await _save(tester);
-
-      expect(find.text('Choose a day of the month from 1 to 31.'),
-          findsOneWidget);
-      expect(
-          tester
-              .widget<TextField>(
-                  find.byKey(const Key('routine-form-monthday')))
-              .decoration!
-              .error,
-          isNotNull);
-      expect(repo.calls, isEmpty);
-    });
   });
 
   group('edit', () {
-    testWidgets('prefills the routine and saves from today', (tester) async {
+    testWidgets('prefills the routine and sends only what changed',
+        (tester) async {
       repo.detail = sampleRoutine(
         id: 'rtn-1',
         name: 'Trening',
@@ -230,31 +270,32 @@ void main() {
         startTime: '18:00',
         lastDay: '2026-12-31',
         missed: RoutineMissed.waits,
-        templates: const [
-          RoutineTemplate(text: 'bieg', sortOrder: 2),
-          RoutineTemplate(text: 'rozgrzewka', sortOrder: 1),
+        steps: const [
+          RoutineStep(text: 'bieg', sortOrder: 2),
+          RoutineStep(text: 'rozgrzewka', sortOrder: 1),
         ],
       );
-      repo.saveAnswers.add(sampleRoutine(id: 'rtn-2'));
+      repo.saveAnswers.add(sampleRoutine(id: 'rtn-1'));
       await _pumpForm(tester, repo, editId: 'rtn-1');
 
       expect(find.text('Edit routine'), findsOneWidget);
-      expect(find.text('2026-10-27'), findsOneWidget);
+      expect(find.byKey(const Key('routine-form-starts-on')), findsNothing);
       expect(find.text('2026-12-31'), findsOneWidget);
       expect(find.text('18:00'), findsOneWidget);
       expect(find.text('Every N weeks'), findsOneWidget);
+      expect(find.text('rozgrzewka'), findsOneWidget);
 
+      await _save(tester);
+      expect(find.text('Nothing changed.'), findsOneWidget);
+      expect(repo.calls, ['detail rtn-1']);
+
+      await tester.enterText(
+          find.byKey(const Key('routine-form-name')), 'Trening 2');
       await _save(tester);
 
       expect(repo.calls, ['detail rtn-1', 'edit rtn-1']);
-      expect(repo.lastStartsOn, '2026-10-27');
-      final input = repo.lastInput!;
-      expect(input.rrule, 'FREQ=WEEKLY;INTERVAL=2;BYDAY=SA');
-      expect(input.startTime, '18:00');
-      expect(input.lastDay, '2026-12-31');
-      expect(input.missed, RoutineMissed.waits);
-      expect(input.items, ['rozgrzewka', 'bieg']);
-      expect(find.text('popped rtn-2'), findsOneWidget);
+      expect(repo.lastPatch!.toMap(), {'name': 'Trening 2'});
+      expect(find.text('popped rtn-1'), findsOneWidget);
     });
 
     testWidgets('a past last day is not offered again', (tester) async {
@@ -262,14 +303,17 @@ void main() {
           id: 'rtn-1', name: 'Pranie', lastDay: '2026-10-20', ended: true);
       await _pumpForm(tester, repo, editId: 'rtn-1');
 
+      expect(find.text('2026-10-20'), findsNothing);
+      await tester.enterText(
+          find.byKey(const Key('routine-form-name')), 'Pranie 2');
       await _save(tester);
 
-      expect(repo.lastInput!.lastDay, isNull);
+      expect(repo.lastPatch!.toMap(), {'name': 'Pranie 2'});
     });
 
     testWidgets('a last day with no day of the schedule left is marked',
         (tester) async {
-      // Ended after today, a Tuesday, on Mondays and Fridays.
+      // Ends today, a Tuesday, on Mondays and Fridays.
       repo.detail = sampleRoutine(
           id: 'rtn-1',
           name: 'Trening',
@@ -306,21 +350,7 @@ void main() {
 
       await _save(tester);
       expect(repo.calls, ['detail rtn-1', 'edit rtn-1']);
-      expect(repo.lastInput!.lastDay, isNull);
-    });
-
-    testWidgets('a last day on a day of the schedule saves', (tester) async {
-      repo.detail = sampleRoutine(
-          id: 'rtn-1',
-          name: 'Leki',
-          rrule: 'FREQ=DAILY;UNTIL=20261027T235959Z',
-          lastDay: '2026-10-27');
-      await _pumpForm(tester, repo, editId: 'rtn-1');
-
-      await _save(tester);
-
-      expect(repo.calls, ['detail rtn-1', 'edit rtn-1']);
-      expect(repo.lastInput!.lastDay, '2026-10-27');
+      expect(repo.lastPatch!.toMap(), {'last_day': null});
     });
 
     testWidgets('an unknown schedule asks for a new one', (tester) async {
@@ -334,6 +364,21 @@ void main() {
       expect(repo.calls, ['detail rtn-1']);
     });
 
+    testWidgets('a one-off becomes some day', (tester) async {
+      repo.detail = sampleRoutine(
+          id: 'rtn-1',
+          name: 'Hydraulik',
+          dueOn: '2026-10-30',
+          dueWindow: TimeWindow.week);
+      await _pumpForm(tester, repo, editId: 'rtn-1');
+
+      expect(find.text('2026-10-30'), findsOneWidget);
+      await _chooseType(tester, 'Some day');
+      await _save(tester);
+
+      expect(repo.lastPatch!.toMap(), {'term': <String, dynamic>{}});
+    });
+
     testWidgets('an owed day is ticked off and the edit saved again',
         (tester) async {
       repo.detail = sampleRoutine(
@@ -341,9 +386,10 @@ void main() {
       repo.saveAnswers
         ..add(RoutineOverdueException('owed',
             routineId: 'rtn-1', scheduledFor: '2026-10-10'))
-        ..add(sampleRoutine(id: 'rtn-2'));
+        ..add(sampleRoutine(id: 'rtn-1'));
       await _pumpForm(tester, repo, editId: 'rtn-1');
 
+      await _chooseKind(tester, 'Every day');
       await _save(tester);
       expect(find.text('An occurrence is still open'), findsOneWidget);
       expect(find.textContaining('2026-10-10'), findsOneWidget);
@@ -357,65 +403,10 @@ void main() {
         'resolve rtn-1 2026-10-10 done',
         'edit rtn-1',
       ]);
-      expect(find.text('popped rtn-2'), findsOneWidget);
-    });
-
-    testWidgets('several owed days say how many and the earliest',
-        (tester) async {
-      repo.detail = sampleRoutine(id: 'rtn-1', name: 'Czynsz');
-      repo.saveAnswers.add(RoutineOverdueException('owed',
-          routineId: 'rtn-1', scheduledFor: '2026-09-10', openDays: 2));
-      await _pumpForm(tester, repo, editId: 'rtn-1');
-
-      await _save(tester);
-
-      expect(
-          find.text('2 days are still open, the earliest 2026-09-10. '
-              'Tick it off or skip it, and the edit is saved again.'),
-          findsOneWidget);
-    });
-
-    testWidgets('a stale edit opens the newer version', (tester) async {
-      repo.detailsById['rtn-1'] =
-          sampleRoutine(id: 'rtn-1', name: 'Trening', nextRoutineId: 'rtn-5');
-      repo.detailsById['rtn-5'] = sampleRoutine(id: 'rtn-5', name: 'Trening');
-      repo.saveAnswers.add(RoutineAlreadyEditedException(
-          'routine: already replaced by a newer version'));
-      await _pumpForm(tester, repo, editId: 'rtn-1');
-
-      await _save(tester);
-
-      expect(find.text('popped rtn-5'), findsOneWidget);
-      expect(
-          find.text(
-              'This routine was changed meanwhile: this is its newer version.'),
-          findsOneWidget);
-      expect(find.textContaining('already replaced'), findsNothing);
-    });
-
-    testWidgets('a start day refused by the server is marked',
-        (tester) async {
-      repo.detail = sampleRoutine(id: 'rtn-1', name: 'Leki');
-      repo.saveAnswers.add(RoutineFieldException(
-          'starts_on must not be before 2026-10-28',
-          field: RoutineFormField.startsOn));
-      await _pumpForm(tester, repo, editId: 'rtn-1');
-
-      await _save(tester);
-
-      expect(find.text('starts_on must not be before 2026-10-28'),
-          findsOneWidget);
-      final errorColor = Theme.of(tester.element(find.text('Changes from')))
-          .colorScheme
-          .error;
-      expect(
-          tester
-              .widget<Text>(find.descendant(
-                  of: find.byKey(const Key('routine-form-starts-on')),
-                  matching: find.text('Changes from')))
-              .style
-              ?.color,
-          errorColor);
+      expect(repo.lastPatch!.toMap(), {
+        'term': {'rrule': 'FREQ=DAILY'},
+      });
+      expect(find.text('popped rtn-1'), findsOneWidget);
     });
 
     testWidgets('cancelling the owed day keeps the form', (tester) async {
@@ -424,6 +415,9 @@ void main() {
           routineId: 'rtn-1', scheduledFor: '2026-10-10'));
       await _pumpForm(tester, repo, editId: 'rtn-1');
 
+      await _chooseKind(tester, 'Day of the month');
+      await tester.enterText(
+          find.byKey(const Key('routine-form-monthday')), '10');
       await _save(tester);
       await tester.tap(find.byKey(const Key('routine-form-overdue-cancel')));
       await tester.pumpAndSettle();

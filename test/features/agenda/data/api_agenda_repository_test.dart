@@ -18,6 +18,8 @@ class _StubApiClient extends ApiClient {
   Map<String, dynamic>? lastPostData;
   String? lastPatchPath;
   Map<String, dynamic>? lastPatchData;
+  ApiResult nextDeleteResult = const ApiSuccess();
+  String? lastDeletePath;
 
   @override
   Future<ApiResult> get(String path,
@@ -42,10 +44,15 @@ class _StubApiClient extends ApiClient {
     lastPatchData = data;
     return nextPatchResult;
   }
+
+  @override
+  Future<ApiResult> delete(String path) async {
+    lastDeletePath = path;
+    return nextDeleteResult;
+  }
 }
 
 Map<String, dynamic> _buildAgendaJson({
-  List<Map<String, dynamic>>? items,
   List<Map<String, dynamic>>? routineItems,
 }) {
   return {
@@ -54,31 +61,21 @@ Map<String, dynamic> _buildAgendaJson({
       'granularity': 'day',
       'from': '2026-04-19',
       'to': '2026-04-19',
-      'items': items ?? [],
       'routine_items': routineItems ?? [],
     },
   };
 }
 
-Map<String, dynamic> _sampleActionItem() => {
-      'record_id': 'rec-1',
-      'text': 'Buy groceries',
-      'topic_ref': null,
-      'scheduled_for': '2026-04-19',
-      'time_window': 'day',
-      'origin_role': 'agent',
-      'status': 'active',
-      'linked_conversation_count': 1,
-    };
-
 Map<String, dynamic> _sampleRoutineItem() => {
       'routine_id': 'rtn-1',
       'routine_name': 'Morning routine',
+      'kind': 'recurring',
       'scheduled_for': '2026-04-19',
+      'due_window': '',
       'start_time': '08:00',
       'overdue': false,
       'status': 'pending',
-      'occurrence_id': 'occ-1',
+      'occurrence_id': null,
       'templates': [
         {'text': 'Meditate', 'sort_order': 0},
       ],
@@ -97,7 +94,6 @@ void main() {
     test('parses successful response with data envelope', () async {
       apiClient.nextGetResult = ApiSuccess(
         body: jsonEncode(_buildAgendaJson(
-          items: [_sampleActionItem()],
           routineItems: [_sampleRoutineItem()],
         )),
       );
@@ -105,8 +101,6 @@ void main() {
       final response = await repo.fetchAgenda('2026-04-19');
 
       expect(response.date, '2026-04-19');
-      expect(response.items, hasLength(1));
-      expect(response.items.first.text, 'Buy groceries');
       expect(response.routineItems, hasLength(1));
       expect(response.routineItems.first.routineName, 'Morning routine');
     });
@@ -196,28 +190,6 @@ void main() {
     });
   });
 
-  group('markActionItemDone', () {
-    test('sends POST to correct path', () async {
-      apiClient.nextPostResult = const ApiSuccess();
-
-      await repo.markActionItemDone('rec-1');
-
-      expect(apiClient.lastPostPath, '/records/rec-1/done');
-    });
-
-    test('throws on failure', () async {
-      apiClient.nextPostResult = const ApiPermanentFailure(
-        statusCode: 404,
-        message: 'Not found',
-      );
-
-      expect(
-        () => repo.markActionItemDone('rec-1'),
-        throwsA(isA<AgendaException>()),
-      );
-    });
-  });
-
   group('refreshCalendars', () {
     test('sends POST /calendar/refresh without a body (#375)', () async {
       apiClient.nextPostResult = const ApiSuccess();
@@ -242,11 +214,11 @@ void main() {
   });
 
   group('resolveOccurrence', () {
-    test('sends POST resolve with the day and status (#363)', () async {
+    test('a recurring row sends its day and the status', () async {
       await repo.resolveOccurrence(
         'rtn-1',
-        '2026-09-10',
         OccurrenceStatus.skipped,
+        scheduledFor: '2026-09-10',
       );
 
       expect(apiClient.lastPostPath, '/routines/rtn-1/resolve');
@@ -255,24 +227,25 @@ void main() {
       expect(apiClient.lastPatchPath, isNull);
     });
 
-    test('sends done status', () async {
-      await repo.resolveOccurrence('rtn-1', '2026-10-26', OccurrenceStatus.done);
+    test('a one-off sends no day', () async {
+      await repo.resolveOccurrence('rtn-2', OccurrenceStatus.done);
 
-      expect(apiClient.lastPostData,
-          {'scheduled_for': '2026-10-26', 'status': 'done'});
+      expect(apiClient.lastPostData, {'status': 'done'});
     });
 
-    test('a refusal carries the server status', () async {
+    test('a refusal carries the server status and code', () async {
       apiClient.nextPostResult = const ApiPermanentFailure(
         statusCode: 409,
-        message: 'already resolved',
+        message: 'Conflict',
+        body: '{"error":{"code":"routine_not_active","message":"paused"}}',
       );
 
       expect(
-        () => repo.resolveOccurrence(
-            'rtn-1', '2026-10-26', OccurrenceStatus.done),
+        () => repo.resolveOccurrence('rtn-1', OccurrenceStatus.done,
+            scheduledFor: '2026-10-26'),
         throwsA(isA<AgendaException>()
-            .having((e) => e.statusCode, 'statusCode', 409)),
+            .having((e) => e.statusCode, 'statusCode', 409)
+            .having((e) => e.code, 'code', 'routine_not_active')),
       );
     });
 
@@ -282,10 +255,39 @@ void main() {
       );
 
       expect(
-        () => repo.resolveOccurrence(
-            'rtn-1', '2026-10-26', OccurrenceStatus.skipped),
+        () => repo.resolveOccurrence('rtn-1', OccurrenceStatus.skipped,
+            scheduledFor: '2026-10-26'),
         throwsA(isA<AgendaException>()
             .having((e) => e.statusCode, 'statusCode', isNull)),
+      );
+    });
+  });
+
+  group('unresolveOccurrence', () {
+    test('a recurring row deletes the tick of its day', () async {
+      await repo.unresolveOccurrence('rtn-1', scheduledFor: '2026-09-10');
+
+      expect(apiClient.lastDeletePath,
+          '/routines/rtn-1/resolve?scheduled_for=2026-09-10');
+    });
+
+    test('a one-off deletes its only tick', () async {
+      await repo.unresolveOccurrence('rtn-2');
+
+      expect(apiClient.lastDeletePath, '/routines/rtn-2/resolve');
+    });
+
+    test('a refusal throws', () async {
+      apiClient.nextDeleteResult = const ApiPermanentFailure(
+        statusCode: 409,
+        message: 'Conflict',
+        body: '{"error":{"code":"not_resolved"}}',
+      );
+
+      expect(
+        () => repo.unresolveOccurrence('rtn-2'),
+        throwsA(isA<AgendaException>()
+            .having((e) => e.code, 'code', 'not_resolved')),
       );
     });
   });
