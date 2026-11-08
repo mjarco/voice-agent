@@ -23,19 +23,19 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T4 | Stop from Listening and from Standby ends in Off | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
 | T5 | An utterance and its reply keep Listening open | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
 | T6 | Tabs do not touch the microphone | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
-| T7 | Locked phone: the headset pauses and resumes | pending (owner: a real headset) |
+| T7 | Locked phone: the headset pauses and resumes | field check FC-9 (owner, stable 1.24.0+41) |
 | T8 | A reply in Standby is not spoken | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
 | T9 | Push-to-talk from Listening returns to Listening | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); defect D1 found, see the case |
-| T10 | Farewell phrase ends in Off | pending (owner: the synthetic voice of the agent's run is not transcribed as "dobranoc") |
+| T10 | Farewell phrase ends in Off | field check FC-10 (owner, stable 1.24.0+41) |
 | T11 | Focus held in Listening only, and a reply keeps it | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
 | T12 | Another app's sound moves Listening to Standby | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
 | T13 | A paused video resumes on Pause and on Stop | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA), YouTube started over adb |
-| T14 | A call means Standby; a start during a call is refused | pending (owner: a real call) |
+| T14 | A call means Standby; a start during a call is refused | field check FC-11 (owner, stable 1.24.0+41) |
 | T15 | The notification shows the mode and its buttons | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
-| T16 | Pause, Resume and Stop from the notification | in-progress (steps 1–2 passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); step 3 owner) |
+| T16 | Pause, Resume and Stop from the notification | steps 1–2 passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); step 3 field check FC-12 (owner) |
 | T17 | The headset button is claimed in Listening and released in Off | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); step 4 in part, see the case |
 | T18 | A swipe from recents means Off | passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA) |
-| T19 | The processing sound plays on the media volume | in-progress (usage, focus and no extra segment passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); real voice and the ear: owner) |
+| T19 | The processing sound plays on the media volume | usage, focus and no extra segment passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); voice and ear field check FC-13 (owner) |
 
 ---
 
@@ -133,7 +133,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T7. Locked phone: the headset pauses and resumes
 
-**Status:** pending (owner: a real headset)
+**Status:** field check FC-9 (owner, stable 1.24.0+41)
 
 **Do:**
 1. In Listening, lock the phone. Press the headset button once.
@@ -168,7 +168,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T10. Farewell phrase ends in Off
 
-**Status:** pending (owner: the synthetic voice of the agent's run is not transcribed as "dobranoc")
+**Status:** field check FC-10 (owner, stable 1.24.0+41)
 
 **Do:** in Listening, say "dobranoc".
 
@@ -213,7 +213,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T14. A call means Standby; a start during a call is refused
 
-**Status:** pending (owner: a real call)
+**Status:** field check FC-11 (owner, stable 1.24.0+41)
 
 **Do:**
 1. In Listening, receive a call; answer it; hang up.
@@ -240,7 +240,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T16. Pause, Resume and Stop from the notification
 
-**Status:** in-progress (steps 1–2 passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); step 3 owner)
+**Status:** steps 1–2 passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); step 3 field check FC-12 (owner)
 
 **Do:**
 1. Unlocked, in Listening: pull down the shade and tap "Pause"; read the recorders (S2).
@@ -280,7 +280,7 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ### T19. The processing sound plays on the media volume
 
-**Status:** in-progress (usage, focus and no extra segment passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); real voice and the ear: owner)
+**Status:** usage, focus and no extra segment passed (2026-11-08, Pixel 11 Pro, Android 17, dev 1.24.0+41, test PA); voice and ear field check FC-13 (owner)
 
 **Do:** note the media and ring volumes (`adb shell dumpsys audio`, `- STREAM_MUSIC` and `- STREAM_RING`, the `2 (speaker)` value; the media scale is 0–25). Raise the media volume to about 18 with the volume keys (`adb shell input keyevent KEYCODE_VOLUME_UP`; `cmd media_session volume --set` does not change it on the Pixel). In Listening, say ten short utterances, each after the previous reply has ended, and while the first one is processed read `adb shell dumpsys audio`. Count the app's rows in PA afterwards. Restore the volume with the keys.
 
@@ -293,4 +293,4 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ## When this plan is done
 
-Must pass: T1–T6, T8–T12, T15–T19 (T16 step 3 and the ear in T19 are the owner's). T7, T13 and T14 need the owner (a headset, a video app, a call); T7 decides whether the media-button claim on entering Listening is enough. Tasks 3–5 add their cases here before task 6 runs the plan.
+Must pass: T1–T6, T8–T12, T15–T19 (T16 step 3 and the ear in T19 are the owner's). T7, T13 and T14 need the owner (a headset, a video app, a call); T7 decides whether the media-button claim on entering Listening is enough. The owner's cases are field checks FC-9 to FC-13 in the workspace's `docs/field-checks/register.md` (owner's decision of 2026-11-08).
