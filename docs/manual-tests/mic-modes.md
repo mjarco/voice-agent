@@ -35,6 +35,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | T16 | Pause, Resume and Stop from the notification | pending |
 | T17 | The headset button is claimed in Listening and released in Off | pending |
 | T18 | A swipe from recents means Off | pending |
+| T19 | The processing sound plays on the media volume | pending |
 
 ---
 
@@ -275,6 +276,18 @@ The dev flavor also sends the telemetry events `hf.mic_mode` (from, to, event) a
 
 ---
 
+### T19. The processing sound plays on the media volume
+
+**Status:** pending
+
+**Do:** note the ring and media volumes (`adb shell cmd media_session volume --stream 2 --get`, `--stream 3`), set the ring volume to 0 and the media volume to 12 of 15. In Listening, say ten short utterances with a pause after each, and while the first one is processed read `adb shell dumpsys audio`. Count the app's rows in PA afterwards. Restore both volumes.
+
+**Why:** criterion 9 of the epic (the processing sound as loud as the replies, without focus); task 5.
+**Expected:** while the sound plays, `dumpsys audio` lists a player of the app's uid with `usage=USAGE_MEDIA`, and the focus stack gains no entry for it. Ten utterances give exactly ten rows in PA and no `Rejected`/empty jobs in logcat. The sound is heard with the ring volume at 0. By ear (owner, task 6): the sound is about as loud as a reply.
+**On failure:** `USAGE_ASSISTANCE_SONIFICATION` in the player list: the old build. More than ten rows, or empty transcriptions between them: the loop reached the open microphone, and the plan returns to the owner with options (b) or (c) of task 5's To decide 2.
+
+---
+
 ## When this plan is done
 
-Must pass: T1–T6, T8–T12, T15–T18 (T16 step 3 is the owner's). T7, T13 and T14 need the owner (a headset, a video app, a call); T7 decides whether the media-button claim on entering Listening is enough. Tasks 3–5 add their cases here before task 6 runs the plan.
+Must pass: T1–T6, T8–T12, T15–T19 (T16 step 3 and the ear in T19 are the owner's). T7, T13 and T14 need the owner (a headset, a video app, a call); T7 decides whether the media-button claim on entering Listening is enough. Tasks 3–5 add their cases here before task 6 runs the plan.

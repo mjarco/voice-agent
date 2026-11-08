@@ -12,6 +12,12 @@ class FakeAudioPlayer implements AudioPlayer {
   int stopCount = 0;
   int disposeCount = 0;
   ReleaseMode currentReleaseMode = ReleaseMode.release;
+  final List<AudioContext> audioContexts = [];
+
+  @override
+  Future<void> setAudioContext(AudioContext ctx) async {
+    audioContexts.add(ctx);
+  }
 
   /// Trigger the player-complete event (simulates end of a sound).
   void completePlayer() => _onCompleteController.add(null);
@@ -58,6 +64,20 @@ class FakeAudioPlayer implements AudioPlayer {
 
 void main() {
   group('AudioplayersAudioFeedbackService', () {
+    test('plays as media without focus on Android, ambient on iOS', () {
+      final player = FakeAudioPlayer();
+      AudioplayersAudioFeedbackService(
+        player: player,
+        getEnabled: () => true,
+      );
+
+      expect(player.audioContexts, hasLength(1));
+      final ctx = player.audioContexts.single;
+      expect(ctx.android.usageType, AndroidUsageType.media);
+      expect(ctx.android.audioFocus, AndroidAudioFocus.none);
+      expect(ctx.iOS.category, AVAudioSessionCategory.ambient);
+    });
+
     group('startProcessingFeedback', () {
       test('does nothing when disabled', () async {
         final player = FakeAudioPlayer();

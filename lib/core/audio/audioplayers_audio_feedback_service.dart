@@ -14,9 +14,13 @@ class AudioplayersAudioFeedbackService implements AudioFeedbackService {
         category: AVAudioSessionCategory.ambient,
         // ambient already implies mix-with-others; no explicit options needed
       ),
+      // Media usage puts the sounds on the media volume, the one the
+      // spoken replies use; assistance sonification followed the ring
+      // volume and went silent on a silenced phone. No focus, so no other
+      // app is paused by them.
       android: AudioContextAndroid(
         contentType: AndroidContentType.sonification,
-        usageType: AndroidUsageType.assistanceSonification,
+        usageType: AndroidUsageType.media,
         audioFocus: AndroidAudioFocus.none,
       ),
     )));
