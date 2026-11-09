@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 import 'package:voice_agent/features/pins/domain/pins_state.dart';
 
@@ -17,8 +18,11 @@ class PinDetailNotifier extends StateNotifier<PinDetailState> {
     lastActionError = null;
     try {
       final pin = await _repository.fetchPin(_recordId);
-      state = PinDetailLoaded(pin: pin);
+      // Disposed with its page (autoDispose): a page left before the answer
+      // takes nothing more.
+      if (mounted) state = PinDetailLoaded(pin: pin);
     } catch (e) {
+      if (!mounted) return;
       state = PinDetailError(
         message: e.toString(),
         gone: e is PinNotFoundException,
@@ -27,6 +31,12 @@ class PinDetailNotifier extends StateNotifier<PinDetailState> {
   }
 
   Future<void> refresh() => load();
+
+  /// Shows the pin as the server answered a save, with no second read.
+  void show(PinDetail pin) {
+    lastActionError = null;
+    state = PinDetailLoaded(pin: pin);
+  }
 
   /// Unpin this reference. Returns true on success; on failure records
   /// [lastActionError] and returns false. The list refreshes on return per

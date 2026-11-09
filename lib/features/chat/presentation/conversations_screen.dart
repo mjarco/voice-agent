@@ -20,17 +20,12 @@ class ConversationsScreen extends ConsumerWidget {
           IconButton(
             key: const Key('conversations-new-icon'),
             icon: const Icon(Icons.add),
+            tooltip: 'New conversation',
             onPressed: () async {
               ref.invalidate(threadNotifierProvider('new'));
               await context.push('/chat/new');
               notifier.refresh();
             },
-          ),
-          IconButton(
-            key: const Key('conversations-matters-icon'),
-            icon: const Icon(Icons.topic_outlined),
-            tooltip: 'Sprawy',
-            onPressed: () => context.push('/matters'),
           ),
           IconButton(
             key: const Key('conversations-pins-icon'),
@@ -41,6 +36,7 @@ class ConversationsScreen extends ConsumerWidget {
           IconButton(
             key: const Key('conversations-settings-icon'),
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
           ),
         ],

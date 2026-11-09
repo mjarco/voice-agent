@@ -25,9 +25,11 @@ class RoutineDetailNotifier extends StateNotifier<RoutineDetailState> {
       final routine = results[0] as Routine;
       final occurrences = results[1] as List<RoutineOccurrence>;
 
-      state = RoutineDetailLoaded(routine: routine, occurrences: occurrences);
+      if (mounted) {
+        state = RoutineDetailLoaded(routine: routine, occurrences: occurrences);
+      }
     } catch (e) {
-      state = RoutineDetailError(message: e.toString());
+      if (mounted) state = RoutineDetailError(message: e.toString());
     }
   }
 

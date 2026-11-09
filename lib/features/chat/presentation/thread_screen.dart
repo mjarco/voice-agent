@@ -44,6 +44,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     final notifier =
         ref.read(threadNotifierProvider(widget.conversationId).notifier);
     final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
 
     final PinSuggestion? suggestion;
     try {
@@ -77,18 +78,25 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         name: confirmed.name,
       );
       if (!mounted) return;
+      // The newest answer shows at once, not behind an older one.
+      messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
         SnackBar(
           content: Text('Pinned as "${created.pin.pinName}"'),
+          // A snackbar with an action stays until dismissed unless told
+          // otherwise; "Open" is an offer, not a question.
+          persist: false,
           action: SnackBarAction(
             label: 'Open',
-            onPressed: () => context.push('/pins'),
+            // The snackbar outlives this thread's page; its router does not.
+            onPressed: () => router.push('/pins'),
           ),
         ),
       );
     } catch (e) {
       // A TypeError from a malformed answer still gets its SnackBar.
       if (!mounted) return;
+      messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(content: Text('Could not pin: $e')));
     }
   }
@@ -216,6 +224,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
           IconButton(
             key: const Key('thread-settings-icon'),
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
           ),
         ],
@@ -756,12 +765,14 @@ class _InputBar extends StatelessWidget {
               IconButton(
                 key: const Key('thread-cancel-button'),
                 icon: const Icon(Icons.stop_circle_outlined),
+                tooltip: 'Stop',
                 onPressed: onCancel,
               )
             else
               IconButton(
                 key: const Key('thread-send-button'),
                 icon: const Icon(Icons.send),
+                tooltip: 'Send',
                 onPressed: canSend
                     ? () {
                         final text = controller.text.trim();

@@ -98,6 +98,7 @@ Future<String?> askMatterText(
   required String title,
   String initial = '',
   bool multiline = false,
+  String? hint,
 }) {
   return showDialog<String>(
     context: context,
@@ -105,6 +106,7 @@ Future<String?> askMatterText(
       title: title,
       initial: initial,
       multiline: multiline,
+      hint: hint ?? title,
     ),
   );
 }
@@ -114,11 +116,15 @@ class _TextDialog extends StatefulWidget {
     required this.title,
     required this.initial,
     required this.multiline,
+    required this.hint,
   });
 
   final String title;
   final String initial;
   final bool multiline;
+
+  /// What the field asks for while it is empty; a screen reader reads it too.
+  final String hint;
 
   @override
   State<_TextDialog> createState() => _TextDialogState();
@@ -144,6 +150,7 @@ class _TextDialogState extends State<_TextDialog> {
         minLines: widget.multiline ? 3 : 1,
         maxLines: widget.multiline ? 8 : 1,
         textCapitalization: TextCapitalization.sentences,
+        decoration: InputDecoration(hintText: widget.hint),
       ),
       actions: [
         TextButton(

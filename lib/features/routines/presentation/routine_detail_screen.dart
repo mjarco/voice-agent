@@ -165,7 +165,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
   /// reloads it.
   Future<void> _handleEdit(Routine routine) async {
     final saved =
-        await context.push<Routine>('/routines/${routine.id}/edit');
+        await context.push<Routine>('/agenda/routines/${routine.id}/edit');
     if (!mounted || saved == null) return;
     ref
         .read(routineDetailNotifierProvider(widget.routineId).notifier)

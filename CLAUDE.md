@@ -418,7 +418,7 @@ final recordingControllerProvider =
 All navigation uses GoRouter:
 
 - Routes are defined in `lib/app/router.dart`.
-- The shell uses `StatefulShellRoute.indexedStack` with 5 tabs (Agenda, Shopping, Record, Routines, Chat).
+- The shell uses `StatefulShellRoute.indexedStack` with 5 tabs (Agenda, Shopping, Record, Sprawy, Chat); routines are managed in a folded section of the Agenda (ADR-ARCH-012).
 - Child routes (e.g., `/record/history`) stay within their branch.
 - Navigation arguments pass via GoRouter `extra` parameter.
 - P020 established the 5-branch route structure. Feature work (P021–P024)
@@ -580,15 +580,17 @@ screens within this structure — it does not add routes.
 
 | Route | Owner | Content owner |
 |-------|-------|---------------|
-| `/agenda` | 020 (shell branch 0) | 021 (AgendaPlaceholderScreen → real screen) |
+| `/agenda` | 020 (shell branch 0) | 021 (AgendaScreen), with RoutinesSection at its end (ADR-ARCH-012) |
 | `/shopping` | 020 (shell branch 1) | voice-agent#371 (replaced Plan) |
 | `/record` | 020 (shell branch 2) | 001 (RecordingScreen) |
 | `/record/history` | 020 (child of /record) | 007 (HistoryScreen) |
 | `/record/history/:id` | 020 (child of /record/history) | 007 (TranscriptDetailScreen) |
-| `/routines` | 020 (shell branch 3) | 022 (RoutinesPlaceholderScreen → real screen) |
+| `/agenda/routines/new` | ADR-ARCH-012 (child of /agenda) | RoutineFormScreen |
+| `/agenda/routines/:id` | ADR-ARCH-012 (child of /agenda) | RoutineDetailScreen; `edit` child: RoutineFormScreen |
+| `/routines`, `/routines/:id` | ADR-ARCH-012 (outside shell) | redirects to `/agenda` and `/agenda/routines/:id` |
 | `/chat` | 020 (shell branch 4) | 024 (ChatPlaceholderScreen → real screen) |
 | `/places` | outside shell | places (PlacesScreen) — reached from Shopping + Record app bars |
-| `/matters` | R3 matters (outside shell) | MattersScreen — reached from Record + Chat app bars, next to Pins |
+| `/matters` | ADR-ARCH-012 (shell branch 3, was Routines) | MattersScreen, the "Sprawy" tab |
 | `/matters/new` | R3 matters (child of /matters) | MatterFormScreen — pops with the saved MatterDetail |
 | `/matters/:id` | R3 matters (child of /matters) | MatterDetailScreen |
 | `/pins` | 045 (outside shell) | 045 (PinsScreen) — reached from Record + Chat app bars |

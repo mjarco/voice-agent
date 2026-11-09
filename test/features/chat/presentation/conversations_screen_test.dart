@@ -158,13 +158,20 @@ void main() {
       );
     });
 
-    testWidgets('the matters icon opens /matters', (tester) async {
+    testWidgets('every button has a label a screen reader can read',
+        (tester) async {
+      final handle = tester.ensureSemantics();
       await _pumpScreen(tester);
 
-      await tester.tap(find.byKey(const Key('conversations-matters-icon')));
-      await tester.pumpAndSettle();
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      handle.dispose();
+    });
 
-      expect(find.text('Matters'), findsOneWidget);
+    testWidgets('has no matters icon: Sprawy are a tab (ADR-ARCH-012)',
+        (tester) async {
+      await _pumpScreen(tester);
+
+      expect(find.byKey(const Key('conversations-matters-icon')), findsNothing);
     });
 
     testWidgets('add icon navigates to /chat/new', (tester) async {

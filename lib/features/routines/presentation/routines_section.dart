@@ -2,59 +2,76 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/providers/routine_changes_provider.dart';
 import 'package:voice_agent/features/routines/domain/routine_schedule.dart';
 import 'package:voice_agent/features/routines/domain/routines_state.dart';
 import 'package:voice_agent/features/routines/presentation/routines_notifier.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
 
-class RoutinesScreen extends ConsumerStatefulWidget {
-  const RoutinesScreen({super.key});
+/// Every routine, to manage, folded into the Agenda (the owner's decision of
+/// 2026-11-09, ADR-ARCH-012): the Agenda shows what is due, and this section
+/// what exists. The router puts it at the end of the Agenda, so neither
+/// feature imports the other. Opening it reads the routines again; it stays
+/// open across days, and the Agenda and the section tell each other of a change
+/// (`routine_changes_provider.dart`).
+class RoutinesSection extends ConsumerStatefulWidget {
+  const RoutinesSection({super.key});
 
   @override
-  ConsumerState<RoutinesScreen> createState() => _RoutinesScreenState();
+  ConsumerState<RoutinesSection> createState() => _RoutinesSectionState();
 }
 
-class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
+class _RoutinesSectionState extends ConsumerState<RoutinesSection> {
   final Set<String> _busyIds = {};
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(routinesNotifierProvider);
     final notifier = ref.read(routinesNotifierProvider.notifier);
+    ref.listen<int>(agendaTickedProvider, (_, _) => notifier.refresh());
+    final live = switch (state) {
+      RoutinesLoaded(sections: final s) =>
+        s.recurring.length + s.tasks.length + s.someday.length + s.paused.length,
+      _ => null,
+    };
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Routines'),
-        actions: [
-          IconButton(
-            key: const Key('routines-settings-icon'),
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('routines-new-button'),
-        onPressed: _openNew,
-        icon: const Icon(Icons.add),
-        label: const Text('New'),
-      ),
-      body: _buildBody(state, notifier),
+    return ExpansionTile(
+      key: const Key('agenda-routines-section'),
+      leading: const Icon(Icons.repeat),
+      title: Text(live == null ? 'Routines' : 'Routines ($live)'),
+      initiallyExpanded: ref.read(routinesSectionOpenProvider),
+      onExpansionChanged: (open) {
+        ref.read(routinesSectionOpenProvider.notifier).state = open;
+        if (open) notifier.refresh();
+      },
+      children: [
+        ListTile(
+          key: const Key('routines-new-button'),
+          leading: const Icon(Icons.add),
+          title: const Text('New routine'),
+          onTap: _openNew,
+        ),
+        ..._buildBody(state, notifier),
+      ],
     );
   }
 
-  Widget _buildBody(RoutinesState state, RoutinesNotifier notifier) {
+  List<Widget> _buildBody(RoutinesState state, RoutinesNotifier notifier) {
     return switch (state) {
-      RoutinesInitial() => const Center(child: CircularProgressIndicator()),
-      RoutinesLoading() => const Center(child: CircularProgressIndicator()),
-      RoutinesLoaded(sections: final sections) =>
-        _buildContent(sections, notifier),
-      RoutinesError(message: final message) =>
-        _buildError(message, notifier),
+      RoutinesInitial() || RoutinesLoading() => const [
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        ],
+      RoutinesLoaded(sections: final sections) => _buildContent(sections),
+      RoutinesError(message: final message) => [
+          _buildError(message, notifier),
+        ],
     };
   }
 
-  Widget _buildContent(RoutineSections sections, RoutinesNotifier notifier) {
+  List<Widget> _buildContent(RoutineSections sections) {
     final today = formatRoutineDay(ref.read(routinesClockProvider)());
     Widget card(Routine r) => _RoutineCard(
           routine: r,
@@ -77,58 +94,41 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
             ...routines.map(card),
           ],
         ];
-    return RefreshIndicator(
-      onRefresh: notifier.refresh,
-      child: sections.isEmpty
-          ? ListView(
-              children: const [
-                SizedBox(height: 120),
-                Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.event_repeat, size: 64, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text(
-                        'No routines or tasks yet',
-                        key: Key('routines-empty-state'),
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            )
-          : ListView(
-              // Room for the New button over the last card.
-              padding: const EdgeInsets.only(bottom: 88),
-              children: [
-                ...section('recurring', 'Routines', sections.recurring),
-                ...section('tasks', 'Tasks', sections.tasks),
-                ...section('someday', 'Some day', sections.someday),
-                ...section('paused', 'Paused', sections.paused),
-                if (sections.finished.isNotEmpty)
-                  // Collapsed: it only grows.
-                  ExpansionTile(
-                    key: const Key('routines-section-finished'),
-                    title: Text(
-                        'Done and ended (${sections.finished.length})'),
-                    children: sections.finished.map(card).toList(),
-                  ),
-              ],
-            ),
-    );
+    if (sections.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'No routines or tasks yet',
+            key: Key('routines-empty-state'),
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      ];
+    }
+    return [
+      ...section('recurring', 'Routines', sections.recurring),
+      ...section('tasks', 'Tasks', sections.tasks),
+      ...section('someday', 'Some day', sections.someday),
+      ...section('paused', 'Paused', sections.paused),
+      if (sections.finished.isNotEmpty)
+        // Collapsed: it only grows.
+        ExpansionTile(
+          key: const Key('routines-section-finished'),
+          title: Text('Done and ended (${sections.finished.length})'),
+          children: sections.finished.map(card).toList(),
+        ),
+    ];
   }
 
   Widget _buildError(String message, RoutinesNotifier notifier) {
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.all(16),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
-          const SizedBox(height: 16),
           Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          ElevatedButton(
+          const SizedBox(height: 8),
+          OutlinedButton(
             key: const Key('routines-retry-button'),
             onPressed: notifier.refresh,
             child: const Text('Retry'),
@@ -139,15 +139,17 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
   }
 
   Future<void> _openNew() async {
-    final created = await context.push<Routine>('/routines/new');
+    final created = await context.push<Routine>('/agenda/routines/new');
     if (!mounted || created == null) return;
     ref.read(routinesNotifierProvider.notifier).refresh();
+    ref.read(routinesEditedProvider.notifier).state++;
   }
 
   Future<void> _navigateToDetail(String routineId) async {
-    await context.push('/routines/$routineId');
+    await context.push('/agenda/routines/$routineId');
     if (mounted) {
       ref.read(routinesNotifierProvider.notifier).refresh();
+      ref.read(routinesEditedProvider.notifier).state++;
     }
   }
 
@@ -156,6 +158,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
     final notifier = ref.read(routinesNotifierProvider.notifier);
     final success = await notifier.pauseRoutine(id);
     if (mounted) setState(() => _busyIds.remove(id));
+    if (success && mounted) ref.read(routinesEditedProvider.notifier).state++;
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -170,6 +173,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
     final notifier = ref.read(routinesNotifierProvider.notifier);
     final success = await notifier.activateRoutine(id);
     if (mounted) setState(() => _busyIds.remove(id));
+    if (success && mounted) ref.read(routinesEditedProvider.notifier).state++;
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

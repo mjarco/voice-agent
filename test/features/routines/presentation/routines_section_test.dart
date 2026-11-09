@@ -3,32 +3,40 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/providers/routine_changes_provider.dart';
 import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
-import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
+import 'package:voice_agent/features/routines/presentation/routines_section.dart';
 
 import '../fake_routines_repository.dart';
 
-Future<void> _pumpScreen(WidgetTester tester, FakeRoutinesRepository repo) async {
+/// The section as the Agenda shows it, at the end of a list, opened unless
+/// [open] is false.
+Future<void> _pumpScreen(
+  WidgetTester tester,
+  FakeRoutinesRepository repo, {
+  bool open = true,
+}) async {
   final router = GoRouter(
-    initialLocation: '/',
+    initialLocation: '/agenda',
     routes: [
       GoRoute(
-        path: '/',
-        builder: (context, state) => const RoutinesScreen(),
-      ),
-      GoRoute(
-        path: '/settings',
-        builder: (context, state) => const Scaffold(body: Text('Settings')),
-      ),
-      GoRoute(
-        path: '/routines/new',
-        builder: (context, state) => const Scaffold(body: Text('New form')),
-      ),
-      GoRoute(
-        path: '/routines/:id',
-        builder: (context, state) =>
-            Scaffold(body: Text('Detail ${state.pathParameters['id']}')),
+        path: '/agenda',
+        builder: (context, state) => Scaffold(
+          body: ListView(children: const [RoutinesSection()]),
+        ),
+        routes: [
+          GoRoute(
+            path: 'routines/new',
+            builder: (context, state) =>
+                const Scaffold(body: Text('New form')),
+          ),
+          GoRoute(
+            path: 'routines/:id',
+            builder: (context, state) =>
+                Scaffold(body: Text('Detail ${state.pathParameters['id']}')),
+          ),
+        ],
       ),
     ],
   );
@@ -43,6 +51,10 @@ Future<void> _pumpScreen(WidgetTester tester, FakeRoutinesRepository repo) async
     ),
   );
   await tester.pumpAndSettle();
+  if (open) {
+    await tester.tap(find.byKey(const Key('agenda-routines-section')));
+    await tester.pumpAndSettle();
+  }
 }
 
 void main() {
@@ -52,27 +64,82 @@ void main() {
     repo = FakeRoutinesRepository();
   });
 
-  group('RoutinesScreen', () {
-    testWidgets('has no tabs: sections instead', (tester) async {
-      await _pumpScreen(tester, repo);
+  group('RoutinesSection', () {
+    testWidgets('is folded, with the count of live routines',
+        (tester) async {
+      repo.routines = [
+        sampleRoutine(id: 'r1', name: 'Trening'),
+        sampleRoutine(
+            id: 'p1', name: 'Swim', status: RoutineStatus.paused),
+        sampleRoutine(id: 'arch', name: 'Old', status: RoutineStatus.archived),
+      ];
+      await _pumpScreen(tester, repo, open: false);
 
-      expect(find.byType(TabBar), findsNothing);
-      expect(find.text('Draft'), findsNothing);
+      expect(find.text('Routines (2)'), findsOneWidget);
+      expect(find.text('Trening'), findsNothing);
+      expect(find.byKey(const Key('routines-new-button')), findsNothing);
     });
 
-    testWidgets('the gear icon opens settings', (tester) async {
-      await _pumpScreen(tester, repo);
+    testWidgets('opening it reads the routines again', (tester) async {
+      await _pumpScreen(tester, repo, open: false);
+      final reads = repo.fetchCount;
+      repo.routines = [sampleRoutine(id: 'r1', name: 'Added elsewhere')];
 
-      await tester.tap(find.byKey(const Key('routines-settings-icon')));
+      await tester.tap(find.byKey(const Key('agenda-routines-section')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Settings'), findsOneWidget);
+      expect(repo.fetchCount, reads + 1);
+      expect(find.text('Added elsewhere'), findsOneWidget);
     });
 
     testWidgets('shows the empty state', (tester) async {
       await _pumpScreen(tester, repo);
 
       expect(find.text('No routines or tasks yet'), findsOneWidget);
+    });
+
+    testWidgets('a tick in the Agenda reads the routines again',
+        (tester) async {
+      await _pumpScreen(tester, repo);
+      final reads = repo.fetchCount;
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(RoutinesSection)));
+
+      container.read(agendaTickedProvider.notifier).state++;
+      await tester.pumpAndSettle();
+
+      expect(repo.fetchCount, reads + 1);
+    });
+
+    testWidgets('pausing tells the Agenda', (tester) async {
+      repo.routines = [sampleRoutine(id: 'r1')];
+      await _pumpScreen(tester, repo);
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(RoutinesSection)));
+
+      await tester.tap(find.byKey(const Key('routine-pause-r1')));
+      await tester.pumpAndSettle();
+
+      expect(container.read(routinesEditedProvider), 1);
+    });
+
+    testWidgets('stays open when it is built again', (tester) async {
+      repo.routines = [sampleRoutine(id: 'r1', name: 'Trening')];
+      await _pumpScreen(tester, repo);
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(RoutinesSection)));
+      expect(container.read(routinesSectionOpenProvider), isTrue);
+
+      // A new section in its place, as after a day with other rows.
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(body: Material(child: RoutinesSection(key: ValueKey('again')))),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Trening'), findsOneWidget);
     });
 
     testWidgets('a recurring card shows the schedule in words',

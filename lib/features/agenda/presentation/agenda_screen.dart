@@ -3,12 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/providers/routine_changes_provider.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_state.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_notifier.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
-  const AgendaScreen({super.key});
+  const AgendaScreen({super.key, this.footer});
+
+  /// Shown below the day, on every day: the router puts the routines' section
+  /// here (ADR-ARCH-012), so this feature does not import another.
+  final Widget? footer;
 
   @override
   ConsumerState<AgendaScreen> createState() => _AgendaScreenState();
@@ -19,6 +24,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(agendaNotifierProvider);
     final notifier = ref.read(agendaNotifierProvider.notifier);
+    ref.listen<int>(routinesEditedProvider, (_, _) => notifier.refresh());
 
     return Scaffold(
       appBar: AppBar(
@@ -27,6 +33,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           IconButton(
             key: const Key('agenda-settings-icon'),
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
           ),
         ],
@@ -46,9 +53,32 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     );
   }
 
+  /// The footer keeps its place and its state across days and reloads: a key
+  /// of its own, so a different count of rows above does not rebuild it.
+  Widget? get _footer => widget.footer == null
+      ? null
+      : KeyedSubtree(
+          key: const ValueKey('agenda-footer'),
+          child: widget.footer!,
+        );
+
+  /// A day still loading or failed with nothing cached shows its state above
+  /// the footer: the routines read their own endpoint and may still answer.
+  Widget _withFooter(Widget top) {
+    final footer = _footer;
+    if (footer == null) return top;
+    return ListView(
+      children: [
+        Padding(padding: const EdgeInsets.symmetric(vertical: 48), child: top),
+        footer,
+      ],
+    );
+  }
+
   Widget _buildBody(AgendaState state, AgendaNotifier notifier) {
     return switch (state) {
-      AgendaInitial() => const Center(child: CircularProgressIndicator()),
+      AgendaInitial() =>
+        _withFooter(const Center(child: CircularProgressIndicator())),
       AgendaLoading(cached: final cached) =>
         cached != null
             ? _buildContent(
@@ -57,7 +87,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 staleAt: cached.fetchedAt,
                 isRefreshing: true,
               )
-            : const Center(child: CircularProgressIndicator()),
+            : _withFooter(const Center(child: CircularProgressIndicator())),
       AgendaLoaded(response: final response, fetchedAt: final fetchedAt) =>
         _buildContent(response, notifier, staleAt: fetchedAt),
       AgendaError(message: final message, cached: final cached) =>
@@ -68,7 +98,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 staleAt: cached.fetchedAt,
                 errorMessage: message,
               )
-            : _buildError(message, notifier),
+            : _withFooter(_buildError(message, notifier)),
     };
   }
 
@@ -99,12 +129,15 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         if (isRefreshing) const LinearProgressIndicator(),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: notifier.refreshWithCalendars,
+            onRefresh: () async {
+              ref.read(agendaTickedProvider.notifier).state++;
+              await notifier.refreshWithCalendars();
+            },
             child: isEmpty
                 ? ListView(
-                    children: const [
-                      SizedBox(height: 120),
-                      Center(
+                    children: [
+                      const SizedBox(height: 120),
+                      const Center(
                         child: Column(
                           children: [
                             Icon(
@@ -123,6 +156,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                           ],
                         ),
                       ),
+                      ?_footer,
                     ],
                   )
                 : ListView(
@@ -171,6 +205,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                               )
                               .toList(),
                         ),
+                      ?_footer,
                     ],
                   ),
           ),
@@ -216,6 +251,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       messenger.showSnackBar(SnackBar(content: Text(refusal)));
       return;
     }
+    ref.read(agendaTickedProvider.notifier).state++;
     final verb = status == OccurrenceStatus.skipped ? 'Skipped' : 'Done';
     // The newest tick's Undo shows at once, not behind an older one.
     messenger.hideCurrentSnackBar();
@@ -223,6 +259,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       SnackBar(
         key: Key('agenda-ticked-${item.routineId}'),
         content: Text('$verb: ${item.routineName}'),
+        // A snackbar with an action stays until dismissed unless told
+        // otherwise; the Undo must run out by itself.
+        persist: false,
         action: SnackBarAction(
           key: Key('agenda-undo-${item.routineId}'),
           label: 'Undo',
@@ -235,6 +274,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Future<void> _handleUndoTicked(AgendaTickedItem item) async {
     final notifier = ref.read(agendaNotifierProvider.notifier);
     final refusal = await notifier.undoTicked(item);
+    if (refusal == null && mounted) {
+      ref.read(agendaTickedProvider.notifier).state++;
+    }
     if (refusal != null && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -245,6 +287,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   Future<void> _handleUndo(AgendaRoutineItem item) async {
     final notifier = ref.read(agendaNotifierProvider.notifier);
     final refusal = await notifier.undoOccurrence(item);
+    if (refusal == null && mounted) {
+      ref.read(agendaTickedProvider.notifier).state++;
+    }
     if (refusal != null && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -305,6 +350,7 @@ class _DateNavigationBar extends StatelessWidget {
           IconButton(
             key: const Key('agenda-prev-day'),
             icon: const Icon(Icons.chevron_left),
+            tooltip: 'Previous day',
             onPressed: onPrevious,
           ),
           Expanded(
@@ -318,6 +364,7 @@ class _DateNavigationBar extends StatelessWidget {
           IconButton(
             key: const Key('agenda-next-day'),
             icon: const Icon(Icons.chevron_right),
+            tooltip: 'Next day',
             onPressed: onNext,
           ),
           if (!isToday)

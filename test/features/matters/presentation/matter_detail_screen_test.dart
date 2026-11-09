@@ -102,6 +102,19 @@ Future<void> _scrollTo(WidgetTester tester, Finder finder) =>
 
 void main() {
   group('MatterDetailScreen', () {
+    testWidgets('a matter opened again is read again, once each time',
+        (tester) async {
+      final repo = await _pump(tester);
+      expect(repo.fetches, 1);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start'));
+      await tester.pumpAndSettle();
+
+      expect(repo.fetches, 2);
+    });
+
     testWidgets('shows the state, the timeline and the links',
         (tester) async {
       await _pump(tester);
@@ -189,6 +202,8 @@ void main() {
 
       await tester.tap(find.byKey(const Key('matter-add-entry')));
       await tester.pumpAndSettle();
+      // The empty field says what it asks for.
+      expect(find.text('Co się wydarzyło, jednym zdaniem'), findsOneWidget);
       await tester.enterText(
           find.byKey(const Key('matter-text-field')), 'kupiłem płytki');
       await tester.tap(find.byKey(const Key('matter-text-save')));

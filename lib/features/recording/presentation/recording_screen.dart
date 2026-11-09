@@ -322,12 +322,6 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
             onPressed: () => context.push('/places'),
           ),
           IconButton(
-            key: const Key('record-matters-button'),
-            icon: const Icon(Icons.topic_outlined),
-            tooltip: 'Sprawy',
-            onPressed: () => context.push('/matters'),
-          ),
-          IconButton(
             key: const Key('record-pins-button'),
             icon: const Icon(Icons.push_pin_outlined),
             tooltip: 'Pins',
@@ -335,10 +329,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.history),
+            tooltip: 'History',
             onPressed: () => context.push('/record/history'),
           ),
           IconButton(
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
           ),
         ],

@@ -498,8 +498,9 @@ void main() {
     });
   });
 
-  group('Matters button (next to Pins)', () {
-    testWidgets('tap opens Sprawy', (tester) async {
+  group('Sprawy in the bottom bar (ADR-ARCH-012)', () {
+    testWidgets('the Record app bar has no Sprawy button; the bar opens them',
+        (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -512,7 +513,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('record-matters-button')));
+      expect(find.byKey(const Key('record-matters-button')), findsNothing);
+
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Sprawy'));
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(AppBar, 'Sprawy'), findsOneWidget);
