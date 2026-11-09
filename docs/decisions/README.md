@@ -42,13 +42,14 @@ and focused on a single decision. See any existing ADR for reference.
 | ADR | Title | Status |
 | --- | ----- | ------ |
 | [ADR-ARCH-001](ADR-ARCH-001-riverpod-manual-providers.md) | Riverpod with manual providers, no codegen | Accepted |
-| [ADR-ARCH-002](ADR-ARCH-002-gorouter-stateful-shell-route.md) | GoRouter with StatefulShellRoute navigation | Accepted |
+| [ADR-ARCH-002](ADR-ARCH-002-gorouter-stateful-shell-route.md) | GoRouter with StatefulShellRoute navigation | Accepted (amended by ADR-ARCH-012) |
 | [ADR-ARCH-003](ADR-ARCH-003-layered-feature-isolation.md) | Layered architecture with strict feature isolation | Accepted |
 | [ADR-ARCH-004](ADR-ARCH-004-stub-provider-pattern.md) | Stub provider pattern for incremental delivery | Accepted |
 | [ADR-ARCH-005](ADR-ARCH-005-app-config-in-core.md) | App configuration ownership in core layer | Accepted |
 | [ADR-ARCH-006](ADR-ARCH-006-domain-port-pattern.md) | Domain port pattern for platform services | Accepted |
 | [ADR-ARCH-007](ADR-ARCH-007-async-db-init-before-runapp.md) | Async DB init before runApp | Accepted |
 | [ADR-ARCH-008](ADR-ARCH-008-ephemeral-cross-feature-state.md) | Ephemeral cross-feature state via core StateProvider | Accepted |
+| [ADR-ARCH-012](ADR-ARCH-012-matters-tab-routines-in-agenda.md) | Sprawy take the Routines tab; routines are managed inside the Agenda | Accepted |
 
 ### AUDIO — Audio, STT & Recording
 

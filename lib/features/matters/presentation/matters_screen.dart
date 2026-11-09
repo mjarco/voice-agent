@@ -8,8 +8,8 @@ import 'package:voice_agent/features/matters/presentation/matters_notifier.dart'
 import 'package:voice_agent/features/matters/presentation/matters_providers.dart';
 
 /// The owner's matters (ADR-CORE-118 of personal-agent): the proposed ones to
-/// review first, then the rest grouped by status. Reached from the Record and
-/// Chat app bars, next to Pins.
+/// review first, then the rest grouped by status. A tab of the bottom bar,
+/// in the place Routines had (ADR-ARCH-012).
 class MattersScreen extends ConsumerWidget {
   const MattersScreen({super.key});
 

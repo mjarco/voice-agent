@@ -11,6 +11,7 @@ import 'package:voice_agent/core/providers/shopping_list_changes_provider.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
+import 'package:voice_agent/features/matters/presentation/matters_providers.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 class AppShellScaffold extends ConsumerStatefulWidget {
@@ -32,6 +33,9 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
   // Matches Branch 1. A proposal made by voice reaches the app in no other way
   // than a read of this tab.
   static const _shoppingTabIndex = 1;
+  // Matches Branch 3. The list stays built in the shell, so a return to the
+  // tab reads it again, as the push of its page did before ADR-ARCH-012.
+  static const _mattersTabIndex = 3;
 
   /// P040 §Reconciler Triggers #2: kick a refresh on app resume if the last
   /// successful agenda fetch was >1h ago. Compensates for iOS BGAppRefresh
@@ -161,6 +165,9 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
           if (index == _shoppingTabIndex && index != currentIndex) {
             ref.read(shoppingListChangesProvider.notifier).state++;
           }
+          if (index == _mattersTabIndex && index != currentIndex) {
+            unawaited(ref.read(mattersNotifierProvider.notifier).refresh());
+          }
           widget.navigationShell.goBranch(
             index,
             initialLocation: index == currentIndex,
@@ -180,8 +187,8 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
             label: 'Record',
           ),
           NavigationDestination(
-            icon: Icon(Icons.repeat),
-            label: 'Routines',
+            icon: Icon(Icons.topic_outlined),
+            label: 'Sprawy',
           ),
           NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),

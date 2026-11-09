@@ -25,10 +25,10 @@ Future<void> _pumpScreen(
   Widget Function(BuildContext, GoRouterState)? editBuilder,
 }) async {
   final router = GoRouter(
-    initialLocation: '/routines/$routineId',
+    initialLocation: '/agenda/routines/$routineId',
     routes: [
       GoRoute(
-        path: '/routines/:id',
+        path: '/agenda/routines/:id',
         builder: (context, state) =>
             RoutineDetailScreen(routineId: state.pathParameters['id']!),
         routes: [

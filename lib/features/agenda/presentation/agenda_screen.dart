@@ -8,7 +8,11 @@ import 'package:voice_agent/features/agenda/presentation/agenda_notifier.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
-  const AgendaScreen({super.key});
+  const AgendaScreen({super.key, this.footer});
+
+  /// Shown below the day, on every day: the router puts the routines' section
+  /// here (ADR-ARCH-012), so this feature does not import another.
+  final Widget? footer;
 
   @override
   ConsumerState<AgendaScreen> createState() => _AgendaScreenState();
@@ -102,9 +106,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             onRefresh: notifier.refreshWithCalendars,
             child: isEmpty
                 ? ListView(
-                    children: const [
-                      SizedBox(height: 120),
-                      Center(
+                    children: [
+                      const SizedBox(height: 120),
+                      const Center(
                         child: Column(
                           children: [
                             Icon(
@@ -123,6 +127,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                           ],
                         ),
                       ),
+                      ?widget.footer,
                     ],
                   )
                 : ListView(
@@ -171,6 +176,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                               )
                               .toList(),
                         ),
+                      ?widget.footer,
                     ],
                   ),
           ),

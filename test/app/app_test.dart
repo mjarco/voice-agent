@@ -24,7 +24,11 @@ import 'package:voice_agent/features/pins/domain/pin_draft_store.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 import 'package:voice_agent/features/pins/presentation/pin_form_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
+import 'package:voice_agent/features/matters/presentation/matters_providers.dart';
+import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
 
+import '../features/matters/fake_matters_repository.dart';
+import '../features/routines/fake_routines_repository.dart';
 import '../helpers/stub_background_service.dart';
 import '../helpers/stub_notifications.dart';
 import '../helpers/stub_session_control.dart';
@@ -158,8 +162,41 @@ void main() {
     expect(find.text('Agenda'), findsWidgets);
     expect(find.text('Shopping'), findsWidgets);
     expect(find.text('Record'), findsWidgets);
-    expect(find.text('Routines'), findsWidgets);
+    expect(find.text('Sprawy'), findsWidgets);
     expect(find.text('Chat'), findsWidgets);
+    // Routines live in the Agenda since ADR-ARCH-012.
+    expect(
+      find.widgetWithText(NavigationDestination, 'Routines'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Sprawy are tab 3, and the Agenda holds the routines',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ..._testOverrides,
+          mattersRepositoryProvider.overrideWithValue(FakeMattersRepository()),
+          routinesRepositoryProvider
+              .overrideWithValue(FakeRoutinesRepository()),
+        ],
+        child: const App(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Sprawy'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      3,
+    );
+    expect(find.widgetWithText(AppBar, 'Sprawy'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.calendar_today));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('agenda-routines-section')), findsOneWidget);
   });
 
   testWidgets('Default tab is Record (index 2)', (tester) async {

@@ -13,7 +13,7 @@ import 'package:voice_agent/features/pins/presentation/pins_screen.dart';
 import 'package:voice_agent/features/places/presentation/places_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routine_form_screen.dart';
-import 'package:voice_agent/features/routines/presentation/routines_screen.dart';
+import 'package:voice_agent/features/routines/presentation/routines_section.dart';
 import 'package:voice_agent/features/history/history_screen.dart';
 import 'package:voice_agent/features/history/transcript_detail_screen.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
@@ -31,12 +31,35 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
         return AppShellScaffold(navigationShell: navigationShell);
       },
       branches: [
-        // Branch 0: Agenda
+        // Branch 0: Agenda, with every routine to manage in a folded section
+        // at its end (ADR-ARCH-012); a routine's pages stay in this branch.
         StatefulShellBranch(
           routes: [
             GoRoute(
               path: '/agenda',
-              builder: (context, state) => const AgendaScreen(),
+              builder: (context, state) =>
+                  const AgendaScreen(footer: RoutinesSection()),
+              routes: [
+                GoRoute(
+                  path: 'routines/new',
+                  builder: (context, state) => const RoutineFormScreen(),
+                ),
+                GoRoute(
+                  path: 'routines/:id',
+                  builder: (context, state) {
+                    final id = state.pathParameters['id']!;
+                    return RoutineDetailScreen(routineId: id);
+                  },
+                  routes: [
+                    GoRoute(
+                      path: 'edit',
+                      builder: (context, state) => RoutineFormScreen(
+                        editId: state.pathParameters['id']!,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ],
         ),
@@ -82,31 +105,22 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
             ),
           ],
         ),
-        // Branch 3: Routines
+        // Branch 3: Matters (ADR-CORE-118 of personal-agent), in the place
+        // Routines had until ADR-ARCH-012.
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/routines',
-              builder: (context, state) => const RoutinesScreen(),
+              path: '/matters',
+              builder: (context, state) => const MattersScreen(),
               routes: [
                 GoRoute(
                   path: 'new',
-                  builder: (context, state) => const RoutineFormScreen(),
+                  builder: (context, state) => const MatterFormScreen(),
                 ),
                 GoRoute(
                   path: ':id',
-                  builder: (context, state) {
-                    final id = state.pathParameters['id']!;
-                    return RoutineDetailScreen(routineId: id);
-                  },
-                  routes: [
-                    GoRoute(
-                      path: 'edit',
-                      builder: (context, state) => RoutineFormScreen(
-                        editId: state.pathParameters['id']!,
-                      ),
-                    ),
-                  ],
+                  builder: (context, state) =>
+                      MatterDetailScreen(matterId: state.pathParameters['id']!),
                 ),
               ],
             ),
@@ -135,20 +149,19 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
     // Places — top-level like Pins, reached from the Shopping and Record app
     // bars; a place is named standing there, so it is rare, and not a tab.
     GoRoute(path: '/places', builder: (context, state) => const PlacesScreen()),
-    // Matters (ADR-CORE-118 of personal-agent) — top-level like Pins, reached
-    // from the same Record and Chat app bars.
+    // The routines' old addresses lead to the Agenda, where they live since
+    // ADR-ARCH-012.
     GoRoute(
-      path: '/matters',
-      builder: (context, state) => const MattersScreen(),
+      path: '/routines',
+      // A parent's redirect runs for its children too; only the list itself
+      // goes to the Agenda.
+      redirect: (context, state) =>
+          state.uri.path == '/routines' ? '/agenda' : null,
       routes: [
         GoRoute(
-          path: 'new',
-          builder: (context, state) => const MatterFormScreen(),
-        ),
-        GoRoute(
           path: ':id',
-          builder: (context, state) =>
-              MatterDetailScreen(matterId: state.pathParameters['id']!),
+          redirect: (context, state) =>
+              '/agenda/routines/${state.pathParameters['id']}',
         ),
       ],
     ),
