@@ -16,13 +16,14 @@ class RoutineFormNotifier extends StateNotifier<RoutineFormState> {
   final String? _editId;
   final DateTime Function() _clock;
 
-  ({RoutineInput input, String? startsOn})? _pending;
+  RoutineInput? _pendingInput;
+  RoutinePatch? _pendingPatch;
   RoutineOverdueException? _overdue;
 
   bool get isEdit => _editId != null;
 
   /// Loads the edited routine with its steps; saving waits for them, since
-  /// an edit without the steps would replace them.
+  /// the edit sends what differs from them.
   Future<void> load() async {
     state = state.copyWith(loading: true, error: () => null);
     try {
@@ -36,10 +37,21 @@ class RoutineFormNotifier extends StateNotifier<RoutineFormState> {
     }
   }
 
-  /// Creates the routine, or edits it from [startsOn].
-  Future<void> save(RoutineInput input, {String? startsOn}) async {
-    if (state.saving || state.loading || state.stale) return;
-    _pending = (input: input, startsOn: startsOn);
+  /// Creates the routine, or edits it with what [input] changes.
+  Future<void> save(RoutineInput input) async {
+    if (state.saving || state.loading) return;
+    _pendingInput = input;
+    _pendingPatch = null;
+    final old = state.routine;
+    if (isEdit && old != null) {
+      final patch = RoutinePatch.between(old, input, today: _today());
+      if (patch.isEmpty) {
+        state = state.copyWith(
+            error: () => 'Nothing changed.', errorField: () => null);
+        return;
+      }
+      _pendingPatch = patch;
+    }
     await _submit();
   }
 
@@ -51,8 +63,8 @@ class RoutineFormNotifier extends StateNotifier<RoutineFormState> {
     if (owed == null || state.saving) return;
     state = state.copyWith(saving: true, error: () => null);
     try {
-      await _repository.resolveOccurrence(
-          owed.routineId, owed.scheduledFor, status);
+      await _repository.resolve(owed.routineId, status,
+          scheduledFor: owed.scheduledFor);
     } on RoutineAlreadyResolvedException {
       // Resolved elsewhere: saved again below.
     } on RoutinesException catch (e) {
@@ -67,7 +79,7 @@ class RoutineFormNotifier extends StateNotifier<RoutineFormState> {
 
   void dismissOverdue() {
     _overdue = null;
-    state = state.copyWith(overdueDay: () => null, overdueOpenDays: () => null);
+    state = state.copyWith(overdueDay: () => null);
   }
 
   /// The form changed the field the error is about: its mark goes.
@@ -76,95 +88,59 @@ class RoutineFormNotifier extends StateNotifier<RoutineFormState> {
     state = state.copyWith(errorField: () => null);
   }
 
+  String _today() {
+    final now = _clock();
+    return formatRoutineDay(DateTime(now.year, now.month, now.day));
+  }
+
   Future<void> _submit() async {
-    final pending = _pending;
-    if (pending == null) return;
+    final input = _pendingInput;
+    if (input == null) return;
     _overdue = null;
     state = state.copyWith(
         saving: true,
         error: () => null,
         errorField: () => null,
-        overdueDay: () => null,
-        overdueOpenDays: () => null);
+        overdueDay: () => null);
     try {
-      final saved = _editId == null
-          ? await _repository.createRoutine(pending.input)
-          : await _repository.editRoutine(_editId, pending.input,
-              startsOn: pending.startsOn!);
+      final patch = _pendingPatch;
+      final saved = patch == null
+          ? await _repository.createRoutine(input)
+          : await _repository.editRoutine(_editId!, patch);
       if (!mounted) return;
+      if (saved.existing) {
+        // A live routine of that name exists: nothing was written.
+        state = state.copyWith(
+            saving: false,
+            error: () => '“${saved.name}” is already on the list: '
+                'nothing was saved. Choose another name.',
+            errorField: () => RoutineFormField.name);
+        return;
+      }
       state = state.copyWith(saving: false, saved: saved);
     } on RoutineOverdueException catch (e) {
       if (!mounted) return;
       _overdue = e;
-      state = state.copyWith(
-          saving: false,
-          overdueDay: () => e.scheduledFor,
-          overdueOpenDays: () => e.openDays);
-    } on RoutineAlreadyEditedException {
-      if (!mounted) return;
-      await _openNewer();
-    } on RoutineFieldException catch (e) {
+      state = state.copyWith(saving: false, overdueDay: () => e.scheduledFor);
+    } on RoutineNameTakenException catch (e) {
       if (!mounted) return;
       state = state.copyWith(
           saving: false,
-          error: () => _refusal(e, pending.startsOn),
-          errorField: () => e.field);
-    } on RoutineNoChangeException {
+          error: () => e.message,
+          errorField: () => RoutineFormField.name);
+    } on RoutineInvalidRRuleException catch (e) {
       if (!mounted) return;
+      // With a last day the rule has no day left; without one, the schedule
+      // does not parse.
       state = state.copyWith(
           saving: false,
-          error: () => 'Nothing changed: the routine is already like this.');
-    } on RoutineNotActiveException {
-      if (!mounted) return;
-      state = state.copyWith(
-          saving: false,
-          error: () => 'Only an active routine is edited: resume it first.');
+          error: () => e.message,
+          errorField: () => input.lastDay != null
+              ? RoutineFormField.lastDay
+              : RoutineFormField.schedule);
     } on RoutinesException catch (e) {
       if (!mounted) return;
       state = state.copyWith(saving: false, error: () => e.message);
-    }
-  }
-
-  /// The message of a field refusal, in the web UI's words (#575).
-  String _refusal(RoutineFieldException e, String? startsOn) {
-    if (e.field != RoutineFormField.lastDay || !e.firstDayKnown) {
-      return e.message;
-    }
-    final now = _clock();
-    final from =
-        startsOn ?? formatRoutineDay(DateTime(now.year, now.month, now.day));
-    final first = e.firstDay;
-    if (first != null) {
-      return 'The first day of this schedule from $from is $first, after '
-          'the last day. Move the last day or clear it.';
-    }
-    return 'No day of this schedule falls between $from and the last day. '
-        'Move the last day or clear it.';
-  }
-
-  /// A stale edit (`routine_already_edited`): the form is not saved again,
-  /// and the newest version of the routine is the one to open.
-  Future<void> _openNewer() async {
-    const changed = 'This routine was changed meanwhile.';
-    state = state.copyWith(saving: false, stale: true, error: () => changed);
-    try {
-      var newer = await _repository.fetchRoutineDetail(_editId!);
-      // Each edit links the version it replaced; a few hops at most.
-      for (var hop = 0; newer.nextRoutineId != null && hop < 10; hop++) {
-        newer = await _repository.fetchRoutineDetail(newer.nextRoutineId!);
-      }
-      if (!mounted) return;
-      if (newer.id != _editId) {
-        state = state.copyWith(newer: newer);
-      } else {
-        state = state.copyWith(
-            error: () => '$changed Go back and edit its newer version.');
-      }
-    } on RoutinesException catch (e) {
-      if (!mounted) return;
-      state = state.copyWith(
-          error: () => '$changed Go back and edit its newer version '
-              '(it did not load: $e).');
     }
   }
 }

@@ -6,38 +6,64 @@ import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 Routine sampleRoutine({
   String id = 'rtn-1',
   String name = 'Morning routine',
+  RoutineKind? kind,
   String rrule = 'FREQ=DAILY',
+  String? dueOn,
+  TimeWindow? dueWindow,
   RoutineStatus status = RoutineStatus.active,
   RoutineMissed missed = RoutineMissed.lapses,
   String? startTime,
   String? activeSince,
   String? lastDay,
+  String? nextDue,
   bool ended = false,
-  String? previousRoutineId,
-  String? nextRoutineId,
-  List<RoutineTemplate> templates = const [],
+  RoutineOccurrence? resolved,
+  List<RoutineStep> steps = const [],
+  bool existing = false,
+  DateTime? updatedAt,
+}) {
+  final k = kind ??
+      (dueOn != null ? RoutineKind.oneOff : RoutineKind.recurring);
+  return Routine(
+    id: id,
+    name: name,
+    kind: k,
+    rrule: k == RoutineKind.recurring ? rrule : '',
+    dueOn: dueOn,
+    dueWindow: dueWindow ?? (dueOn != null ? TimeWindow.day : null),
+    status: status,
+    missed: k == RoutineKind.recurring ? missed : RoutineMissed.waits,
+    startTime: startTime,
+    activeSince: activeSince,
+    lastDay: lastDay,
+    nextDue: nextDue,
+    ended: ended,
+    resolved: resolved,
+    steps: steps,
+    existing: existing,
+    createdAt: DateTime(2026, 4, 1),
+    updatedAt: updatedAt ?? DateTime(2026, 4, 18),
+  );
+}
+
+RoutineOccurrence sampleOccurrence({
+  String id = 'occ-1',
+  String routineId = 'rtn-1',
+  String scheduledFor = '2026-04-19',
+  OccurrenceStatus status = OccurrenceStatus.done,
 }) =>
-    Routine(
+    RoutineOccurrence(
       id: id,
-      sourceRecordId: 'src-1',
-      name: name,
-      rrule: rrule,
+      routineId: routineId,
+      scheduledFor: scheduledFor,
       status: status,
-      missed: missed,
-      startTime: startTime,
-      activeSince: activeSince,
-      lastDay: lastDay,
-      ended: ended,
-      previousRoutineId: previousRoutineId,
-      nextRoutineId: nextRoutineId,
-      templates: templates,
-      createdAt: DateTime(2026, 4, 1),
-      updatedAt: DateTime(2026, 4, 18),
+      createdAt: DateTime(2026, 4, 19, 8),
+      updatedAt: DateTime(2026, 4, 19, 8),
     );
 
 /// An in-memory [RoutinesRepository] that records the calls it gets.
 class FakeRoutinesRepository implements RoutinesRepository {
-  final Map<RoutineStatus, List<Routine>> byStatus = {};
+  List<Routine> routines = [];
   Routine? detail;
 
   /// Details by id, ahead of [detail].
@@ -53,18 +79,18 @@ class FakeRoutinesRepository implements RoutinesRepository {
   /// When set, fetchRoutineDetail waits for it.
   Completer<void>? detailGate;
 
-  final List<RoutineStatus> fetchedStatuses = [];
+  int fetchCount = 0;
   final List<String> calls = [];
   RoutineInput? lastInput;
-  String? lastStartsOn;
-  String? lastEndDay;
-  ({String routineId, String day, OccurrenceStatus status})? lastResolve;
+  RoutinePatch? lastPatch;
+  ({String routineId, String? day, OccurrenceStatus status})? lastResolve;
+  ({String routineId, String? day})? lastUnresolve;
 
   @override
-  Future<List<Routine>> fetchRoutines(RoutineStatus status) async {
-    fetchedStatuses.add(status);
+  Future<List<Routine>> fetchRoutines() async {
+    fetchCount++;
     if (fetchError != null) throw fetchError!;
-    return byStatus[status] ?? const [];
+    return routines;
   }
 
   @override
@@ -82,7 +108,8 @@ class FakeRoutinesRepository implements RoutinesRepository {
   }
 
   Future<Routine> _nextSave() async {
-    final answer = saveAnswers.isEmpty ? sampleRoutine(id: 'rtn-new') : saveAnswers.removeAt(0);
+    final answer =
+        saveAnswers.isEmpty ? sampleRoutine(id: 'rtn-new') : saveAnswers.removeAt(0);
     if (answer is Exception) throw answer;
     return answer as Routine;
   }
@@ -95,26 +122,24 @@ class FakeRoutinesRepository implements RoutinesRepository {
   }
 
   @override
-  Future<Routine> editRoutine(String id, RoutineInput input,
-      {required String startsOn}) {
+  Future<Routine> editRoutine(String id, RoutinePatch patch) {
     calls.add('edit $id');
-    lastInput = input;
-    lastStartsOn = startsOn;
+    lastPatch = patch;
     return _nextSave();
   }
 
   @override
-  Future<void> endRoutine(String id, String lastDay) async {
-    calls.add('end $id');
-    lastEndDay = lastDay;
+  Future<void> resolve(String routineId, OccurrenceStatus status,
+      {String? scheduledFor}) async {
+    calls.add('resolve $routineId $scheduledFor ${status.toJson()}');
+    lastResolve = (routineId: routineId, day: scheduledFor, status: status);
     if (actionError != null) throw actionError!;
   }
 
   @override
-  Future<void> resolveOccurrence(
-      String routineId, String scheduledFor, OccurrenceStatus status) async {
-    calls.add('resolve $routineId $scheduledFor ${status.toJson()}');
-    lastResolve = (routineId: routineId, day: scheduledFor, status: status);
+  Future<void> unresolve(String routineId, {String? scheduledFor}) async {
+    calls.add('unresolve $routineId $scheduledFor');
+    lastUnresolve = (routineId: routineId, day: scheduledFor);
     if (actionError != null) throw actionError!;
   }
 
@@ -133,13 +158,6 @@ class FakeRoutinesRepository implements RoutinesRepository {
   @override
   Future<void> archiveRoutine(String id) async {
     calls.add('archive $id');
-    if (actionError != null) throw actionError!;
-  }
-
-  @override
-  Future<void> updateOccurrenceStatus(
-      String routineId, String occurrenceId, OccurrenceStatus status) async {
-    calls.add('occurrence $occurrenceId ${status.toJson()}');
     if (actionError != null) throw actionError!;
   }
 }

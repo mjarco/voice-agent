@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/models/agenda.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
@@ -79,7 +78,6 @@ void main() {
 
   AgendaResponse responseFor(
     String date, {
-    List<AgendaItem> items = const [],
     List<AgendaRoutineItem> routineItems = const [],
   }) =>
       AgendaResponse(
@@ -87,23 +85,7 @@ void main() {
         granularity: 'day',
         from: '${date}T00:00:00Z',
         to: '${date}T23:59:59Z',
-        items: items,
         routineItems: routineItems,
-      );
-
-  AgendaItem actionItem(
-    String id, {
-    required RecordStatus status,
-    String scheduledFor = '2026-05-17',
-  }) =>
-      AgendaItem(
-        recordId: id,
-        text: 'Item $id',
-        scheduledFor: scheduledFor,
-        timeWindow: TimeWindow.day,
-        originRole: OriginRole.user,
-        status: status,
-        linkedConversationCount: 0,
       );
 
   AgendaRoutineItem routine(
@@ -111,18 +93,17 @@ void main() {
     required String name,
     String scheduledFor = '2026-05-17',
     String? startTime = '14:30',
-    String? occurrenceId = 'occ-001',
-    OccurrenceStatus status = OccurrenceStatus.pending,
+    bool overdue = false,
+    RoutineKind kind = RoutineKind.recurring,
   }) =>
       AgendaRoutineItem(
         routineId: routineId,
         routineName: name,
+        kind: kind,
         scheduledFor: scheduledFor,
+        dueWindow: kind == RoutineKind.oneOff ? TimeWindow.week : null,
         startTime: startTime,
-        overdue: false,
-        status: status,
-        occurrenceId: occurrenceId,
-        templates: const [],
+        overdue: overdue,
       );
 
   group('summaries', () {
@@ -169,30 +150,26 @@ void main() {
       expect(snapshot[1000]!.body, 'Morning: nothing scheduled today');
     });
 
-    test('body: counts grouped by status with zero-elision', () async {
+    test('body: counts the routine rows, overdue among them', () async {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       await scheduler.reconcile(
-        responseFor('2026-05-17', items: [
-          actionItem('a1', status: RecordStatus.active),
-          actionItem('a2', status: RecordStatus.active),
-          actionItem('a3', status: RecordStatus.active),
-          actionItem('d1', status: RecordStatus.done),
-          actionItem('p1', status: RecordStatus.promoted), // counted as done
-          actionItem('s1', status: RecordStatus.superseded), // dismissed
+        responseFor('2026-05-17', routineItems: [
+          routine('r1', name: 'Walk'),
+          routine('r2', name: 'Call', kind: RoutineKind.oneOff),
+          routine('r3', name: 'Rent', overdue: true),
         ]),
         sessionActive: false,
       );
       final snapshot = await service.currentlyScheduled();
-      // open=3, done=2 (1 done + 1 promoted), dismissed=1
-      expect(snapshot[1000]!.body, 'Morning: 3 open, 2 done, 1 dismissed');
+      expect(snapshot[1000]!.body, 'Morning: 3 open, 1 overdue');
     });
 
-    test('body: zero terms elided', () async {
+    test('body: no overdue term without an overdue row', () async {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       await scheduler.reconcile(
-        responseFor('2026-05-17', items: [
-          actionItem('a1', status: RecordStatus.active),
-          actionItem('a2', status: RecordStatus.active),
+        responseFor('2026-05-17', routineItems: [
+          routine('r1', name: 'Walk', startTime: null),
+          routine('r2', name: 'Call', kind: RoutineKind.oneOff),
         ]),
         sessionActive: false,
       );
@@ -273,39 +250,18 @@ void main() {
       expect(routineIds, isEmpty);
     });
 
-    test('pending occurrence without occurrenceId is scheduled (#357)',
-        () async {
+    test('a one-off with an hour gets a reminder on its due day', () async {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       await scheduler.reconcile(
         responseFor('2026-05-17', routineItems: [
-          routine('r1', name: 'Not acted on yet', occurrenceId: null),
+          routine('t1', name: 'Call the plumber', kind: RoutineKind.oneOff),
         ]),
         sessionActive: false,
       );
       final snapshot = await service.currentlyScheduled();
       final routineIds = snapshot.keys.where((id) => id >= 3000000);
       expect(routineIds.length, 1);
-      expect(snapshot[routineIds.first]!.title, 'Not acted on yet');
-    });
-
-    test('reminder id does not change when occurrenceId appears', () async {
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17', routineItems: [
-          routine('r1', name: 'Same reminder', occurrenceId: null),
-        ]),
-        sessionActive: false,
-      );
-      final before = (await service.currentlyScheduled()).keys.toSet();
-      await scheduler.reconcile(
-        responseFor('2026-05-17', routineItems: [
-          routine('r1', name: 'Same reminder', occurrenceId: 'occ-001'),
-        ]),
-        sessionActive: false,
-      );
-      final after = (await service.currentlyScheduled()).keys.toSet();
-      expect(after, before);
-      expect(service.cancelCount, 0);
+      expect(snapshot[routineIds.first]!.title, 'Call the plumber');
     });
 
     test('same routine on two days gets two reminders', () async {
@@ -339,31 +295,6 @@ void main() {
       final snapshot = await service.currentlyScheduled();
       expect(snapshot.keys.where((id) => id >= 3000000), isEmpty);
     });
-
-    test('skipped occurrence is not scheduled', () async {
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17', routineItems: [
-          routine('r1',
-              name: 'Skipped', status: OccurrenceStatus.skipped),
-        ]),
-        sessionActive: false,
-      );
-      final snapshot = await service.currentlyScheduled();
-      expect(snapshot.keys.where((id) => id >= 3000000), isEmpty);
-    });
-
-    test('done occurrence is not scheduled (already complete)', () async {
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17', routineItems: [
-          routine('r1', name: 'Done', status: OccurrenceStatus.done),
-        ]),
-        sessionActive: false,
-      );
-      final snapshot = await service.currentlyScheduled();
-      expect(snapshot.keys.where((id) => id >= 3000000), isEmpty);
-    });
   });
 
   group('session gating', () {
@@ -373,8 +304,7 @@ void main() {
       await scheduler.reconcile(
         responseFor('2026-05-17', routineItems: [
           routine('r1', name: 'X', startTime: '14:30'),
-          routine('r2',
-              name: 'Y', startTime: '16:00', occurrenceId: 'occ-002'),
+          routine('r2', name: 'Y', startTime: '16:00'),
         ]),
         sessionActive: true,
       );
@@ -434,41 +364,40 @@ void main() {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       await scheduler.reconcile(
         responseFor('2026-05-17', routineItems: [
-          routine('r1',
-              name: 'Keep', startTime: '14:30', occurrenceId: 'occ-001'),
-          routine('r2',
-              name: 'Remove', startTime: '16:00', occurrenceId: 'occ-002'),
+          routine('r1', name: 'Keep', startTime: '14:30'),
+          routine('r2', name: 'Remove', startTime: '16:00'),
         ]),
         sessionActive: false,
       );
       service.calls.clear();
       await scheduler.reconcile(
         responseFor('2026-05-17', routineItems: [
-          routine('r1',
-              name: 'Keep', startTime: '14:30', occurrenceId: 'occ-001'),
+          routine('r1', name: 'Keep', startTime: '14:30'),
         ]),
         sessionActive: false,
       );
       expect(service.cancelCount, 1);
-      expect(service.scheduleCount, 0);
+      // The summaries count the rows, so their four bodies change too;
+      // the kept reminder is not rescheduled.
+      expect(service.scheduleCount, 4);
     });
 
     test('body drift (count change) triggers cancel+reschedule for summary',
         () async {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      // First call: 1 active item
+      // First call: 1 routine row, no hour (no reminder)
       await scheduler.reconcile(
-        responseFor('2026-05-17', items: [
-          actionItem('a1', status: RecordStatus.active),
+        responseFor('2026-05-17', routineItems: [
+          routine('r1', name: 'A', startTime: null),
         ]),
         sessionActive: false,
       );
       service.calls.clear();
-      // Second call: 2 active items — summary body changes from "1 open" to "2 open"
+      // Second call: 2 rows — summary body changes from "1 open" to "2 open"
       await scheduler.reconcile(
-        responseFor('2026-05-17', items: [
-          actionItem('a1', status: RecordStatus.active),
-          actionItem('a2', status: RecordStatus.active),
+        responseFor('2026-05-17', routineItems: [
+          routine('r1', name: 'A', startTime: null),
+          routine('r2', name: 'B', startTime: null),
         ]),
         sessionActive: false,
       );
@@ -514,14 +443,11 @@ void main() {
   });
 
   group('id stability', () {
-    test('same occurrenceId produces same id across runs', () async {
+    test('same routine and day produce the same id across runs', () async {
       final scheduler1 = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       await scheduler1.reconcile(
         responseFor('2026-05-17', routineItems: [
-          routine('r1',
-              name: 'X',
-              startTime: '14:30',
-              occurrenceId: 'stable-uuid-123'),
+          routine('r1', name: 'X', startTime: '14:30'),
         ]),
         sessionActive: false,
       );
@@ -537,10 +463,7 @@ void main() {
       );
       await scheduler2.reconcile(
         responseFor('2026-05-17', routineItems: [
-          routine('r1',
-              name: 'X',
-              startTime: '14:30',
-              occurrenceId: 'stable-uuid-123'),
+          routine('r1', name: 'X', startTime: '14:30'),
         ]),
         sessionActive: false,
       );
@@ -551,14 +474,12 @@ void main() {
       expect(id1, id2);
     });
 
-    test('different occurrenceIds produce different ids', () async {
+    test('different routines produce different ids', () async {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       await scheduler.reconcile(
         responseFor('2026-05-17', routineItems: [
-          routine('r1',
-              name: 'X', startTime: '14:30', occurrenceId: 'occ-aaa'),
-          routine('r2',
-              name: 'Y', startTime: '16:00', occurrenceId: 'occ-bbb'),
+          routine('r1', name: 'X', startTime: '14:30'),
+          routine('r2', name: 'Y', startTime: '16:00'),
         ]),
         sessionActive: false,
       );

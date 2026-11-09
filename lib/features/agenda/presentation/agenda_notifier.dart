@@ -134,45 +134,59 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
 
   void nextDay() => selectDate(_selectedDate.add(const Duration(days: 1)));
 
-  Future<bool> markDone(String recordId) async {
-    try {
-      await _repository.markActionItemDone(recordId);
-      await loadAgenda();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Ticks off the routine's occurrence of [scheduledFor] (done or skipped)
-  /// through resolve (#363). Returns null when it was stored, otherwise the
-  /// short reason the snackbar shows.
+  /// Ticks off the [item] (done or skipped) through resolve: a recurring
+  /// routine on its day, a one-off on its due day. Returns null when it was
+  /// stored, otherwise the short reason the snackbar shows.
   Future<String?> resolveOccurrence(
-    String routineId,
-    String scheduledFor,
+    AgendaRoutineItem item,
     OccurrenceStatus status,
   ) async {
     try {
-      await _repository.resolveOccurrence(routineId, scheduledFor, status);
+      await _repository.resolveOccurrence(item.routineId, status,
+          scheduledFor: item.isOneOff ? null : item.scheduledFor);
       await loadAgenda();
       return null;
     } catch (e) {
       return refusalMessage(e, status);
     }
   }
+
+  /// Undoes the tick of [item] just made (the snackbar's Undo). Returns null
+  /// when it was undone, otherwise the reason.
+  Future<String?> undoOccurrence(AgendaRoutineItem item) =>
+      _undo(item.routineId, item.isOneOff ? null : item.scheduledFor);
+
+  /// Undoes a tick listed under done ([AgendaResponse.tickedItems]). The day
+  /// is always sent: a recurring routine needs it, and for a one-off or
+  /// someday routine personal-agent removes its one tick whatever the day.
+  Future<String?> undoTicked(AgendaTickedItem item) =>
+      _undo(item.routineId, item.scheduledFor);
+
+  Future<String?> _undo(String routineId, String? scheduledFor) async {
+    try {
+      await _repository.unresolveOccurrence(routineId,
+          scheduledFor: scheduledFor);
+      await loadAgenda();
+      return null;
+    } catch (e) {
+      final code = e is AgendaException ? e.code : null;
+      return code == 'not_resolved' ? 'Nothing to undo' : 'Failed to undo';
+    }
+  }
 }
 
-/// Why a tick-off was not stored, said by the server's status where it has
-/// one (personal-agent: 409 already resolved, 422 no occurrence that day,
-/// 404 no such routine).
+/// Why a tick-off was not stored, said by the server's refusal where it has
+/// one (personal-agent: 409 already resolved or not active, 422 no
+/// occurrence that day, 404 no such routine).
 String refusalMessage(Object error, OccurrenceStatus status) {
-  final code = error is AgendaException ? error.statusCode : null;
-  return switch (code) {
-    409 => 'Already done',
+  final e = error is AgendaException ? error : null;
+  if (e?.code == 'routine_not_active') return 'The routine is paused';
+  return switch (e?.statusCode) {
+    409 => 'Already ticked off',
     422 => 'Nothing due that day',
     404 => 'Routine not found',
     _ => status == OccurrenceStatus.skipped
-        ? 'Failed to skip occurrence'
-        : 'Failed to complete occurrence',
+        ? 'Failed to skip'
+        : 'Failed to tick off',
   };
 }

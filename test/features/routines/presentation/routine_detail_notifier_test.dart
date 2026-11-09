@@ -4,282 +4,107 @@ import 'package:voice_agent/features/routines/domain/routine_detail_state.dart';
 import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_notifier.dart';
 
-class _MockRepository implements RoutinesRepository {
-  Routine? nextRoutine;
-  List<RoutineOccurrence> nextOccurrences = [];
-  Exception? fetchError;
-  Exception? actionError;
-
-  int fetchDetailCount = 0;
-  int fetchOccurrencesCount = 0;
-  String? lastActivateId;
-  String? lastPauseId;
-  String? lastArchiveId;
-  String? lastUpdateRoutineId;
-  String? lastUpdateOccurrenceId;
-  OccurrenceStatus? lastUpdateStatus;
-
-  @override
-  Future<Routine> fetchRoutineDetail(String id) async {
-    fetchDetailCount++;
-    if (fetchError != null) throw fetchError!;
-    return nextRoutine ?? _defaultRoutine(id);
-  }
-
-  @override
-  Future<List<RoutineOccurrence>> fetchOccurrences(String id) async {
-    fetchOccurrencesCount++;
-    if (fetchError != null) throw fetchError!;
-    return nextOccurrences;
-  }
-
-  @override
-  Future<void> activateRoutine(String id) async {
-    lastActivateId = id;
-    if (actionError != null) throw actionError!;
-  }
-
-  @override
-  Future<void> pauseRoutine(String id) async {
-    lastPauseId = id;
-    if (actionError != null) throw actionError!;
-  }
-
-  @override
-  Future<void> archiveRoutine(String id) async {
-    lastArchiveId = id;
-    if (actionError != null) throw actionError!;
-  }
-
-  @override
-  Future<void> updateOccurrenceStatus(
-    String routineId,
-    String occurrenceId,
-    OccurrenceStatus status,
-  ) async {
-    lastUpdateRoutineId = routineId;
-    lastUpdateOccurrenceId = occurrenceId;
-    lastUpdateStatus = status;
-    if (actionError != null) throw actionError!;
-  }
-
-  @override
-  Future<List<Routine>> fetchRoutines(RoutineStatus status) async => [];
-
-
-  String? lastEndDay;
-
-  @override
-  Future<void> endRoutine(String id, String lastDay) async {
-    lastEndDay = lastDay;
-  }
-
-  @override
-  Future<Routine> createRoutine(RoutineInput input) =>
-      throw UnimplementedError();
-
-  @override
-  Future<Routine> editRoutine(String id, RoutineInput input,
-          {required String startsOn}) =>
-      throw UnimplementedError();
-
-  @override
-  Future<void> resolveOccurrence(String routineId, String scheduledFor,
-          OccurrenceStatus status) =>
-      throw UnimplementedError();
-
-  Routine _defaultRoutine(String id) => Routine(
-        id: id,
-        sourceRecordId: 'src-1',
-        name: 'Test routine',
-        rrule: 'FREQ=DAILY',
-        cadence: 'daily',
-        status: RoutineStatus.active,
-        templates: const [RoutineTemplate(text: 'Item 1', sortOrder: 1)],
-        createdAt: DateTime(2026, 4, 1),
-        updatedAt: DateTime(2026, 4, 18),
-      );
-}
-
-RoutineOccurrence _sampleOccurrence({
-  String id = 'occ-1',
-  OccurrenceStatus status = OccurrenceStatus.pending,
-}) =>
-    RoutineOccurrence(
-      id: id,
-      routineId: 'rtn-1',
-      scheduledFor: '2026-04-19',
-      timeWindow: TimeWindow.day,
-      status: status,
-      createdAt: DateTime(2026, 4, 19),
-      updatedAt: DateTime(2026, 4, 19),
-    );
+import '../fake_routines_repository.dart';
 
 void main() {
-  late _MockRepository repo;
+  late FakeRoutinesRepository repo;
 
   setUp(() {
-    repo = _MockRepository();
+    repo = FakeRoutinesRepository();
   });
 
+  Future<RoutineDetailNotifier> loaded([String id = 'rtn-1']) async {
+    final notifier = RoutineDetailNotifier(repo, id);
+    await Future<void>.delayed(Duration.zero);
+    return notifier;
+  }
+
   group('RoutineDetailNotifier', () {
-    test('constructor triggers loadDetail and transitions to loaded', () async {
-      repo.nextOccurrences = [_sampleOccurrence()];
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
+    test('loads the routine and its ticks', () async {
+      repo.occurrences = [sampleOccurrence()];
 
-      await Future<void>.delayed(Duration.zero);
+      final notifier = await loaded();
 
-      expect(notifier.state, isA<RoutineDetailLoaded>());
-      final loaded = notifier.state as RoutineDetailLoaded;
-      expect(loaded.routine.id, 'rtn-1');
-      expect(loaded.occurrences, hasLength(1));
+      final state = notifier.state as RoutineDetailLoaded;
+      expect(state.routine.id, 'rtn-1');
+      expect(state.occurrences.single.id, 'occ-1');
     });
 
     test('transitions to error on fetch failure', () async {
-      repo.fetchError = Exception('Network error');
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
+      repo.fetchError = RoutinesGeneralException('Network error');
 
-      await Future<void>.delayed(Duration.zero);
+      final notifier = await loaded();
 
       expect(notifier.state, isA<RoutineDetailError>());
-      expect(
-        (notifier.state as RoutineDetailError).message,
-        contains('Network error'),
-      );
+      expect((notifier.state as RoutineDetailError).message, 'Network error');
     });
 
-    test('fetches both detail and occurrences', () async {
-      RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
+    test('endRoutine is a PATCH of the last day, then a reload', () async {
+      final notifier = await loaded();
+      repo.calls.clear();
 
-      expect(repo.fetchDetailCount, 1);
-      expect(repo.fetchOccurrencesCount, 1);
+      expect(await notifier.endRoutine('2026-05-01'), isTrue);
+
+      expect(repo.lastPatch!.toMap(), {'last_day': '2026-05-01'});
+      expect(repo.calls, ['edit rtn-1', 'detail rtn-1']);
     });
 
-    test('refresh reloads data', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
+    test('status changes reload on success and keep the error otherwise',
+        () async {
+      final notifier = await loaded();
 
-      repo.fetchDetailCount = 0;
-      repo.fetchOccurrencesCount = 0;
-      await notifier.refresh();
+      expect(await notifier.activateRoutine(), isTrue);
+      expect(await notifier.pauseRoutine(), isTrue);
+      expect(await notifier.archiveRoutine(), isTrue);
+      expect(repo.calls,
+          containsAllInOrder(['activate rtn-1', 'pause rtn-1', 'archive rtn-1']));
 
-      expect(repo.fetchDetailCount, 1);
-      expect(repo.fetchOccurrencesCount, 1);
-    });
-
-    test('endRoutine sends the last day and reloads', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      repo.fetchDetailCount = 0;
-      expect(await notifier.endRoutine('2026-10-26'), isTrue);
-
-      expect(repo.lastEndDay, '2026-10-26');
-      expect(repo.fetchDetailCount, 1);
-    });
-
-    test('activateRoutine returns true and reloads on success', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      repo.fetchDetailCount = 0;
-      final result = await notifier.activateRoutine();
-
-      expect(result, isTrue);
-      expect(repo.lastActivateId, 'rtn-1');
-      expect(repo.fetchDetailCount, 1);
-    });
-
-    test('activateRoutine returns false on conflict', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      repo.actionError = RoutineConflictException('Already active');
-      final result = await notifier.activateRoutine();
-
-      expect(result, isFalse);
-      expect(notifier.lastActionError, 'Already active');
-    });
-
-    test('pauseRoutine returns true on success', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      final result = await notifier.pauseRoutine();
-
-      expect(result, isTrue);
-      expect(repo.lastPauseId, 'rtn-1');
-    });
-
-    test('pauseRoutine returns false on failure', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      repo.actionError = RoutinesGeneralException('Cannot pause');
-      final result = await notifier.pauseRoutine();
-
-      expect(result, isFalse);
-      expect(notifier.lastActionError, 'Cannot pause');
-    });
-
-    test('archiveRoutine returns true on success', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      final result = await notifier.archiveRoutine();
-
-      expect(result, isTrue);
-      expect(repo.lastArchiveId, 'rtn-1');
-    });
-
-    test('archiveRoutine returns false on conflict', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      repo.actionError = RoutineConflictException('Already archived');
-      final result = await notifier.archiveRoutine();
-
-      expect(result, isFalse);
-      expect(notifier.lastActionError, 'Already archived');
-    });
-
-    test('updateOccurrenceStatus returns true on success', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      final result = await notifier.updateOccurrenceStatus(
-          'occ-1', OccurrenceStatus.done);
-
-      expect(result, isTrue);
-      expect(repo.lastUpdateRoutineId, 'rtn-1');
-      expect(repo.lastUpdateOccurrenceId, 'occ-1');
-      expect(repo.lastUpdateStatus, OccurrenceStatus.done);
-    });
-
-    test('updateOccurrenceStatus returns false on failure', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      repo.actionError = RoutinesGeneralException('Failed');
-      final result = await notifier.updateOccurrenceStatus(
-          'occ-1', OccurrenceStatus.skipped);
-
-      expect(result, isFalse);
-      expect(notifier.lastActionError, 'Failed');
-    });
-
-    test('lastActionError clears on new action', () async {
-      final notifier = RoutineDetailNotifier(repo, 'rtn-1');
-      await Future<void>.delayed(Duration.zero);
-
-      repo.actionError = RoutinesGeneralException('Error');
-      await notifier.pauseRoutine();
-      expect(notifier.lastActionError, 'Error');
+      repo.actionError = RoutineConflictException('archived is final');
+      expect(await notifier.activateRoutine(), isFalse);
+      expect(notifier.lastActionError, 'archived is final');
 
       repo.actionError = null;
-      await notifier.activateRoutine();
+      expect(await notifier.pauseRoutine(), isTrue);
       expect(notifier.lastActionError, isNull);
+    });
+
+    test('resolve ticks a one-off off without a day', () async {
+      repo.detail = sampleRoutine(dueOn: '2026-11-10');
+      final notifier = await loaded();
+
+      expect(await notifier.resolve(OccurrenceStatus.done), isTrue);
+
+      expect(repo.lastResolve,
+          (routineId: 'rtn-1', day: null, status: OccurrenceStatus.done));
+    });
+
+    test('resolve gives the refusal of a paused routine', () async {
+      repo.detail = sampleRoutine(kind: RoutineKind.someday);
+      final notifier = await loaded();
+      repo.actionError = RoutineNotActiveException('routine is paused');
+
+      expect(await notifier.resolve(OccurrenceStatus.skipped), isFalse);
+      expect(notifier.lastActionError, 'routine is paused');
+    });
+
+    test('undo of a recurring tick names its day', () async {
+      final notifier = await loaded();
+
+      expect(
+          await notifier
+              .undo(sampleOccurrence(scheduledFor: '2026-04-19')),
+          isTrue);
+
+      expect(repo.lastUnresolve, (routineId: 'rtn-1', day: '2026-04-19'));
+    });
+
+    test('undo of a one-off tick names no day', () async {
+      repo.detail = sampleRoutine(dueOn: '2026-11-10');
+      final notifier = await loaded();
+
+      expect(await notifier.undo(sampleOccurrence()), isTrue);
+
+      expect(repo.lastUnresolve, (routineId: 'rtn-1', day: null));
     });
   });
 }

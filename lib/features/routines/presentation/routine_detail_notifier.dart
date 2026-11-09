@@ -33,69 +33,38 @@ class RoutineDetailNotifier extends StateNotifier<RoutineDetailState> {
 
   Future<void> refresh() => loadDetail();
 
-  Future<bool> activateRoutine() async {
-    lastActionError = null;
-    try {
-      await _repository.activateRoutine(_routineId);
-      await loadDetail();
-      return true;
-    } on RoutineConflictException catch (e) {
-      lastActionError = e.message;
-      return false;
-    } on RoutinesException catch (e) {
-      lastActionError = e.message;
-      return false;
-    }
+  Future<bool> activateRoutine() =>
+      _act(() => _repository.activateRoutine(_routineId));
+
+  Future<bool> pauseRoutine() =>
+      _act(() => _repository.pauseRoutine(_routineId));
+
+  Future<bool> archiveRoutine() =>
+      _act(() => _repository.archiveRoutine(_routineId));
+
+  /// Ends a recurring routine after [lastDay], the last day it still occurs:
+  /// a PATCH of `last_day`.
+  Future<bool> endRoutine(String lastDay) => _act(() =>
+      _repository.editRoutine(_routineId, RoutinePatch.endAfter(lastDay)));
+
+  /// Ticks off a one-off or someday routine (its due day or today).
+  Future<bool> resolve(OccurrenceStatus status) =>
+      _act(() => _repository.resolve(_routineId, status));
+
+  /// Undoes [occurrence]: a recurring routine's tick of its day, any other's
+  /// only tick.
+  Future<bool> undo(RoutineOccurrence occurrence) {
+    final loaded = state;
+    final recurring =
+        loaded is RoutineDetailLoaded && loaded.routine.isRecurring;
+    return _act(() => _repository.unresolve(_routineId,
+        scheduledFor: recurring ? occurrence.scheduledFor : null));
   }
 
-  Future<bool> pauseRoutine() async {
+  Future<bool> _act(Future<void> Function() action) async {
     lastActionError = null;
     try {
-      await _repository.pauseRoutine(_routineId);
-      await loadDetail();
-      return true;
-    } on RoutinesException catch (e) {
-      lastActionError = e.message;
-      return false;
-    }
-  }
-
-  Future<bool> archiveRoutine() async {
-    lastActionError = null;
-    try {
-      await _repository.archiveRoutine(_routineId);
-      await loadDetail();
-      return true;
-    } on RoutineConflictException catch (e) {
-      lastActionError = e.message;
-      return false;
-    } on RoutinesException catch (e) {
-      lastActionError = e.message;
-      return false;
-    }
-  }
-
-  /// Ends the routine after [lastDay], the last day it still occurs.
-  Future<bool> endRoutine(String lastDay) async {
-    lastActionError = null;
-    try {
-      await _repository.endRoutine(_routineId, lastDay);
-      await loadDetail();
-      return true;
-    } on RoutinesException catch (e) {
-      lastActionError = e.message;
-      return false;
-    }
-  }
-
-  Future<bool> updateOccurrenceStatus(
-    String occurrenceId,
-    OccurrenceStatus status,
-  ) async {
-    lastActionError = null;
-    try {
-      await _repository.updateOccurrenceStatus(
-          _routineId, occurrenceId, status);
+      await action();
       await loadDetail();
       return true;
     } on RoutinesException catch (e) {

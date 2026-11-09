@@ -80,21 +80,26 @@ class ApiAgendaRepository implements AgendaRepository {
   }
 
   @override
-  Future<void> markActionItemDone(String recordId) async {
-    final result = await _apiClient.postJson('/records/$recordId/done');
+  Future<void> resolveOccurrence(
+    String routineId,
+    OccurrenceStatus status, {
+    String? scheduledFor,
+  }) async {
+    final result = await _apiClient.postJson(
+      '/routines/$routineId/resolve',
+      data: {'scheduled_for': ?scheduledFor, 'status': status.toJson()},
+    );
     _throwOnFailure(result);
   }
 
   @override
-  Future<void> resolveOccurrence(
-    String routineId,
-    String scheduledFor,
-    OccurrenceStatus status,
-  ) async {
-    final result = await _apiClient.postJson(
-      '/routines/$routineId/resolve',
-      data: {'scheduled_for': scheduledFor, 'status': status.toJson()},
-    );
+  Future<void> unresolveOccurrence(
+    String routineId, {
+    String? scheduledFor,
+  }) async {
+    final query = scheduledFor == null ? '' : '?scheduled_for=$scheduledFor';
+    final result =
+        await _apiClient.delete('/routines/$routineId/resolve$query');
     _throwOnFailure(result);
   }
 
@@ -108,12 +113,30 @@ class ApiAgendaRepository implements AgendaRepository {
     switch (result) {
       case ApiSuccess():
         return;
-      case ApiPermanentFailure(message: final msg, statusCode: final code):
-        throw AgendaException('Server error $code: $msg', statusCode: code);
+      case ApiPermanentFailure(
+          message: final msg,
+          statusCode: final code,
+          body: final body,
+        ):
+        throw AgendaException('Server error $code: $msg',
+            statusCode: code, code: _errorCode(body));
       case ApiTransientFailure(reason: final reason):
         throw AgendaException(reason);
       case ApiNotConfigured():
         throw AgendaException('API not configured');
+    }
+  }
+
+  /// The `error.code` of a refusal's body, or null.
+  static String? _errorCode(String? body) {
+    if (body == null || body.isEmpty) return null;
+    try {
+      final json = jsonDecode(body);
+      final error = json is Map ? json['error'] : null;
+      final code = error is Map ? error['code'] : null;
+      return code is String ? code : null;
+    } on FormatException {
+      return null;
     }
   }
 

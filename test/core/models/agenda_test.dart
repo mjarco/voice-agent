@@ -2,165 +2,235 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/models/agenda.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/routine.dart';
 
 void main() {
   group('AgendaResponse', () {
+    // The shape of personal-agent's GET /agenda since ADR-CORE-116: no
+    // `items`, routine rows with kind and due_window.
     final sampleMap = {
-      'date': '2026-04-18',
+      'date': '2026-11-10',
       'granularity': 'day',
-      'from': '2026-04-18',
-      'to': '2026-04-18',
-      'items': [
-        {
-          'record_id': 'rec-1',
-          'text': 'Buy groceries',
-          'topic_ref': 'topic:health',
-          'scheduled_for': '2026-04-18',
-          'time_window': 'day',
-          'origin_role': 'agent',
-          'status': 'active',
-          'linked_conversation_count': 2,
-        },
-      ],
+      'from': '2026-11-10',
+      'to': '2026-11-10',
       'routine_items': [
         {
           'routine_id': 'rt-1',
           'routine_name': 'Morning exercise',
-          'scheduled_for': '2026-04-18',
+          'kind': 'recurring',
+          'scheduled_for': '2026-11-10',
           'start_time': '07:00',
           'overdue': false,
           'status': 'pending',
-          'occurrence_id': 'occ-1',
+          'occurrence_id': null,
           'templates': [
             {'text': 'Stretch', 'sort_order': 0},
           ],
         },
+        {
+          'routine_id': 'rt-2',
+          'routine_name': 'Call the plumber',
+          'kind': 'one_off',
+          'scheduled_for': '2026-11-08',
+          'due_window': 'week',
+          'start_time': null,
+          'overdue': false,
+          'status': 'pending',
+          'occurrence_id': null,
+          'templates': [],
+        },
       ],
+      'calendar_items': [],
+      'calendar_sources': [],
     };
 
-    test('fromMap creates correct instance', () {
+    test('reads an agenda without items', () {
       final agenda = AgendaResponse.fromMap(sampleMap);
 
-      expect(agenda.date, '2026-04-18');
+      expect(agenda.date, '2026-11-10');
       expect(agenda.granularity, 'day');
-      expect(agenda.from, '2026-04-18');
-      expect(agenda.to, '2026-04-18');
-      expect(agenda.items, hasLength(1));
-      expect(agenda.routineItems, hasLength(1));
+      expect(agenda.routineItems, hasLength(2));
+      expect(agenda.calendarItems, isEmpty);
     });
 
-    test('round-trip preserves all fields', () {
-      final agenda = AgendaResponse.fromMap(sampleMap);
-      final roundTripped = AgendaResponse.fromMap(agenda.toMap());
-
-      expect(roundTripped.date, agenda.date);
-      expect(roundTripped.items.length, agenda.items.length);
-      expect(roundTripped.routineItems.length, agenda.routineItems.length);
-    });
-
-    test('toMap produces valid JSON', () {
-      final agenda = AgendaResponse.fromMap(sampleMap);
-      final json = jsonEncode(agenda.toMap());
-      final decoded = jsonDecode(json) as Map<String, dynamic>;
-
-      expect(decoded['date'], '2026-04-18');
-      expect(decoded['items'], hasLength(1));
-    });
-  });
-
-  group('AgendaItem', () {
-    test('fromMap parses all fields', () {
-      final item = AgendaItem.fromMap({
-        'record_id': 'rec-1',
-        'text': 'Task text',
-        'topic_ref': 'topic:work',
-        'scheduled_for': '2026-04-18',
-        'time_window': 'day',
-        'origin_role': 'user',
-        'status': 'active',
-        'linked_conversation_count': 3,
+    test('an old agenda with items still reads; the items are ignored', () {
+      final agenda = AgendaResponse.fromMap({
+        ...sampleMap,
+        'items': [
+          {'record_id': 'rec-1', 'text': 'Buy groceries'},
+        ],
       });
-
-      expect(item.recordId, 'rec-1');
-      expect(item.text, 'Task text');
-      expect(item.topicRef, 'topic:work');
-      expect(item.timeWindow, TimeWindow.day);
-      expect(item.originRole, OriginRole.user);
-      expect(item.status, RecordStatus.active);
-      expect(item.linkedConversationCount, 3);
+      expect(agenda.routineItems, hasLength(2));
+      expect(agenda.toMap().containsKey('items'), isFalse);
     });
 
-    test('topicRef is nullable', () {
-      final item = AgendaItem.fromMap({
-        'record_id': 'rec-1',
-        'text': 'Task',
-        'scheduled_for': '2026-04-18',
-        'time_window': 'day',
-        'origin_role': 'agent',
-        'status': 'done',
-        'linked_conversation_count': 0,
-      });
+    test('round-trip preserves the rows', () {
+      final agenda = AgendaResponse.fromMap(sampleMap);
+      final json = jsonDecode(jsonEncode(agenda.toMap()));
+      final back = AgendaResponse.fromMap(json as Map<String, dynamic>);
 
-      expect(item.topicRef, isNull);
+      expect(back.date, agenda.date);
+      expect(back.routineItems.map((i) => i.routineId), ['rt-1', 'rt-2']);
+      expect(back.routineItems[1].kind, RoutineKind.oneOff);
+      expect(back.routineItems[1].dueWindow, TimeWindow.week);
+      expect(back.routineItems[0].steps.single.text, 'Stretch');
+    });
+
+    test('drops a malformed routine row and keeps the rest', () {
+      final agenda = AgendaResponse.fromMap({
+        ...sampleMap,
+        'routine_items': [
+          null,
+          {'routine_id': 'x'},
+          (sampleMap['routine_items'] as List).first,
+        ],
+      });
+      expect(agenda.routineItems.single.routineId, 'rt-1');
     });
   });
 
   group('AgendaRoutineItem', () {
-    test('fromMap parses all fields', () {
-      final item = AgendaRoutineItem.fromMap({
-        'routine_id': 'rt-1',
-        'routine_name': 'Exercise',
-        'scheduled_for': '2026-04-18',
-        'start_time': '07:00',
-        'overdue': true,
-        'status': 'pending',
-        'occurrence_id': 'occ-1',
-        'templates': [
-          {'text': 'Step 1', 'sort_order': 0},
-        ],
-      });
-
-      expect(item.routineId, 'rt-1');
-      expect(item.routineName, 'Exercise');
-      expect(item.startTime, '07:00');
-      expect(item.overdue, true);
-      expect(item.status, OccurrenceStatus.pending);
-      expect(item.occurrenceId, 'occ-1');
-      expect(item.templates, hasLength(1));
-    });
-
-    test('nullable fields handle absence', () {
+    test('a recurring row has no window', () {
       final item = AgendaRoutineItem.fromMap({
         'routine_id': 'rt-1',
         'routine_name': 'Walk',
-        'scheduled_for': '2026-04-18',
-        'overdue': false,
-        'status': 'done',
-        'templates': <dynamic>[],
+        'kind': 'recurring',
+        'scheduled_for': '2026-11-09',
+        'due_window': '',
+        'start_time': '07:00',
+        'overdue': true,
+        'templates': [
+          {'text': 'Second', 'sort_order': 1},
+          {'text': 'First', 'sort_order': 0},
+        ],
       });
 
-      expect(item.startTime, isNull);
-      expect(item.occurrenceId, isNull);
-      expect(item.templates, isEmpty);
-      expect(item.peerId, isNull);
-      expect(item.toMap().containsKey('peer_id'), isFalse);
+      expect(item.kind, RoutineKind.recurring);
+      expect(item.isOneOff, isFalse);
+      expect(item.dueWindow, isNull);
+      expect(item.startTime, '07:00');
+      expect(item.overdue, isTrue);
+      expect(item.steps.map((s) => s.text), ['First', 'Second']);
     });
 
-    test('peer_id survives a round trip (#363)', () {
+    test('a one-off row carries its window', () {
       final item = AgendaRoutineItem.fromMap({
-        'routine_id': 'rt-1',
-        'routine_name': 'Upstream walk',
-        'scheduled_for': '2026-10-26',
+        'routine_id': 'rt-2',
+        'routine_name': 'Call the plumber',
+        'kind': 'one_off',
+        'scheduled_for': '2026-11-08',
+        'due_window': 'month',
         'overdue': false,
-        'status': 'pending',
-        'templates': <dynamic>[],
-        'peer_id': 'upstream',
+        'templates': [],
       });
 
-      expect(item.peerId, 'upstream');
-      expect(AgendaRoutineItem.fromMap(item.toMap()).peerId, 'upstream');
+      expect(item.isOneOff, isTrue);
+      expect(item.dueWindow, TimeWindow.month);
+      expect(item.dueWindow!.describeFrom(item.scheduledFor),
+          'within a month from 2026-11-08');
+    });
+
+    test('unknown kind and window, missing fields: safe defaults', () {
+      final unknown = AgendaRoutineItem.fromMap({
+        'routine_id': 'rt-3',
+        'routine_name': 'X',
+        'kind': 'quarterly',
+        'scheduled_for': '2026-11-08',
+        'due_window': 'fortnight',
+      });
+      expect(unknown.kind, RoutineKind.recurring);
+      expect(unknown.dueWindow, isNull);
+      expect(unknown.overdue, isFalse);
+      expect(unknown.steps, isEmpty);
+
+      // A row with a known window but no kind reads as a one-off.
+      final windowed = AgendaRoutineItem.fromMap({
+        'routine_id': 'rt-4',
+        'routine_name': 'Y',
+        'scheduled_for': '2026-11-08',
+        'due_window': 'week',
+      });
+      expect(windowed.kind, RoutineKind.oneOff);
+    });
+
+    test('a one-off without a window is due on its day', () {
+      final item = AgendaRoutineItem.fromMap({
+        'routine_id': 'rt-5',
+        'routine_name': 'Z',
+        'kind': 'one_off',
+        'scheduled_for': '2026-11-08',
+      });
+      expect(item.dueWindow, TimeWindow.day);
+      expect(item.dueWindow!.describeFrom('2026-11-08'), 'on 2026-11-08');
+    });
+  });
+
+  group('AgendaTickedItem', () {
+    test('reads ticked_items, newest first as sent, and round-trips them', () {
+      final r = AgendaResponse.fromMap({
+        'date': '2026-11-09',
+        'granularity': 'day',
+        'from': '2026-11-09',
+        'to': '2026-11-09',
+        'routine_items': [],
+        'ticked_items': [
+          {
+            'routine_id': 'r1',
+            'routine_name': 'Leki',
+            'kind': 'recurring',
+            'scheduled_for': '2026-11-07',
+            'status': 'skipped',
+            'ticked_at': '2026-11-09T12:01:00+01:00',
+          },
+          {
+            'routine_id': 'r2',
+            'routine_name': 'Faktura',
+            'kind': 'one_off',
+            'scheduled_for': '2026-11-05',
+            'status': 'done',
+            'ticked_at': '2026-11-09T00:30:00+01:00',
+          },
+        ],
+      });
+      expect(r.tickedItems.map((t) => t.routineName), ['Leki', 'Faktura']);
+      final first = r.tickedItems.first;
+      expect(first.status, OccurrenceStatus.skipped);
+      expect(first.kind, RoutineKind.recurring);
+      expect(first.time, '12:01');
+      final again = AgendaResponse.fromMap(
+          jsonDecode(jsonEncode(r.toMap())) as Map<String, dynamic>);
+      expect(again.tickedItems.map((t) => t.toMap()).toList(),
+          r.tickedItems.map((t) => t.toMap()).toList());
+    });
+
+    test('an agenda without ticked_items has none', () {
+      final r = AgendaResponse.fromMap({
+        'date': '2026-11-09',
+        'granularity': 'day',
+        'from': '2026-11-09',
+        'to': '2026-11-09',
+        'routine_items': [],
+      });
+      expect(r.tickedItems, isEmpty);
+    });
+
+    test('drops a row it cannot show or undo, keeps the rest', () {
+      final r = AgendaResponse.fromMap({
+        'date': '2026-11-09',
+        'granularity': 'day',
+        'from': '2026-11-09',
+        'to': '2026-11-09',
+        'routine_items': [],
+        'ticked_items': [
+          {'routine_name': 'no id', 'scheduled_for': '2026-11-09', 'status': 'done'},
+          {'routine_id': 'r3', 'routine_name': 'Unknown', 'scheduled_for': '2026-11-09', 'status': 'later'},
+          'not a map',
+          {'routine_id': 'r4', 'routine_name': 'Kept', 'kind': 'new_kind', 'scheduled_for': '2026-11-09', 'status': 'done'},
+        ],
+      });
+      expect(r.tickedItems.map((t) => t.routineId), ['r4']);
+      expect(r.tickedItems.single.kind, isNull);
+      expect(r.tickedItems.single.time, isNull);
     });
   });
 
@@ -171,7 +241,6 @@ void main() {
         'granularity': 'day',
         'from': '2026-04-18',
         'to': '2026-04-18',
-        'items': [],
         'routine_items': [],
         'calendar_items': [
           {
@@ -250,7 +319,6 @@ void main() {
         'granularity': 'day',
         'from': '2026-04-18',
         'to': '2026-04-18',
-        'items': <dynamic>[],
         'routine_items': <dynamic>[],
         'calendar_items': [
           null,

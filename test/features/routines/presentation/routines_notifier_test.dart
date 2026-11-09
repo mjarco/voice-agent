@@ -19,68 +19,47 @@ void main() {
     return notifier;
   }
 
-  List<String> ids(RoutinesNotifier n) =>
-      (n.state as RoutinesLoaded).routines.map((r) => r.id).toList();
+  List<String> ids(List<Routine> routines) =>
+      routines.map((r) => r.id).toList();
 
   group('RoutinesNotifier', () {
-    test('Active lists active and draft routines that have not ended',
-        () async {
-      repo.byStatus[RoutineStatus.active] = [
-        sampleRoutine(id: 'a1'),
-        sampleRoutine(id: 'a-ended', ended: true),
-      ];
-      repo.byStatus[RoutineStatus.draft] = [
-        sampleRoutine(id: 'd1', status: RoutineStatus.draft),
-      ];
-
-      final notifier = await loaded();
-
-      expect(notifier.selectedTab, RoutinesTab.active);
-      expect(ids(notifier), ['a1', 'd1']);
-    });
-
-    test('Active keeps a version an edit replaces until it ends', () async {
-      repo.byStatus[RoutineStatus.active] = [
-        sampleRoutine(id: 'old', nextRoutineId: 'new'),
-        sampleRoutine(id: 'new', previousRoutineId: 'old'),
-      ];
-
-      final notifier = await loaded();
-
-      expect(ids(notifier), ['old', 'new']);
-    });
-
-    test('Paused lists paused routines that have not ended', () async {
-      repo.byStatus[RoutineStatus.paused] = [
-        sampleRoutine(id: 'p1', status: RoutineStatus.paused),
-        sampleRoutine(id: 'p-ended', status: RoutineStatus.paused, ended: true),
-      ];
-      final notifier = await loaded();
-
-      await notifier.selectTab(RoutinesTab.paused);
-
-      expect(ids(notifier), ['p1']);
-    });
-
-    test('Ended lists ended and archived routines, not replaced versions',
-        () async {
-      repo.byStatus[RoutineStatus.active] = [
-        sampleRoutine(id: 'live'),
-        sampleRoutine(id: 'ended', ended: true),
-        sampleRoutine(id: 'replaced', ended: true, nextRoutineId: 'x'),
-      ];
-      repo.byStatus[RoutineStatus.paused] = [
-        sampleRoutine(id: 'p-ended', status: RoutineStatus.paused, ended: true),
-      ];
-      repo.byStatus[RoutineStatus.archived] = [
+    test('loads every routine once and groups them in sections', () async {
+      repo.routines = [
+        sampleRoutine(id: 'rec'),
+        sampleRoutine(id: 'rec-ended', ended: true),
+        sampleRoutine(id: 'task-late', dueOn: '2026-11-20'),
+        sampleRoutine(id: 'task-soon', dueOn: '2026-11-10'),
+        sampleRoutine(id: 'some', kind: RoutineKind.someday),
+        sampleRoutine(
+            id: 'some-done',
+            kind: RoutineKind.someday,
+            ended: true,
+            updatedAt: DateTime(2026, 11, 1)),
+        sampleRoutine(id: 'paused', status: RoutineStatus.paused),
+        sampleRoutine(
+            id: 'paused-task',
+            dueOn: '2026-11-10',
+            status: RoutineStatus.paused),
         sampleRoutine(id: 'arch', status: RoutineStatus.archived),
       ];
+
       final notifier = await loaded();
 
-      await notifier.selectTab(RoutinesTab.ended);
+      expect(repo.fetchCount, 1);
+      final sections = (notifier.state as RoutinesLoaded).sections;
+      expect(ids(sections.recurring), ['rec']);
+      expect(ids(sections.tasks), ['task-soon', 'task-late']);
+      expect(ids(sections.someday), ['some']);
+      expect(ids(sections.paused), ['paused', 'paused-task']);
+      // The latest changed first.
+      expect(ids(sections.finished), ['some-done', 'rec-ended', 'arch']);
+      expect(sections.isEmpty, isFalse);
+    });
 
-      expect(ids(notifier), ['ended', 'p-ended', 'arch']);
-      expect(repo.fetchedStatuses, containsAll(RoutineStatus.values));
+    test('no routines: the sections are empty', () async {
+      final notifier = await loaded();
+
+      expect((notifier.state as RoutinesLoaded).sections.isEmpty, isTrue);
     });
 
     test('transitions to error on fetch failure', () async {
@@ -97,6 +76,7 @@ void main() {
 
       expect(await notifier.pauseRoutine('a1'), isTrue);
       expect(repo.calls, ['pause a1']);
+      expect(repo.fetchCount, 2);
       expect(notifier.state, isA<RoutinesLoaded>());
     });
 

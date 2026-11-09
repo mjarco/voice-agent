@@ -14,34 +14,8 @@ class RoutinesScreen extends ConsumerStatefulWidget {
   ConsumerState<RoutinesScreen> createState() => _RoutinesScreenState();
 }
 
-class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  static const _tabs = RoutinesTab.values;
-
+class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
   final Set<String> _busyIds = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
-    _tabController.addListener(_onTabChanged);
-  }
-
-  @override
-  void dispose() {
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  void _onTabChanged() {
-    if (_tabController.indexIsChanging) return;
-    ref
-        .read(routinesNotifierProvider.notifier)
-        .selectTab(_tabs[_tabController.index]);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,20 +32,12 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
             onPressed: () => context.push('/settings'),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Active'),
-            Tab(text: 'Paused'),
-            Tab(text: 'Ended'),
-          ],
-        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         key: const Key('routines-new-button'),
         onPressed: _openNew,
         icon: const Icon(Icons.add),
-        label: const Text('New routine'),
+        label: const Text('New'),
       ),
       body: _buildBody(state, notifier),
     );
@@ -81,32 +47,51 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
     return switch (state) {
       RoutinesInitial() => const Center(child: CircularProgressIndicator()),
       RoutinesLoading() => const Center(child: CircularProgressIndicator()),
-      RoutinesLoaded(routines: final routines) =>
-        _buildContent(routines, notifier),
+      RoutinesLoaded(sections: final sections) =>
+        _buildContent(sections, notifier),
       RoutinesError(message: final message) =>
         _buildError(message, notifier),
     };
   }
 
-  Widget _buildContent(List<Routine> routines, RoutinesNotifier notifier) {
+  Widget _buildContent(RoutineSections sections, RoutinesNotifier notifier) {
     final today = formatRoutineDay(ref.read(routinesClockProvider)());
+    Widget card(Routine r) => _RoutineCard(
+          routine: r,
+          today: today,
+          isBusy: _busyIds.contains(r.id),
+          onTap: () => _navigateToDetail(r.id),
+          onPause: r.status == RoutineStatus.active && !r.ended
+              ? () => _handlePause(r.id)
+              : null,
+          onResume: r.status == RoutineStatus.paused && !r.ended
+              ? () => _handleResume(r.id)
+              : null,
+        );
+    List<Widget> section(String key, String title, List<Routine> routines) => [
+          if (routines.isNotEmpty) ...[
+            _SectionHeader(
+                key: Key('routines-section-$key'),
+                title: title,
+                count: routines.length),
+            ...routines.map(card),
+          ],
+        ];
     return RefreshIndicator(
       onRefresh: notifier.refresh,
-      child: routines.isEmpty
+      child: sections.isEmpty
           ? ListView(
-              children: [
-                const SizedBox(height: 120),
+              children: const [
+                SizedBox(height: 120),
                 Center(
                   child: Column(
                     children: [
-                      const Icon(Icons.event_repeat,
-                          size: 64, color: Colors.grey),
-                      const SizedBox(height: 16),
+                      Icon(Icons.event_repeat, size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
                       Text(
-                        'No ${_tabs[_tabController.index].name} routines',
-                        key: const Key('routines-empty-state'),
-                        style: const TextStyle(
-                            fontSize: 16, color: Colors.grey),
+                        'No routines or tasks yet',
+                        key: Key('routines-empty-state'),
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -114,22 +99,22 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
               ],
             )
           : ListView(
-              // Room for the New routine button over the last card.
+              // Room for the New button over the last card.
               padding: const EdgeInsets.only(bottom: 88),
-              children: routines
-                  .map((r) => _RoutineCard(
-                        routine: r,
-                        today: today,
-                        isBusy: _busyIds.contains(r.id),
-                        onTap: () => _navigateToDetail(r.id),
-                        onPause: r.status == RoutineStatus.active && !r.ended
-                            ? () => _handlePause(r.id)
-                            : null,
-                        onResume: r.status == RoutineStatus.paused && !r.ended
-                            ? () => _handleResume(r.id)
-                            : null,
-                      ))
-                  .toList(),
+              children: [
+                ...section('recurring', 'Routines', sections.recurring),
+                ...section('tasks', 'Tasks', sections.tasks),
+                ...section('someday', 'Some day', sections.someday),
+                ...section('paused', 'Paused', sections.paused),
+                if (sections.finished.isNotEmpty)
+                  // Collapsed: it only grows.
+                  ExpansionTile(
+                    key: const Key('routines-section-finished'),
+                    title: Text(
+                        'Done and ended (${sections.finished.length})'),
+                    children: sections.finished.map(card).toList(),
+                  ),
+              ],
             ),
     );
   }
@@ -213,11 +198,7 @@ class _RoutineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badge = switch (routine) {
-      Routine(status: RoutineStatus.archived) => 'archived',
-      Routine(status: RoutineStatus.draft) => 'draft',
-      _ => null,
-    };
+    final badge = routineEndBadge(routine);
     return Card(
       key: Key('routine-card-${routine.id}'),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -258,9 +239,11 @@ class _RoutineCard extends StatelessWidget {
                       key: Key('routine-schedule-${routine.id}'),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    if (routine.nextOccurrence != null && !routine.ended)
+                    if (routine.isRecurring &&
+                        routine.nextDue != null &&
+                        !routine.ended)
                       Text(
-                        'Next: ${routine.nextOccurrence!.date}',
+                        'Next: ${routine.nextDue}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                   ],
@@ -291,6 +274,31 @@ class _RoutineCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({super.key, required this.title, required this.count});
+  final String title;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+          ),
+          const SizedBox(width: 8),
+          Text('($count)', style: Theme.of(context).textTheme.bodySmall),
+        ],
       ),
     );
   }

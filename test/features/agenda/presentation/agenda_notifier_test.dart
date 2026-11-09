@@ -6,7 +6,6 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/models/agenda.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
@@ -26,7 +25,8 @@ class _MockRepository implements AgendaRepository {
   int fetchCount = 0;
   Exception? calendarRefreshError;
   final calls = <String>[];
-  String? lastMarkDoneId;
+  String? lastUndoRoutineId;
+  String? lastUndoScheduledFor;
   String? lastUpdateRoutineId;
   String? lastUpdateScheduledFor;
   OccurrenceStatus? lastUpdateStatus;
@@ -36,7 +36,6 @@ class _MockRepository implements AgendaRepository {
         granularity: 'day',
         from: date,
         to: date,
-        items: [],
         routineItems: [],
       );
 
@@ -61,20 +60,25 @@ class _MockRepository implements AgendaRepository {
   Future<void> cacheAgenda(String date, AgendaResponse response) async {}
 
   @override
-  Future<void> markActionItemDone(String recordId) async {
-    lastMarkDoneId = recordId;
+  Future<void> resolveOccurrence(
+    String routineId,
+    OccurrenceStatus status, {
+    String? scheduledFor,
+  }) async {
+    lastUpdateRoutineId = routineId;
+    lastUpdateScheduledFor = scheduledFor;
+    lastUpdateStatus = status;
     if (actionError != null) throw actionError!;
   }
 
   @override
-  Future<void> resolveOccurrence(
-    String routineId,
-    String scheduledFor,
-    OccurrenceStatus status,
-  ) async {
-    lastUpdateRoutineId = routineId;
-    lastUpdateScheduledFor = scheduledFor;
-    lastUpdateStatus = status;
+  Future<void> unresolveOccurrence(
+    String routineId, {
+    String? scheduledFor,
+  }) async {
+    calls.add('unresolve');
+    lastUndoRoutineId = routineId;
+    lastUndoScheduledFor = scheduledFor;
     if (actionError != null) throw actionError!;
   }
 }
@@ -84,30 +88,30 @@ AgendaResponse _responseWithItems() => AgendaResponse(
       granularity: 'day',
       from: '2026-04-19',
       to: '2026-04-19',
-      items: [
-        const AgendaItem(
-          recordId: 'rec-1',
-          text: 'Buy groceries',
-          scheduledFor: '2026-04-19',
-          timeWindow: TimeWindow.day,
-          originRole: OriginRole.agent,
-          status: RecordStatus.active,
-          linkedConversationCount: 0,
-        ),
-      ],
       routineItems: [
-        const AgendaRoutineItem(
-          routineId: 'rtn-1',
-          routineName: 'Morning routine',
-          scheduledFor: '2026-04-19',
-          startTime: '08:00',
-          overdue: false,
-          status: OccurrenceStatus.pending,
-          occurrenceId: 'occ-1',
-          templates: [RoutineTemplate(text: 'Meditate', sortOrder: 0)],
-        ),
+        _recurringRow,
+        _oneOffRow,
       ],
     );
+
+const _recurringRow = AgendaRoutineItem(
+  routineId: 'rtn-1',
+  routineName: 'Morning routine',
+  kind: RoutineKind.recurring,
+  scheduledFor: '2026-09-10',
+  startTime: '08:00',
+  overdue: false,
+  steps: [RoutineStep(text: 'Meditate', sortOrder: 0)],
+);
+
+const _oneOffRow = AgendaRoutineItem(
+  routineId: 'rtn-2',
+  routineName: 'Call the plumber',
+  kind: RoutineKind.oneOff,
+  scheduledFor: '2026-09-08',
+  dueWindow: TimeWindow.week,
+  overdue: false,
+);
 
 /// Minimal in-memory NotificationService for tests (mirrors the production
 /// snapshot semantics so the scheduler diff behaves realistically).
@@ -186,8 +190,7 @@ void main() {
 
       expect(notifier.state, isA<AgendaLoaded>());
       final loaded = notifier.state as AgendaLoaded;
-      expect(loaded.response.items, hasLength(1));
-      expect(loaded.response.routineItems, hasLength(1));
+      expect(loaded.response.routineItems, hasLength(2));
     });
 
     test('transitions to error on fetch failure', () async {
@@ -214,7 +217,7 @@ void main() {
       expect(notifier.state, isA<AgendaError>());
       final errorState = notifier.state as AgendaError;
       expect(errorState.cached, isNotNull);
-      expect(errorState.cached!.response.items, hasLength(1));
+      expect(errorState.cached!.response.routineItems, hasLength(2));
     });
 
     test('selectDate changes date and triggers reload', () async {
@@ -270,33 +273,12 @@ void main() {
       expect(notifier.isToday, isTrue);
     });
 
-    test('markDone calls repository and returns true on success', () async {
-      final notifier = buildNotifier();
-      await Future<void>.delayed(Duration.zero);
-
-      final result = await notifier.markDone('rec-1');
-
-      expect(result, isTrue);
-      expect(repo.lastMarkDoneId, 'rec-1');
-    });
-
-    test('markDone returns false on failure', () async {
-      final notifier = buildNotifier();
-      await Future<void>.delayed(Duration.zero);
-
-      repo.actionError = Exception('Server error');
-      final result = await notifier.markDone('rec-1');
-
-      expect(result, isFalse);
-    });
-
-    test('resolveOccurrence skips through resolve with the row day (#363)',
-        () async {
+    test('resolveOccurrence skips a recurring row on its day', () async {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
       final refusal = await notifier.resolveOccurrence(
-          'rtn-1', '2026-09-10', OccurrenceStatus.skipped);
+          _recurringRow, OccurrenceStatus.skipped);
 
       expect(refusal, isNull);
       expect(repo.lastUpdateRoutineId, 'rtn-1');
@@ -304,14 +286,16 @@ void main() {
       expect(repo.lastUpdateStatus, OccurrenceStatus.skipped);
     });
 
-    test('resolveOccurrence marks done', () async {
+    test('resolveOccurrence ticks a one-off off without a day', () async {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      final refusal = await notifier.resolveOccurrence(
-          'rtn-1', '2026-10-26', OccurrenceStatus.done);
+      final refusal =
+          await notifier.resolveOccurrence(_oneOffRow, OccurrenceStatus.done);
 
       expect(refusal, isNull);
+      expect(repo.lastUpdateRoutineId, 'rtn-2');
+      expect(repo.lastUpdateScheduledFor, isNull);
       expect(repo.lastUpdateStatus, OccurrenceStatus.done);
     });
 
@@ -320,26 +304,70 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final cases = {
-        409: 'Already done',
+        409: 'Already ticked off',
         422: 'Nothing due that day',
         404: 'Routine not found',
-        400: 'Failed to complete occurrence',
+        400: 'Failed to tick off',
       };
       for (final MapEntry(key: code, value: text) in cases.entries) {
-        repo.actionError = AgendaException('Server error $code', statusCode: code);
+        repo.actionError =
+            AgendaException('Server error $code', statusCode: code);
         expect(
           await notifier.resolveOccurrence(
-              'rtn-1', '2026-10-26', OccurrenceStatus.done),
+              _recurringRow, OccurrenceStatus.done),
           text,
           reason: 'status $code',
         );
       }
+      repo.actionError = AgendaException('Server error 409',
+          statusCode: 409, code: 'routine_not_active');
+      expect(
+        await notifier.resolveOccurrence(_recurringRow, OccurrenceStatus.done),
+        'The routine is paused',
+      );
       repo.actionError = Exception('Offline');
       expect(
         await notifier.resolveOccurrence(
-            'rtn-1', '2026-10-26', OccurrenceStatus.skipped),
-        'Failed to skip occurrence',
+            _recurringRow, OccurrenceStatus.skipped),
+        'Failed to skip',
       );
+    });
+
+    test('undoOccurrence deletes the tick and reloads', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      repo.calls.clear();
+      expect(await notifier.undoOccurrence(_recurringRow), isNull);
+      expect(repo.lastUndoRoutineId, 'rtn-1');
+      expect(repo.lastUndoScheduledFor, '2026-09-10');
+      expect(repo.calls, ['unresolve', 'fetch']);
+
+      expect(await notifier.undoOccurrence(_oneOffRow), isNull);
+      expect(repo.lastUndoScheduledFor, isNull);
+
+      repo.actionError = AgendaException('Server error 409',
+          statusCode: 409, code: 'not_resolved');
+      expect(await notifier.undoOccurrence(_oneOffRow), 'Nothing to undo');
+    });
+
+    test('undoTicked sends the tick\'s day, whatever the kind', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      repo.calls.clear();
+      const tick = AgendaTickedItem(
+        routineId: 'rtn-2',
+        routineName: 'Faktura',
+        kind: RoutineKind.oneOff,
+        scheduledFor: '2026-11-05',
+        status: OccurrenceStatus.done,
+        tickedAt: '2026-11-09T10:00:00+01:00',
+      );
+      expect(await notifier.undoTicked(tick), isNull);
+      expect(repo.lastUndoRoutineId, 'rtn-2');
+      expect(repo.lastUndoScheduledFor, '2026-11-05');
+      expect(repo.calls, ['unresolve', 'fetch']);
     });
 
     test('refresh reloads data', () async {
