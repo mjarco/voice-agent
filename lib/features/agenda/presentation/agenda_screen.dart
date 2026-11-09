@@ -200,6 +200,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       return;
     }
     final verb = status == OccurrenceStatus.skipped ? 'Skipped' : 'Done';
+    // The newest tick's Undo shows at once, not behind an older one.
+    messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         key: Key('agenda-ticked-${item.routineId}'),

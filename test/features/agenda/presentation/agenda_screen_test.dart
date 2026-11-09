@@ -390,6 +390,26 @@ void main() {
       expect(repo.undone, ['rtn-inv 2026-09-10']);
     });
 
+    testWidgets('a second tick replaces the first one\'s Undo at once',
+        (tester) async {
+      final repo = _StubRepository(response: routineAgenda([waiting, task]));
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.text('Invoice'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-complete-rtn-inv')));
+      await tester.pumpAndSettle();
+      expect(find.text('Done: Invoice'), findsOneWidget);
+
+      await tester.tap(find.text('Call the plumber'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-skip-rtn-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Skipped: Call the plumber'), findsOneWidget);
+      expect(find.text('Done: Invoice'), findsNothing);
+    });
+
     testWidgets('every row can be ticked off; no action-item checkbox',
         (tester) async {
       final repo = _StubRepository(response: routineAgenda([waiting, task]));
