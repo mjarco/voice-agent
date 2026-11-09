@@ -1,14 +1,5 @@
 import 'package:voice_agent/core/models/pin.dart';
 
-/// List ordering for `GET /api/v1/pins?view=...`.
-enum PinView {
-  recent,
-  topic;
-
-  /// The `?view=` query value (`recent` | `topic`).
-  String get queryValue => name;
-}
-
 sealed class PinsException implements Exception {
   String get message;
 
@@ -39,12 +30,14 @@ class PinRefusedException extends PinsException {
   final String message;
 
   /// The write named an earlier version of the pin (ADR-CORE-111): what the
-  /// client shows is out of date.
+  /// client shows is out of date. personal-agent since R2 no longer sends it;
+  /// kept for a server that does.
   bool get isStale => code == 'pin_changed';
 }
 
 abstract class PinsRepository {
-  Future<List<PinSummary>> fetchPins(PinView view);
+  /// The pins, newest first.
+  Future<List<PinSummary>> fetchPins();
   Future<PinDetail> fetchPin(String recordId);
   Future<void> unpin(String recordId);
 }

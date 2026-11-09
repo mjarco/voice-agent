@@ -10,15 +10,13 @@ class _MockRepository implements PinsRepository {
   Exception? unpinError;
 
   int fetchCount = 0;
-  PinView? lastView;
   String? lastUnpinId;
 
   _MockRepository({this.pins = const []});
 
   @override
-  Future<List<PinSummary>> fetchPins(PinView view) async {
+  Future<List<PinSummary>> fetchPins() async {
     fetchCount++;
-    lastView = view;
     if (fetchError != null) throw fetchError!;
     return pins;
   }
@@ -34,10 +32,9 @@ class _MockRepository implements PinsRepository {
   }
 }
 
-PinSummary _pin(String id, {String? topic}) => PinSummary(
+PinSummary _pin(String id) => PinSummary(
       recordId: id,
       pinName: 'pin $id',
-      topicLabel: topic,
       createdAt: DateTime.utc(2026, 6, 15),
     );
 
@@ -52,7 +49,6 @@ void main() {
     final state = notifier.state;
     expect(state, isA<PinsListLoaded>());
     expect((state as PinsListLoaded).pins, hasLength(2));
-    expect(state.view, PinView.recent);
   });
 
   test('emits error when the fetch throws', () async {
@@ -61,28 +57,6 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(notifier.state, isA<PinsListError>());
-  });
-
-  test('setView switches view and refetches', () async {
-    final repo = _MockRepository(pins: [_pin('a')]);
-    final notifier = PinsNotifier(repo);
-    await Future<void>.delayed(Duration.zero);
-
-    await notifier.setView(PinView.topic);
-
-    expect(repo.lastView, PinView.topic);
-    expect((notifier.state as PinsListLoaded).view, PinView.topic);
-  });
-
-  test('setView to the current view does not refetch', () async {
-    final repo = _MockRepository(pins: [_pin('a')]);
-    final notifier = PinsNotifier(repo);
-    await Future<void>.delayed(Duration.zero);
-    final countAfterLoad = repo.fetchCount;
-
-    await notifier.setView(PinView.recent);
-
-    expect(repo.fetchCount, countAfterLoad);
   });
 
   test('unpin success removes the row from the loaded list', () async {

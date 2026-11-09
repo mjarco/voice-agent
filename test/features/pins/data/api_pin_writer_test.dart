@@ -82,7 +82,6 @@ void main() {
       expect(apiClient.lastPostData,
           {'conversation_id': 'conv-1', 'event_id': 'event-9'});
       expect(s.name, 'ESP32 GPIO pinout');
-      expect(s.topicLabel, 'Electronics');
     });
 
     test('throws PinNotFoundException on 404', () async {
@@ -145,7 +144,6 @@ void main() {
         conversationId: 'conv-1',
         eventId: 'event-9',
         name: 'garage pinout',
-        topicLabel: 'Electronics',
       ));
 
       expect(apiClient.lastPostPath, '/pins');
@@ -153,22 +151,9 @@ void main() {
         'conversation_id': 'conv-1',
         'event_id': 'event-9',
         'name': 'garage pinout',
-        'topic_label': 'Electronics',
       });
       expect(result.pin.recordId, 'abc123');
       expect(result.created, isTrue);
-    });
-
-    test('omits topic_label when empty', () async {
-      apiClient.nextPostResult = ApiSuccess(body: _createBody());
-
-      await writer.createPin(const PinCreateRequest(
-        conversationId: 'conv-1',
-        eventId: 'event-9',
-        name: 'n',
-      ));
-
-      expect(apiClient.lastPostData!.containsKey('topic_label'), isFalse);
     });
 
     test('throws PinNotFoundException on 404', () async {
@@ -210,19 +195,17 @@ void main() {
       expect(apiClient.lastPostPath, '/pins/suggest');
       expect(apiClient.lastPostData, {'text': 'a recipe'});
       expect(suggestion.name, 'ESP32 GPIO pinout');
-      expect(suggestion.topicLabel, 'Electronics');
       expect(suggestion.aliases, ['pinout']);
     });
   });
 
   group('createTextPin', () {
-    test('posts text, name, topic and aliases', () async {
+    test('posts text, name and aliases', () async {
       apiClient.nextPostResult = ApiSuccess(body: _createBody());
 
       final result = await writer.createTextPin(const PinTextCreateRequest(
         text: 'a recipe',
         name: 'Tarta',
-        topicLabel: 'Kuchnia',
         aliases: ['ciasto'],
       ));
 
@@ -230,17 +213,16 @@ void main() {
       expect(apiClient.lastPostData, {
         'text': 'a recipe',
         'name': 'Tarta',
-        'topic_label': 'Kuchnia',
         'aliases': ['ciasto'],
       });
       expect(result.pin.recordId, 'abc123');
     });
 
-    test('leaves out an empty topic and empty aliases', () async {
+    test('leaves out empty aliases', () async {
       apiClient.nextPostResult = ApiSuccess(body: _createBody());
 
       await writer.createTextPin(
-        const PinTextCreateRequest(text: 't', name: 'n', topicLabel: ''),
+        const PinTextCreateRequest(text: 't', name: 'n'),
       );
 
       expect(apiClient.lastPostData, {'text': 't', 'name': 'n'});

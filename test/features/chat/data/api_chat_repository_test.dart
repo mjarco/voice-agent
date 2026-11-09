@@ -72,19 +72,6 @@ Map<String, dynamic> _sampleEvent() => {
       'received_at': '2026-01-01T00:00:00Z',
     };
 
-Map<String, dynamic> _sampleRecord() => {
-      'record_id': 'rec-1',
-      'conversation_id': 'conv-1',
-      'record_type': 'topic',
-      'subject_ref': 'meeting',
-      'payload': {'text': 'Team meeting'},
-      'confidence': 0.9,
-      'origin_role': 'agent',
-      'assertion_mode': 'assert',
-      'user_endorsed': false,
-      'source_event_refs': [],
-    };
-
 Map<String, dynamic> _sampleModel() => {
       'id': 'model-1',
       'label': 'GPT-4',
@@ -186,26 +173,6 @@ void main() {
       apiClient.nextGetResult = const ApiNotConfigured();
 
       expect(() => repo.getEvents('conv-1'), throwsA(isA<ChatException>()));
-    });
-  });
-
-  group('getRecords', () {
-    test('fetches records for conversation', () async {
-      apiClient.nextGetResult = ApiSuccess(
-        body: jsonEncode({'data': [_sampleRecord()]}),
-      );
-
-      final records = await repo.getRecords('conv-1');
-
-      expect(records, hasLength(1));
-      expect(records.first.recordId, 'rec-1');
-      expect(apiClient.lastGetPath, '/conversations/conv-1/records');
-    });
-
-    test('throws on failure', () async {
-      apiClient.nextGetResult = const ApiTransientFailure(reason: 'error');
-
-      expect(() => repo.getRecords('conv-1'), throwsA(isA<ChatException>()));
     });
   });
 
@@ -338,41 +305,6 @@ void main() {
       apiClient.nextGetResult = const ApiNotConfigured();
 
       expect(() => repo.getBackends(), throwsA(isA<ChatException>()));
-    });
-  });
-
-  group('toggleEndorse', () {
-    test('returns true when endorsed', () async {
-      apiClient.nextPostResult = const ApiSuccess(
-        body: '{"data": {"user_endorsed": true}}',
-      );
-
-      final result = await repo.toggleEndorse('rec-1');
-
-      expect(result, isTrue);
-      expect(apiClient.lastPostPath, '/records/rec-1/endorse');
-    });
-
-    test('returns false when unendorsed', () async {
-      apiClient.nextPostResult = const ApiSuccess(
-        body: '{"data": {"user_endorsed": false}}',
-      );
-
-      final result = await repo.toggleEndorse('rec-1');
-
-      expect(result, isFalse);
-    });
-
-    test('throws on failure', () async {
-      apiClient.nextPostResult = const ApiPermanentFailure(
-        statusCode: 404,
-        message: 'Not found',
-      );
-
-      expect(
-        () => repo.toggleEndorse('rec-1'),
-        throwsA(isA<ChatException>()),
-      );
     });
   });
 

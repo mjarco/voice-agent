@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:voice_agent/core/models/conversation.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
@@ -42,17 +41,6 @@ class ApiChatRepository implements ChatRepository {
     final json = jsonDecode(body) as Map<String, dynamic>;
     return (json['data'] as List)
         .map((e) => ConversationEvent.fromMap(e as Map<String, dynamic>))
-        .toList();
-  }
-
-  @override
-  Future<List<ConversationRecord>> getRecords(String conversationId) async {
-    final result =
-        await _apiClient.get('/conversations/$conversationId/records');
-    final body = _unwrap(result);
-    final json = jsonDecode(body) as Map<String, dynamic>;
-    return (json['data'] as List)
-        .map((e) => ConversationRecord.fromMap(e as Map<String, dynamic>))
         .toList();
   }
 
@@ -125,16 +113,6 @@ class ApiChatRepository implements ChatRepository {
       backends: backends,
       defaultBackend: data['default_backend'] as String?,
     );
-  }
-
-  @override
-  Future<bool> toggleEndorse(String recordId) async {
-    final result =
-        await _apiClient.postJson('/records/$recordId/endorse');
-    final body = _unwrap(result);
-    final json = jsonDecode(body) as Map<String, dynamic>;
-    final data = json['data'] as Map<String, dynamic>;
-    return data['user_endorsed'] as bool;
   }
 
   String _unwrap(ApiResult result) {

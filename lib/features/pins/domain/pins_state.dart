@@ -1,5 +1,4 @@
 import 'package:voice_agent/core/models/pin.dart';
-import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 
 sealed class PinsListState {
   const PinsListState();
@@ -14,9 +13,8 @@ class PinsListLoading extends PinsListState {
 }
 
 class PinsListLoaded extends PinsListState {
-  const PinsListLoaded({required this.pins, required this.view});
+  const PinsListLoaded({required this.pins});
   final List<PinSummary> pins;
-  final PinView view;
 }
 
 class PinsListError extends PinsListState {

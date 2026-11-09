@@ -13,7 +13,7 @@ class _MockRepository implements PinsRepository {
   String? lastUnpinId;
 
   @override
-  Future<List<PinSummary>> fetchPins(PinView view) async =>
+  Future<List<PinSummary>> fetchPins() async =>
       throw UnimplementedError();
 
   @override

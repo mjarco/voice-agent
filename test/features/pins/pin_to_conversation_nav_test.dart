@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
@@ -32,7 +31,7 @@ import '../../core/network/fake_shopping_proposals.dart';
 /// exercises the actual shell structure that the bug depended on.
 class _StubPinsRepository implements PinsRepository {
   @override
-  Future<List<PinSummary>> fetchPins(PinView view) async => [];
+  Future<List<PinSummary>> fetchPins() async => [];
 
   @override
   Future<PinDetail> fetchPin(String recordId) async => PinDetail(
@@ -62,10 +61,6 @@ class _StubChatRepository implements ChatRepository {
   Future<List<ConversationEvent>> getEvents(String conversationId) async => [];
 
   @override
-  Future<List<ConversationRecord>> getRecords(String conversationId) async =>
-      [];
-
-  @override
   Future<List<ModelInfo>> getModels({String? backend}) async => [];
 
   @override
@@ -90,9 +85,6 @@ class _StubChatRepository implements ChatRepository {
     required String sessionId,
     required String idempotencyKey,
   }) async {}
-
-  @override
-  Future<bool> toggleEndorse(String recordId) async => false;
 }
 
 class _NoopPinWriter implements PinWriter {

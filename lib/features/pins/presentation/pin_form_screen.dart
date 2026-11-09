@@ -55,7 +55,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
   bool _proposalFailed = false;
   bool _titleTyped = false;
   bool _saving = false;
-  String? _topicLabel;
   List<String> _aliases = const [];
 
   /// The fields stay read-only until the draft is read, so typing cannot race
@@ -124,7 +123,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
       _draftRestored = true;
       _title.text = draft.title;
       _titleTyped = draft.titleTyped;
-      _topicLabel = draft.topicLabel;
       _aliases = draft.aliases;
       _text.text = _joined(draft.text, widget.initialText);
     });
@@ -162,7 +160,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
       _titleTyped = false;
       _proposing = false;
       _proposalFailed = false;
-      _topicLabel = null;
       _aliases = const [];
     });
     _proposeNow();
@@ -198,7 +195,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
             title: title,
             text: text,
             titleTyped: _titleTyped,
-            topicLabel: _topicLabel,
             aliases: _aliases,
           ),
         )
@@ -221,7 +217,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
     if (_isEdit) return;
     _proposalTimer?.cancel();
     final round = ++_proposalRound;
-    _topicLabel = null;
     _aliases = const [];
     if (text.trim().isEmpty) {
       setState(() => _proposing = false);
@@ -241,7 +236,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
       setState(() {
         _proposing = false;
         _proposalFailed = false;
-        _topicLabel = proposal.topicLabel;
         _aliases = proposal.aliases;
         if (!_titleTyped) _title.text = proposal.name;
       });
@@ -252,7 +246,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
       setState(() {
         _proposing = false;
         _proposalFailed = true;
-        _topicLabel = null;
         _aliases = const [];
       });
     }
@@ -284,7 +277,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
               PinTextCreateRequest(
                 text: text,
                 name: name,
-                topicLabel: _topicLabel,
                 aliases: _aliases,
               ),
             )

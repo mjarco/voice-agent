@@ -10,7 +10,6 @@ void main() {
     title: 'Tarta',
     text: 'ciasto',
     titleTyped: true,
-    topicLabel: 'Kuchnia',
     aliases: ['ciasto'],
   );
 
@@ -27,7 +26,19 @@ void main() {
       expect(loaded?.title, 'Tarta');
       expect(loaded?.text, 'ciasto');
       expect(loaded?.titleTyped, isTrue);
-      expect(loaded?.topicLabel, 'Kuchnia');
+      expect(loaded?.aliases, ['ciasto']);
+    });
+
+    test('a draft saved by 1.25 with a topic still loads', () async {
+      SharedPreferences.setMockInitialValues({
+        'pin_draft_new_v1':
+            '{"title":"Tarta","text":"ciasto","title_typed":true,'
+                '"topic_label":"Kuchnia","aliases":["ciasto"]}',
+      });
+
+      final loaded = await PrefsPinDraftStore().load(null);
+
+      expect(loaded?.title, 'Tarta');
       expect(loaded?.aliases, ['ciasto']);
     });
 

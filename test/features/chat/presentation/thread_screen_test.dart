@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/core/network/shopping_proposals_port.dart';
@@ -23,11 +22,9 @@ import '../../../core/network/fake_shopping_proposals.dart';
 class _StubRepository implements ChatRepository {
   Conversation? conversationResult;
   List<ConversationEvent> eventsResult = [];
-  List<ConversationRecord> recordsResult = [];
   BackendOptions backendsResult = const BackendOptions(backends: [
     BackendInfo(id: 'b1', name: 'Claude', available: true),
   ]);
-  bool toggleResult = true;
 
   StreamController<SseEvent>? streamController;
 
@@ -41,10 +38,6 @@ class _StubRepository implements ChatRepository {
   @override
   Future<List<ConversationEvent>> getEvents(String conversationId) async =>
       eventsResult;
-
-  @override
-  Future<List<ConversationRecord>> getRecords(String conversationId) async =>
-      recordsResult;
 
   @override
   Future<List<ModelInfo>> getModels({String? backend}) async => [];
@@ -69,9 +62,6 @@ class _StubRepository implements ChatRepository {
     required String sessionId,
     required String idempotencyKey,
   }) async {}
-
-  @override
-  Future<bool> toggleEndorse(String recordId) async => toggleResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,21 +95,6 @@ ConversationEvent _event({String id = 'evt-1', EventRole role = EventRole.user, 
   );
 }
 
-ConversationRecord _record({String id = 'rec-1', bool endorsed = false, String subjectRef = 'A decision'}) {
-  return ConversationRecord(
-    recordId: id,
-    conversationId: 'conv-1',
-    recordType: RecordType.decision,
-    subjectRef: subjectRef,
-    payload: const {},
-    confidence: 0.9,
-    originRole: OriginRole.agent,
-    assertionMode: 'assert',
-    userEndorsed: endorsed,
-    sourceEventRefs: const [],
-  );
-}
-
 class _FakePinWriter implements PinWriter {
   @override
   Future<PinSuggestion> suggestPinFromText(String text) async =>
@@ -138,7 +113,7 @@ class _FakePinWriter implements PinWriter {
       throw UnimplementedError();
 
   PinSuggestion suggestResult =
-      const PinSuggestion(name: 'ESP32 pinout', topicLabel: 'Electronics');
+      const PinSuggestion(name: 'ESP32 pinout');
   Object? suggestError;
   Object? createError;
   final List<PinCreateRequest> created = [];
@@ -160,7 +135,6 @@ class _FakePinWriter implements PinWriter {
       pin: PinDetail(
         recordId: 'pin-1',
         pinName: request.name,
-        topicLabel: request.topicLabel,
         text: 'body',
         createdAt: DateTime(2026, 1, 1),
       ),
@@ -292,82 +266,15 @@ void main() {
       );
     });
 
-    testWidgets('knowledge items hidden by default and toggle reveals them',
+    testWidgets('a reply carries no knowledge row (personal-agent R2)',
         (tester) async {
       final repo = _StubRepository()
         ..conversationResult = _conv()
-        ..eventsResult = [_event(id: 'a1', role: EventRole.agent, content: 'Reply')]
-        ..recordsResult = [_record(subjectRef: 'Decision badge')];
+        ..eventsResult = [_event(id: 'a1', role: EventRole.agent, content: 'Reply')];
       await _pumpScreen(tester, repository: repo);
 
-      expect(find.byKey(const Key('thread-record-badges')), findsOneWidget);
-      expect(find.byKey(const Key('thread-knowledge-toggle')), findsOneWidget);
-      expect(find.text('1 knowledge item'), findsOneWidget);
-      expect(find.text('Decision badge'), findsNothing);
-
-      await tester.tap(find.byKey(const Key('thread-knowledge-toggle')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Decision badge'), findsOneWidget);
-    });
-
-    testWidgets('toggle pluralises label for multiple items', (tester) async {
-      final repo = _StubRepository()
-        ..conversationResult = _conv()
-        ..eventsResult = [_event(id: 'a1', role: EventRole.agent)]
-        ..recordsResult = [
-          _record(id: 'rec-a', subjectRef: 'A'),
-          _record(id: 'rec-b', subjectRef: 'B'),
-        ];
-      await _pumpScreen(tester, repository: repo);
-
-      expect(find.text('2 knowledge items'), findsOneWidget);
-    });
-
-    testWidgets('record badge shows empty star when not endorsed', (tester) async {
-      final repo = _StubRepository()
-        ..conversationResult = _conv()
-        ..eventsResult = [_event(id: 'a1', role: EventRole.agent)]
-        ..recordsResult = [_record(id: 'rec-1', endorsed: false)];
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('thread-knowledge-toggle')));
-      await tester.pumpAndSettle();
-
-      final starIcon = find.byKey(const Key('badge-star-rec-1'));
-      expect(starIcon, findsOneWidget);
-      final icon = tester.widget<Icon>(starIcon);
-      expect(icon.icon, Icons.star_border);
-    });
-
-    testWidgets('record badge shows filled star when endorsed', (tester) async {
-      final repo = _StubRepository()
-        ..conversationResult = _conv()
-        ..eventsResult = [_event(id: 'a1', role: EventRole.agent)]
-        ..recordsResult = [_record(id: 'rec-2', endorsed: true)];
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('thread-knowledge-toggle')));
-      await tester.pumpAndSettle();
-
-      final icon = tester.widget<Icon>(find.byKey(const Key('badge-star-rec-2')));
-      expect(icon.icon, Icons.star);
-    });
-
-    testWidgets('tapping record badge calls toggleEndorse', (tester) async {
-      final repo = _StubRepository()
-        ..conversationResult = _conv()
-        ..eventsResult = [_event(id: 'a1', role: EventRole.agent)]
-        ..recordsResult = [_record(id: 'rec-tap')];
-      await _pumpScreen(tester, repository: repo);
-
-      await tester.tap(find.byKey(const Key('thread-knowledge-toggle')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const Key('badge-rec-tap')));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('badge-star-rec-tap')), findsOneWidget);
+      expect(find.text('Reply'), findsOneWidget);
+      expect(find.textContaining('knowledge item'), findsNothing);
     });
 
     testWidgets('send button is enabled when loaded and open', (tester) async {
@@ -519,7 +426,7 @@ void main() {
         (tester) async {
       final pin = _FakePinWriter()
         ..suggestResult =
-            const PinSuggestion(name: 'Garage pinout', topicLabel: 'Wiring');
+            const PinSuggestion(name: 'Garage pinout');
       await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
 
       await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
@@ -527,14 +434,22 @@ void main() {
 
       expect(find.byKey(const Key('pin-confirm-dialog')), findsOneWidget);
       expect(find.text('Garage pinout'), findsOneWidget);
-      expect(find.text('Wiring'), findsOneWidget);
+      // A pin has no topic since personal-agent R2: the dialog asks the name only.
+      expect(find.byKey(const Key('pin-topic-field')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('pin-confirm-dialog')),
+          matching: find.byType(TextField),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('confirming creates the pin with the exact payload',
         (tester) async {
       final pin = _FakePinWriter()
         ..suggestResult =
-            const PinSuggestion(name: 'Garage pinout', topicLabel: 'Wiring');
+            const PinSuggestion(name: 'Garage pinout');
       await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
 
       await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
@@ -546,7 +461,7 @@ void main() {
       expect(req.conversationId, 'conv-1');
       expect(req.eventId, 'evt-agent');
       expect(req.name, 'Garage pinout');
-      expect(req.topicLabel, 'Wiring');
+      expect(req.toMap().keys, {'conversation_id', 'event_id', 'name'});
       expect(find.text('Pinned as "Garage pinout"'), findsOneWidget);
     });
 
@@ -605,6 +520,35 @@ void main() {
     testWidgets('a suggest failure shows a snackbar and opens no dialog',
         (tester) async {
       final pin = _FakePinWriter()..suggestError = Exception('offline');
+      await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
+
+      await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('pin-confirm-dialog')), findsNothing);
+      expect(find.textContaining('Could not prepare pin'), findsOneWidget);
+    });
+
+    // A malformed answer throws a TypeError, not an Exception: the pin may be
+    // saved on the server, so the screen must still say what happened.
+    testWidgets('a malformed create answer still shows a snackbar',
+        (tester) async {
+      final pin = _FakePinWriter()
+        ..createError = TypeError();
+      await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
+
+      await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-confirm-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Could not pin'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a malformed suggest answer still shows a snackbar',
+        (tester) async {
+      final pin = _FakePinWriter()..suggestError = TypeError();
       await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
 
       await tester.tap(find.byKey(const Key('pin-button-evt-agent')));

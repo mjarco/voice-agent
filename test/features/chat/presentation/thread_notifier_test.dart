@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/models/conversation.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/network/api_client.dart';
@@ -21,10 +20,8 @@ import '../../../core/network/fake_shopping_proposals.dart';
 class _StubRepository implements ChatRepository {
   Conversation? conversationResult;
   List<ConversationEvent> eventsResult = [];
-  List<ConversationRecord> recordsResult = [];
   List<ModelInfo> modelsResult = [];
   BackendOptions backendsResult = const BackendOptions(backends: []);
-  bool toggleResult = true;
 
   bool throwOnLoad = false;
   bool throwOnFetchAfterResult = false;
@@ -33,7 +30,6 @@ class _StubRepository implements ChatRepository {
 
   String? lastCancelSessionId;
   String? lastCancelIdempotencyKey;
-  String? lastToggleRecordId;
 
   int getConversationCallCount = 0;
 
@@ -51,12 +47,6 @@ class _StubRepository implements ChatRepository {
   Future<List<ConversationEvent>> getEvents(String conversationId) async {
     if (throwOnFetchAfterResult) throw Exception('fetch failed');
     return eventsResult;
-  }
-
-  @override
-  Future<List<ConversationRecord>> getRecords(String conversationId) async {
-    if (throwOnFetchAfterResult) throw Exception('fetch failed');
-    return recordsResult;
   }
 
   @override
@@ -85,12 +75,6 @@ class _StubRepository implements ChatRepository {
     lastCancelSessionId = sessionId;
     lastCancelIdempotencyKey = idempotencyKey;
   }
-
-  @override
-  Future<bool> toggleEndorse(String recordId) async {
-    lastToggleRecordId = recordId;
-    return toggleResult;
-  }
 }
 
 class _FakePinWriter implements PinWriter {
@@ -111,7 +95,7 @@ class _FakePinWriter implements PinWriter {
       throw UnimplementedError();
 
   PinSuggestion suggestResult =
-      const PinSuggestion(name: 'Suggested', topicLabel: 'Topic');
+      const PinSuggestion(name: 'Suggested');
   Object? suggestError;
   Object? createError;
 
@@ -136,7 +120,6 @@ class _FakePinWriter implements PinWriter {
       pin: PinDetail(
         recordId: 'pin-1',
         pinName: request.name,
-        topicLabel: request.topicLabel,
         text: 'body',
         createdAt: DateTime(2026, 1, 1),
       ),
@@ -174,21 +157,6 @@ ConversationEvent _event({String id = 'evt-1', EventRole role = EventRole.user})
     role: role,
     content: 'content-$id',
     receivedAt: DateTime(2026, 1, 1),
-  );
-}
-
-ConversationRecord _record({String id = 'rec-1', bool endorsed = false}) {
-  return ConversationRecord(
-    recordId: id,
-    conversationId: 'conv-1',
-    recordType: RecordType.decision,
-    subjectRef: 'subj-$id',
-    payload: const {},
-    confidence: 0.9,
-    originRole: OriginRole.agent,
-    assertionMode: 'assert',
-    userEndorsed: endorsed,
-    sourceEventRefs: const [],
   );
 }
 
@@ -252,8 +220,7 @@ void main() {
     test('transitions to loaded state', () async {
       final repo = _StubRepository()
         ..conversationResult = _conv()
-        ..eventsResult = [_event()]
-        ..recordsResult = [_record()];
+        ..eventsResult = [_event()];
       final notifier =
           ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
       await Future.microtask(() {});
@@ -263,7 +230,6 @@ void main() {
       final loaded = notifier.state as ThreadLoaded;
       expect(loaded.conversation.conversationId, 'conv-1');
       expect(loaded.events, hasLength(1));
-      expect(loaded.records, hasLength(1));
     });
 
     test('emits error when getConversation returns null', () async {
@@ -522,38 +488,6 @@ void main() {
     });
   });
 
-  group('ThreadNotifier — toggleEndorse', () {
-    test('flips userEndorsed on matching record in loaded state', () async {
-      final repo = _StubRepository()
-        ..conversationResult = _conv()
-        ..recordsResult = [_record(id: 'rec-1', endorsed: false)]
-        ..toggleResult = true;
-      final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
-      await Future.microtask(() {});
-      await Future.microtask(() {});
-
-      await notifier.toggleEndorse('rec-1');
-
-      final loaded = notifier.state as ThreadLoaded;
-      expect(loaded.records.first.userEndorsed, isTrue);
-    });
-
-    test('calls repository.toggleEndorse with correct id', () async {
-      final repo = _StubRepository()
-        ..conversationResult = _conv()
-        ..recordsResult = [_record(id: 'rec-42')];
-      final notifier =
-          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
-      await Future.microtask(() {});
-      await Future.microtask(() {});
-
-      await notifier.toggleEndorse('rec-42');
-
-      expect(repo.lastToggleRecordId, 'rec-42');
-    });
-  });
-
   group('ThreadNotifier — selectModel / selectBackend', () {
     test('selectModel updates loaded state', () async {
       final repo = _StubRepository()..conversationResult = _conv();
@@ -724,15 +658,13 @@ void main() {
         'conv-1',
         'evt-agent',
         name: 'Garage pinout',
-        topicLabel: 'Electronics',
       );
 
       final req = pin.createdRequests.single;
       expect(req.conversationId, 'conv-1');
       expect(req.eventId, 'evt-agent');
       expect(req.name, 'Garage pinout');
-      expect(req.topicLabel, 'Electronics');
-      expect(req.toMap().containsKey('aliases'), isFalse);
+      expect(req.toMap().keys, {'conversation_id', 'event_id', 'name'});
       expect(result.created, isTrue);
       expect(notifier.isPinned('evt-agent'), isTrue);
       expect(notifier.isPinInFlight('evt-agent'), isFalse);

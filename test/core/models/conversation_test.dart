@@ -18,6 +18,7 @@ void main() {
       'subject_record_status': 'active',
     };
 
+    // subject_record_* came from personal-agent before R2; they are ignored.
     test('fromMap creates correct instance', () {
       final conv = Conversation.fromMap(sampleMap);
 
@@ -27,9 +28,6 @@ void main() {
       expect(conv.eventCount, 5);
       expect(conv.lastEventAt, isNotNull);
       expect(conv.firstMessagePreview, 'Hello agent');
-      expect(conv.subjectRecordId, 'rec-1');
-      expect(conv.subjectRecordText, 'Health topic');
-      expect(conv.subjectRecordStatus, 'active');
     });
 
     test('round-trip preserves all fields', () {
@@ -41,7 +39,6 @@ void main() {
       expect(roundTripped.status, conv.status);
       expect(roundTripped.eventCount, conv.eventCount);
       expect(roundTripped.firstMessagePreview, conv.firstMessagePreview);
-      expect(roundTripped.subjectRecordId, conv.subjectRecordId);
     });
 
     test('nullable fields handle absence', () {
@@ -57,9 +54,6 @@ void main() {
 
       expect(conv.lastEventAt, isNull);
       expect(conv.firstMessagePreview, isNull);
-      expect(conv.subjectRecordId, isNull);
-      expect(conv.subjectRecordText, isNull);
-      expect(conv.subjectRecordStatus, isNull);
     });
 
     test('toMap produces valid JSON', () {

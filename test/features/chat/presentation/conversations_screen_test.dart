@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
@@ -23,9 +22,6 @@ class _StubRepository implements ChatRepository {
 
   @override
   Future<List<ConversationEvent>> getEvents(String conversationId) async => [];
-
-  @override
-  Future<List<ConversationRecord>> getRecords(String conversationId) async => [];
 
   @override
   Stream<SseEvent> streamChat({
@@ -52,9 +48,6 @@ class _StubRepository implements ChatRepository {
   @override
   Future<BackendOptions> getBackends() async =>
       const BackendOptions(backends: []);
-
-  @override
-  Future<bool> toggleEndorse(String recordId) async => false;
 }
 
 Conversation _conv({

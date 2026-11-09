@@ -3,7 +3,7 @@ import 'package:voice_agent/core/models/pin.dart';
 
 void main() {
   group('PinSummary.fromMap', () {
-    test('parses a full row', () {
+    test('parses a row and ignores a topic_label of an older server', () {
       final pin = PinSummary.fromMap({
         'record_id': 'abc123',
         'pin_name': 'garage pinout',
@@ -13,18 +13,18 @@ void main() {
 
       expect(pin.recordId, 'abc123');
       expect(pin.pinName, 'garage pinout');
-      expect(pin.topicLabel, 'Electronics');
       expect(pin.createdAt, DateTime.utc(2026, 6, 15, 10, 30));
     });
 
-    test('tolerates a missing topic_label (omitempty)', () {
+    test('parses a row of personal-agent R2 (no topic, extra fields)', () {
       final pin = PinSummary.fromMap({
         'record_id': 'abc123',
-        'pin_name': 'no topic',
+        'pin_name': 'garage pinout',
         'created_at': '2026-06-15T10:30:00Z',
+        'day': '2026-06-15',
       });
 
-      expect(pin.topicLabel, isNull);
+      expect(pin.pinName, 'garage pinout');
     });
   });
 
@@ -34,7 +34,6 @@ void main() {
       final pin = PinDetail.fromMap({
         'record_id': 'abc123',
         'pin_name': 'garage pinout',
-        'topic_label': 'Electronics',
         'text': '# Pinout\n\n| Pin | Signal |',
         'aliases': ['pinout', 'wiring'],
         'conversation_id': 'conv-789',
@@ -44,7 +43,6 @@ void main() {
 
       expect(pin.recordId, 'abc123');
       expect(pin.pinName, 'garage pinout');
-      expect(pin.topicLabel, 'Electronics');
       expect(pin.text, '# Pinout\n\n| Pin | Signal |');
       expect(pin.aliases, ['pinout', 'wiring']);
       expect(pin.conversationId, 'conv-789');
@@ -52,8 +50,7 @@ void main() {
       expect(pin.createdAt, DateTime.utc(2026, 6, 15, 10, 30));
     });
 
-    test('defaults optional lists to empty, conversation and topic to null',
-        () {
+    test('defaults optional lists to empty and the conversation to null', () {
       final pin = PinDetail.fromMap({
         'record_id': 'abc123',
         'pin_name': 'minimal',
@@ -61,15 +58,30 @@ void main() {
         'created_at': '2026-06-15T10:30:00Z',
       });
 
-      expect(pin.topicLabel, isNull);
       expect(pin.aliases, isEmpty);
       expect(pin.conversationId, isNull);
       expect(pin.sourceEventIds, isEmpty);
     });
+
+    test('a malformed optional field is empty, never an error', () {
+      final pin = PinDetail.fromMap({
+        'record_id': 'abc123',
+        'pin_name': 'odd',
+        'text': 'body',
+        'created_at': '2026-06-15T10:30:00Z',
+        'aliases': 'not a list',
+        'source_event_ids': ['e1', 7, null],
+        'conversation_id': '',
+      });
+
+      expect(pin.aliases, isEmpty);
+      expect(pin.sourceEventIds, ['e1']);
+      expect(pin.conversationId, isNull);
+    });
   });
 
   group('PinSuggestion.fromMap', () {
-    test('parses name and topic, ignoring aliases and topic_ref', () {
+    test('parses name and aliases, ignoring topic fields', () {
       final s = PinSuggestion.fromMap({
         'name': 'ESP32 GPIO pinout',
         'aliases': ['pinout'],
@@ -78,60 +90,48 @@ void main() {
       });
 
       expect(s.name, 'ESP32 GPIO pinout');
-      expect(s.topicLabel, 'Electronics');
+      expect(s.aliases, ['pinout']);
     });
 
-    test('leaves topic null when the backend matched none', () {
-      final s = PinSuggestion.fromMap({'name': 'x', 'topic_label': ''});
-
-      expect(s.name, 'x');
-      expect(s.topicLabel, '');
+    test('a missing or malformed name is empty', () {
+      expect(PinSuggestion.fromMap({}).name, '');
+      expect(PinSuggestion.fromMap({'name': 3}).name, '');
     });
   });
 
   group('PinCreateRequest.toMap', () {
-    test('emits identity + name + topic when topic is present', () {
+    test('emits identity and name only', () {
       const req = PinCreateRequest(
         conversationId: 'conv-1',
         eventId: 'event-9',
         name: 'garage pinout',
-        topicLabel: 'Electronics',
       );
 
       expect(req.toMap(), {
         'conversation_id': 'conv-1',
         'event_id': 'event-9',
         'name': 'garage pinout',
-        'topic_label': 'Electronics',
       });
     });
+  });
 
-    test('omits topic_label when null or empty (backend omitempty)', () {
-      const nullTopic = PinCreateRequest(
-        conversationId: 'conv-1',
-        eventId: 'event-9',
+  group('PinTextCreateRequest.toMap', () {
+    test('sends aliases when there are any, never a topic', () {
+      const req = PinTextCreateRequest(
+        text: 't',
         name: 'n',
-      );
-      const emptyTopic = PinCreateRequest(
-        conversationId: 'conv-1',
-        eventId: 'event-9',
-        name: 'n',
-        topicLabel: '',
+        aliases: ['a'],
       );
 
-      expect(nullTopic.toMap().containsKey('topic_label'), isFalse);
-      expect(emptyTopic.toMap().containsKey('topic_label'), isFalse);
-    });
-
-    test('never sends aliases', () {
-      const req = PinCreateRequest(
-        conversationId: 'c',
-        eventId: 'e',
-        name: 'n',
-        topicLabel: 't',
+      expect(req.toMap(), {
+        'text': 't',
+        'name': 'n',
+        'aliases': ['a'],
+      });
+      expect(
+        const PinTextCreateRequest(text: 't', name: 'n').toMap(),
+        {'text': 't', 'name': 'n'},
       );
-
-      expect(req.toMap().containsKey('aliases'), isFalse);
     });
   });
 
@@ -141,7 +141,6 @@ void main() {
         'pin': {
           'record_id': 'abc123',
           'pin_name': 'garage pinout',
-          'topic_label': 'Electronics',
           'text': '# Pinout',
           'created_at': '2026-06-15T10:30:00Z',
         },
@@ -163,6 +162,8 @@ void main() {
           'text': 'body',
           'created_at': '2026-06-15T10:30:00Z',
         },
+        'created': 'yes',
+        'superseded_record_id': null,
       });
 
       expect(r.created, isFalse);

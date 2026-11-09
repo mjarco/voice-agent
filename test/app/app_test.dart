@@ -109,7 +109,7 @@ class _StubPinsRepository implements PinsRepository {
   int fetches = 0;
 
   @override
-  Future<List<PinSummary>> fetchPins(PinView view) async {
+  Future<List<PinSummary>> fetchPins() async {
     fetches++;
     return [];
   }

@@ -267,7 +267,7 @@ class _StubHandsFreeControlPort implements HandsFreeControlPort {
 
 class _StubPinsRepository implements PinsRepository {
   @override
-  Future<List<PinSummary>> fetchPins(PinView view) async => [];
+  Future<List<PinSummary>> fetchPins() async => [];
   @override
   Future<PinDetail> fetchPin(String recordId) async =>
       throw UnimplementedError();
