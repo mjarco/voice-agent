@@ -588,6 +588,9 @@ screens within this structure — it does not add routes.
 | `/routines` | 020 (shell branch 3) | 022 (RoutinesPlaceholderScreen → real screen) |
 | `/chat` | 020 (shell branch 4) | 024 (ChatPlaceholderScreen → real screen) |
 | `/places` | outside shell | places (PlacesScreen) — reached from Shopping + Record app bars |
+| `/matters` | R3 matters (outside shell) | MattersScreen — reached from Record + Chat app bars, next to Pins |
+| `/matters/new` | R3 matters (child of /matters) | MatterFormScreen — pops with the saved MatterDetail |
+| `/matters/:id` | R3 matters (child of /matters) | MatterDetailScreen |
 | `/pins` | 045 (outside shell) | 045 (PinsScreen) — reached from Record + Chat app bars |
 | `/pins/new` | voice-agent#386 (child of /pins) | voice-agent#386 (PinFormScreen) — `extra`: starting text |
 | `/pins/:id` | 045 (child of /pins) | 045 (PinDetailScreen) |
