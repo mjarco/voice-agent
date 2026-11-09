@@ -81,7 +81,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   }) {
     final routineItems = response.routineItems;
     final meetings = response.calendarItems;
-    final isEmpty = routineItems.isEmpty && meetings.isEmpty;
+    final ticked = response.tickedItems;
+    final isEmpty = routineItems.isEmpty && meetings.isEmpty && ticked.isEmpty;
 
     return Column(
       children: [
@@ -145,15 +146,31 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                         ...routineItems.map(
                           (item) => _RoutineItemTile(
                             item: item,
-                            onSkip: () => _handleResolve(
-                              item,
-                              OccurrenceStatus.skipped,
-                            ),
+                            onSkip: () =>
+                                _handleResolve(item, OccurrenceStatus.skipped),
                             onComplete: () =>
                                 _handleResolve(item, OccurrenceStatus.done),
                           ),
                         ),
                       ],
+                      if (ticked.isNotEmpty)
+                        // Folded: what was ticked on the day, newest first,
+                        // each with its Undo.
+                        ExpansionTile(
+                          key: const Key('agenda-ticked-section'),
+                          title: Text(
+                            '${notifier.isToday ? 'Done today' : 'Done that day'} (${ticked.length})',
+                          ),
+                          children: ticked
+                              .map(
+                                (t) => _TickedTile(
+                                  item: t,
+                                  day: response.date,
+                                  onUndo: () => _handleUndoTicked(t),
+                                ),
+                              )
+                              .toList(),
+                        ),
                     ],
                   ),
           ),
@@ -213,6 +230,16 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleUndoTicked(AgendaTickedItem item) async {
+    final notifier = ref.read(agendaNotifierProvider.notifier);
+    final refusal = await notifier.undoTicked(item);
+    if (refusal != null && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(refusal)));
+    }
   }
 
   Future<void> _handleUndo(AgendaRoutineItem item) async {
@@ -432,6 +459,45 @@ class _RoutineItemTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A tick of the day: done or skipped, at what hour, for which day when it
+/// was not this one, with Undo.
+class _TickedTile extends StatelessWidget {
+  const _TickedTile({
+    required this.item,
+    required this.day,
+    required this.onUndo,
+  });
+  final AgendaTickedItem item;
+  final String day;
+  final VoidCallback onUndo;
+
+  @override
+  Widget build(BuildContext context) {
+    final skipped = item.status == OccurrenceStatus.skipped;
+    final time = item.time;
+    return ListTile(
+      key: Key('ticked-${item.routineId}-${item.scheduledFor}'),
+      leading: Icon(
+        skipped ? Icons.skip_next : Icons.check,
+        color: Colors.grey,
+      ),
+      title: Text(item.routineName),
+      subtitle: Text(
+        [
+          skipped ? 'skipped' : 'done',
+          ?time,
+          if (item.scheduledFor != day) 'for ${item.scheduledFor}',
+        ].join(' · '),
+      ),
+      trailing: TextButton(
+        key: Key('ticked-undo-${item.routineId}-${item.scheduledFor}'),
+        onPressed: onUndo,
+        child: const Text('Undo'),
       ),
     );
   }

@@ -165,6 +165,75 @@ void main() {
     });
   });
 
+  group('AgendaTickedItem', () {
+    test('reads ticked_items, newest first as sent, and round-trips them', () {
+      final r = AgendaResponse.fromMap({
+        'date': '2026-11-09',
+        'granularity': 'day',
+        'from': '2026-11-09',
+        'to': '2026-11-09',
+        'routine_items': [],
+        'ticked_items': [
+          {
+            'routine_id': 'r1',
+            'routine_name': 'Leki',
+            'kind': 'recurring',
+            'scheduled_for': '2026-11-07',
+            'status': 'skipped',
+            'ticked_at': '2026-11-09T12:01:00+01:00',
+          },
+          {
+            'routine_id': 'r2',
+            'routine_name': 'Faktura',
+            'kind': 'one_off',
+            'scheduled_for': '2026-11-05',
+            'status': 'done',
+            'ticked_at': '2026-11-09T00:30:00+01:00',
+          },
+        ],
+      });
+      expect(r.tickedItems.map((t) => t.routineName), ['Leki', 'Faktura']);
+      final first = r.tickedItems.first;
+      expect(first.status, OccurrenceStatus.skipped);
+      expect(first.kind, RoutineKind.recurring);
+      expect(first.time, '12:01');
+      final again = AgendaResponse.fromMap(
+          jsonDecode(jsonEncode(r.toMap())) as Map<String, dynamic>);
+      expect(again.tickedItems.map((t) => t.toMap()).toList(),
+          r.tickedItems.map((t) => t.toMap()).toList());
+    });
+
+    test('an agenda without ticked_items has none', () {
+      final r = AgendaResponse.fromMap({
+        'date': '2026-11-09',
+        'granularity': 'day',
+        'from': '2026-11-09',
+        'to': '2026-11-09',
+        'routine_items': [],
+      });
+      expect(r.tickedItems, isEmpty);
+    });
+
+    test('drops a row it cannot show or undo, keeps the rest', () {
+      final r = AgendaResponse.fromMap({
+        'date': '2026-11-09',
+        'granularity': 'day',
+        'from': '2026-11-09',
+        'to': '2026-11-09',
+        'routine_items': [],
+        'ticked_items': [
+          {'routine_name': 'no id', 'scheduled_for': '2026-11-09', 'status': 'done'},
+          {'routine_id': 'r3', 'routine_name': 'Unknown', 'scheduled_for': '2026-11-09', 'status': 'later'},
+          'not a map',
+          {'routine_id': 'r4', 'routine_name': 'Kept', 'kind': 'new_kind', 'scheduled_for': '2026-11-09', 'status': 'done'},
+        ],
+      });
+      expect(r.tickedItems.map((t) => t.routineId), ['r4']);
+      expect(r.tickedItems.single.kind, isNull);
+      expect(r.tickedItems.single.time, isNull);
+    });
+  });
+
   group('AgendaCalendarItem', () {
     test('reads calendar_items and round-trips them', () {
       final map = {

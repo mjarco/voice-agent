@@ -351,6 +351,25 @@ void main() {
       expect(await notifier.undoOccurrence(_oneOffRow), 'Nothing to undo');
     });
 
+    test('undoTicked sends the tick\'s day, whatever the kind', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      repo.calls.clear();
+      const tick = AgendaTickedItem(
+        routineId: 'rtn-2',
+        routineName: 'Faktura',
+        kind: RoutineKind.oneOff,
+        scheduledFor: '2026-11-05',
+        status: OccurrenceStatus.done,
+        tickedAt: '2026-11-09T10:00:00+01:00',
+      );
+      expect(await notifier.undoTicked(tick), isNull);
+      expect(repo.lastUndoRoutineId, 'rtn-2');
+      expect(repo.lastUndoScheduledFor, '2026-11-05');
+      expect(repo.calls, ['unresolve', 'fetch']);
+    });
+
     test('refresh reloads data', () async {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);

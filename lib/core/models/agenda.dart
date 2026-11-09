@@ -1,7 +1,8 @@
 import 'package:voice_agent/core/models/routine.dart';
 
-/// `GET /agenda` of personal-agent: the routines due in the window and the
-/// window's meetings (ADR-CORE-116 there retired the action items).
+/// `GET /agenda` of personal-agent: the routines due in the window, the ticks
+/// made in it and the window's meetings (ADR-CORE-116 there retired the
+/// action items).
 class AgendaResponse {
   const AgendaResponse({
     required this.date,
@@ -9,6 +10,7 @@ class AgendaResponse {
     required this.from,
     required this.to,
     required this.routineItems,
+    this.tickedItems = const [],
     this.calendarItems = const [],
   });
 
@@ -17,6 +19,11 @@ class AgendaResponse {
   final String from;
   final String to;
   final List<AgendaRoutineItem> routineItems;
+
+  /// The ticks made on the window's days, newest first: a ticked row leaves
+  /// [routineItems] and stays visible here. Empty from a personal-agent that
+  /// does not send them.
+  final List<AgendaTickedItem> tickedItems;
 
   /// Meetings from personal-agent's calendar mirror (ADR-API-101 there);
   /// empty from a personal-agent that does not send them.
@@ -35,6 +42,12 @@ class AgendaResponse {
               .whereType<AgendaRoutineItem>()
               .toList() ??
           [],
+      tickedItems:
+          (map['ticked_items'] as List<dynamic>?)
+              ?.map(AgendaTickedItem.tryFromMap)
+              .whereType<AgendaTickedItem>()
+              .toList() ??
+          [],
       calendarItems:
           (map['calendar_items'] as List<dynamic>?)
               ?.map(AgendaCalendarItem.tryFromMap)
@@ -51,6 +64,7 @@ class AgendaResponse {
       'from': from,
       'to': to,
       'routine_items': routineItems.map((i) => i.toMap()).toList(),
+      'ticked_items': tickedItems.map((i) => i.toMap()).toList(),
       'calendar_items': calendarItems.map((i) => i.toMap()).toList(),
     };
   }
@@ -133,6 +147,77 @@ class AgendaRoutineItem {
       'start_time': startTime,
       'overdue': overdue,
       'templates': steps.map((t) => t.toMap()).toList(),
+    };
+  }
+}
+
+/// A tick made in the agenda's window: a routine done or skipped, possibly for
+/// an earlier day (an overdue day, a one-off's due day). Undone with
+/// `DELETE /routines/{id}/resolve?scheduled_for=`.
+class AgendaTickedItem {
+  const AgendaTickedItem({
+    required this.routineId,
+    required this.routineName,
+    required this.kind,
+    required this.scheduledFor,
+    required this.status,
+    required this.tickedAt,
+  });
+
+  final String routineId;
+  final String routineName;
+
+  /// The routine's kind now; null when this app does not know it.
+  final RoutineKind? kind;
+
+  /// The day the tick is for.
+  final String scheduledFor;
+
+  /// Done or skipped.
+  final OccurrenceStatus status;
+
+  /// When the tick was made, RFC 3339 in the owner's zone.
+  final String tickedAt;
+
+  /// The hour of the tick, `HH:MM`, or null when [tickedAt] has none.
+  String? get time =>
+      _instant.hasMatch(tickedAt) ? tickedAt.substring(11, 16) : null;
+
+  static final _instant = RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}');
+
+  /// [fromMap], or null when the row lacks its routine, name or day, or is
+  /// neither done nor skipped: a row that cannot be shown or undone.
+  static AgendaTickedItem? tryFromMap(dynamic e) {
+    if (e is! Map<String, dynamic>) return null;
+    if (e['routine_id'] is! String ||
+        e['routine_name'] is! String ||
+        e['scheduled_for'] is! String) {
+      return null;
+    }
+    final item = AgendaTickedItem.fromMap(e);
+    return item.status == OccurrenceStatus.pending ? null : item;
+  }
+
+  factory AgendaTickedItem.fromMap(Map<String, dynamic> map) {
+    final at = map['ticked_at'];
+    return AgendaTickedItem(
+      routineId: map['routine_id'] as String,
+      routineName: map['routine_name'] as String,
+      kind: RoutineKind.tryParse(map['kind']),
+      scheduledFor: map['scheduled_for'] as String,
+      status: OccurrenceStatus.fromString(map['status']),
+      tickedAt: at is String ? at : '',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'routine_id': routineId,
+      'routine_name': routineName,
+      'kind': kind?.toJson(),
+      'scheduled_for': scheduledFor,
+      'status': status.toJson(),
+      'ticked_at': tickedAt,
     };
   }
 }

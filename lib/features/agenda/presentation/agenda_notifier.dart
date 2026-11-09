@@ -153,10 +153,19 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
 
   /// Undoes the tick of [item] just made (the snackbar's Undo). Returns null
   /// when it was undone, otherwise the reason.
-  Future<String?> undoOccurrence(AgendaRoutineItem item) async {
+  Future<String?> undoOccurrence(AgendaRoutineItem item) =>
+      _undo(item.routineId, item.isOneOff ? null : item.scheduledFor);
+
+  /// Undoes a tick listed under done ([AgendaResponse.tickedItems]). The day
+  /// is always sent: a recurring routine needs it, and for a one-off or
+  /// someday routine personal-agent removes its one tick whatever the day.
+  Future<String?> undoTicked(AgendaTickedItem item) =>
+      _undo(item.routineId, item.scheduledFor);
+
+  Future<String?> _undo(String routineId, String? scheduledFor) async {
     try {
-      await _repository.unresolveOccurrence(item.routineId,
-          scheduledFor: item.isOneOff ? null : item.scheduledFor);
+      await _repository.unresolveOccurrence(routineId,
+          scheduledFor: scheduledFor);
       await loadAgenda();
       return null;
     } catch (e) {

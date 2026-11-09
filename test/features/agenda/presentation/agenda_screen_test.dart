@@ -410,6 +410,77 @@ void main() {
       expect(find.text('Done: Invoice'), findsNothing);
     });
 
+    testWidgets('the day\'s ticks are listed folded, each with Undo',
+        (tester) async {
+      final repo = _StubRepository(
+        response: AgendaResponse(
+          date: '2026-10-26',
+          granularity: 'day',
+          from: '2026-10-26',
+          to: '2026-10-26',
+          routineItems: const [waiting],
+          tickedItems: const [
+            AgendaTickedItem(
+              routineId: 'rtn-pills',
+              routineName: 'Pills',
+              kind: RoutineKind.recurring,
+              scheduledFor: '2026-10-25',
+              status: OccurrenceStatus.skipped,
+              tickedAt: '2026-10-26T08:15:00+01:00',
+            ),
+            AgendaTickedItem(
+              routineId: 'rtn-bill',
+              routineName: 'Pay the bill',
+              kind: RoutineKind.oneOff,
+              scheduledFor: '2026-10-26',
+              status: OccurrenceStatus.done,
+              tickedAt: '2026-10-26T07:40:00+01:00',
+            ),
+          ],
+        ),
+      );
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.text('Done today (2)'), findsOneWidget);
+      expect(find.text('Pay the bill'), findsNothing);
+
+      await tester.tap(find.text('Done today (2)'));
+      await tester.pumpAndSettle();
+      expect(find.text('skipped · 08:15 · for 2026-10-25'), findsOneWidget);
+      expect(find.text('done · 07:40'), findsOneWidget);
+
+      await tester.tap(
+          find.byKey(const Key('ticked-undo-rtn-pills-2026-10-25')));
+      await tester.pumpAndSettle();
+      expect(repo.undone, ['rtn-pills 2026-10-25']);
+    });
+
+    testWidgets('an agenda of ticks only is not empty', (tester) async {
+      final repo = _StubRepository(
+        response: AgendaResponse(
+          date: '2026-10-26',
+          granularity: 'day',
+          from: '2026-10-26',
+          to: '2026-10-26',
+          routineItems: const [],
+          tickedItems: const [
+            AgendaTickedItem(
+              routineId: 'rtn-bill',
+              routineName: 'Pay the bill',
+              kind: RoutineKind.oneOff,
+              scheduledFor: '2026-10-26',
+              status: OccurrenceStatus.done,
+              tickedAt: '2026-10-26T07:40:00+01:00',
+            ),
+          ],
+        ),
+      );
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.text('No items for this date'), findsNothing);
+      expect(find.text('Done today (1)'), findsOneWidget);
+    });
+
     testWidgets('every row can be ticked off; no action-item checkbox',
         (tester) async {
       final repo = _StubRepository(response: routineAgenda([waiting, task]));
