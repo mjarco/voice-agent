@@ -158,6 +158,15 @@ void main() {
       );
     });
 
+    testWidgets('every button has a label a screen reader can read',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      await _pumpScreen(tester);
+
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      handle.dispose();
+    });
+
     testWidgets('has no matters icon: Sprawy are a tab (ADR-ARCH-012)',
         (tester) async {
       await _pumpScreen(tester);

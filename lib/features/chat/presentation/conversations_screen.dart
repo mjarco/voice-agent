@@ -20,6 +20,7 @@ class ConversationsScreen extends ConsumerWidget {
           IconButton(
             key: const Key('conversations-new-icon'),
             icon: const Icon(Icons.add),
+            tooltip: 'New conversation',
             onPressed: () async {
               ref.invalidate(threadNotifierProvider('new'));
               await context.push('/chat/new');
@@ -35,6 +36,7 @@ class ConversationsScreen extends ConsumerWidget {
           IconButton(
             key: const Key('conversations-settings-icon'),
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
           ),
         ],

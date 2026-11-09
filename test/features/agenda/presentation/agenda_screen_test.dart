@@ -374,6 +374,16 @@ void main() {
       expect(repo.resolved, ['rtn-task null skipped']);
     });
 
+    testWidgets('every button has a label a screen reader can read',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      final repo = _StubRepository(response: routineAgenda([waiting]));
+      await _pumpScreen(tester, repository: repo);
+
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      handle.dispose();
+    });
+
     testWidgets('a tick offers Undo, which deletes it', (tester) async {
       final repo = _StubRepository(response: routineAgenda([waiting]));
       await _pumpScreen(tester, repository: repo);

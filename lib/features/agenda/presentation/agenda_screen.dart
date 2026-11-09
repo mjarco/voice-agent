@@ -31,6 +31,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           IconButton(
             key: const Key('agenda-settings-icon'),
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
           ),
         ],
@@ -314,6 +315,7 @@ class _DateNavigationBar extends StatelessWidget {
           IconButton(
             key: const Key('agenda-prev-day'),
             icon: const Icon(Icons.chevron_left),
+            tooltip: 'Previous day',
             onPressed: onPrevious,
           ),
           Expanded(
@@ -327,6 +329,7 @@ class _DateNavigationBar extends StatelessWidget {
           IconButton(
             key: const Key('agenda-next-day'),
             icon: const Icon(Icons.chevron_right),
+            tooltip: 'Next day',
             onPressed: onNext,
           ),
           if (!isToday)

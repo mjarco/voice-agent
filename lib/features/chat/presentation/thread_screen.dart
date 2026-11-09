@@ -222,6 +222,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
           IconButton(
             key: const Key('thread-settings-icon'),
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
           ),
         ],
@@ -762,12 +763,14 @@ class _InputBar extends StatelessWidget {
               IconButton(
                 key: const Key('thread-cancel-button'),
                 icon: const Icon(Icons.stop_circle_outlined),
+                tooltip: 'Stop',
                 onPressed: onCancel,
               )
             else
               IconButton(
                 key: const Key('thread-send-button'),
                 icon: const Icon(Icons.send),
+                tooltip: 'Send',
                 onPressed: canSend
                     ? () {
                         final text = controller.text.trim();

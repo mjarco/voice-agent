@@ -216,6 +216,21 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
+    testWidgets('every button has a label a screen reader can read',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [
+          _event(role: EventRole.user, content: 'User says hi'),
+          _event(id: 'a1', role: EventRole.agent, content: 'Agent replies'),
+        ];
+      await _pumpScreen(tester, repository: repo);
+
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      handle.dispose();
+    });
+
     testWidgets('renders user message bubble', (tester) async {
       final repo = _StubRepository()
         ..conversationResult = _conv()

@@ -165,6 +165,7 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
           ),
         ],

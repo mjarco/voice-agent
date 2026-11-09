@@ -329,10 +329,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.history),
+            tooltip: 'History',
             onPressed: () => context.push('/record/history'),
           ),
           IconButton(
             icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
           ),
         ],

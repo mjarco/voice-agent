@@ -189,6 +189,8 @@ void main() {
 
       await tester.tap(find.byKey(const Key('matter-add-entry')));
       await tester.pumpAndSettle();
+      // The empty field says what it asks for.
+      expect(find.text('Co się wydarzyło, jednym zdaniem'), findsOneWidget);
       await tester.enterText(
           find.byKey(const Key('matter-text-field')), 'kupiłem płytki');
       await tester.tap(find.byKey(const Key('matter-text-save')));

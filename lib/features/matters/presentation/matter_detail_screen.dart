@@ -263,7 +263,10 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
 
   Future<void> _addEntry() async {
     final text =
-        await askMatterText(context, title: 'Dodaj wpis', multiline: true);
+        await askMatterText(context,
+            title: 'Dodaj wpis',
+            multiline: true,
+            hint: 'Co się wydarzyło, jednym zdaniem');
     if (text == null || text.isEmpty || !mounted) return;
     await _write('dodać wpisu', () => _notifier.addEntry(text));
   }
