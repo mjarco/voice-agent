@@ -86,6 +86,10 @@ Future<void> _pumpScreen(
         path: '/settings',
         builder: (_, _) =>const Scaffold(body: Text('Settings')),
       ),
+      GoRoute(
+        path: '/matters',
+        builder: (_, _) =>const Scaffold(body: Text('Matters')),
+      ),
     ],
   );
 
@@ -152,6 +156,15 @@ void main() {
         find.byKey(const Key('conversations-settings-icon')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('the matters icon opens /matters', (tester) async {
+      await _pumpScreen(tester);
+
+      await tester.tap(find.byKey(const Key('conversations-matters-icon')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Matters'), findsOneWidget);
     });
 
     testWidgets('add icon navigates to /chat/new', (tester) async {

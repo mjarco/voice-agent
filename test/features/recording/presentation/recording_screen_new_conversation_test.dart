@@ -37,6 +37,9 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
+import 'package:voice_agent/features/matters/presentation/matters_providers.dart';
+
+import '../../matters/fake_matters_repository.dart';
 
 import 'package:timezone/data/latest_all.dart' as tz_data;
 
@@ -492,6 +495,27 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(AppBar, 'Pins'), findsOneWidget);
+    });
+  });
+
+  group('Matters button (next to Pins)', () {
+    testWidgets('tap opens Sprawy', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ..._baseOverrides(),
+            mattersRepositoryProvider
+                .overrideWithValue(FakeMattersRepository()),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('record-matters-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(AppBar, 'Sprawy'), findsOneWidget);
     });
   });
 }

@@ -4,6 +4,9 @@ import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
 import 'package:voice_agent/features/chat/presentation/conversations_screen.dart';
 import 'package:voice_agent/features/chat/presentation/thread_screen.dart';
+import 'package:voice_agent/features/matters/presentation/matter_detail_screen.dart';
+import 'package:voice_agent/features/matters/presentation/matter_form_screen.dart';
+import 'package:voice_agent/features/matters/presentation/matters_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pin_detail_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pin_form_screen.dart';
 import 'package:voice_agent/features/pins/presentation/pins_screen.dart';
@@ -132,6 +135,23 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
     // Places — top-level like Pins, reached from the Shopping and Record app
     // bars; a place is named standing there, so it is rare, and not a tab.
     GoRoute(path: '/places', builder: (context, state) => const PlacesScreen()),
+    // Matters (ADR-CORE-118 of personal-agent) — top-level like Pins, reached
+    // from the same Record and Chat app bars.
+    GoRoute(
+      path: '/matters',
+      builder: (context, state) => const MattersScreen(),
+      routes: [
+        GoRoute(
+          path: 'new',
+          builder: (context, state) => const MatterFormScreen(),
+        ),
+        GoRoute(
+          path: ':id',
+          builder: (context, state) =>
+              MatterDetailScreen(matterId: state.pathParameters['id']!),
+        ),
+      ],
+    ),
     // Pins — top-level (full-screen, outside shell) so the saved-references
     // screen is reachable from anywhere: the Record landing screen's app bar
     // and the Chat app bar both push '/pins' (P045 + quick-access).
