@@ -69,27 +69,26 @@ void main() {
         }),
       );
 
-      final pins = await repo.fetchPins(PinView.recent);
+      final pins = await repo.fetchPins();
 
       expect(pins, hasLength(2));
       expect(pins.first.pinName, 'garage pinout');
-      expect(pins[1].topicLabel, isNull);
     });
 
-    test('sends the view query parameter', () async {
+    test('asks for the recent view, which every server knows', () async {
       apiClient.nextGetResult = const ApiSuccess(body: '{"data":[]}');
 
-      await repo.fetchPins(PinView.topic);
+      await repo.fetchPins();
 
       expect(apiClient.lastGetPath, '/pins');
-      expect(apiClient.lastGetParams, {'view': 'topic'});
+      expect(apiClient.lastGetParams, {'view': 'recent'});
     });
 
     test('throws on missing data envelope', () async {
       apiClient.nextGetResult = const ApiSuccess(body: '{"other":1}');
 
       expect(
-        () => repo.fetchPins(PinView.recent),
+        () => repo.fetchPins(),
         throwsA(isA<PinsGeneralException>()),
       );
     });
@@ -99,7 +98,7 @@ void main() {
           const ApiTransientFailure(reason: 'Timeout: connectionTimeout');
 
       expect(
-        () => repo.fetchPins(PinView.recent),
+        () => repo.fetchPins(),
         throwsA(isA<PinsGeneralException>()
             .having((e) => e.message, 'message', contains('Timeout'))),
       );
@@ -109,7 +108,7 @@ void main() {
       apiClient.nextGetResult = const ApiNotConfigured();
 
       expect(
-        () => repo.fetchPins(PinView.recent),
+        () => repo.fetchPins(),
         throwsA(isA<PinsGeneralException>()
             .having((e) => e.message, 'message', contains('not configured'))),
       );

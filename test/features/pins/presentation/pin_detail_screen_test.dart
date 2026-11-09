@@ -18,7 +18,7 @@ class _StubRepository implements PinsRepository {
   int fetchCount = 0;
 
   @override
-  Future<List<PinSummary>> fetchPins(PinView view) async =>
+  Future<List<PinSummary>> fetchPins() async =>
       throw UnimplementedError();
 
   @override

@@ -3,7 +3,6 @@ import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
 import 'package:voice_agent/features/chat/presentation/conversations_notifier.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 
 class _StubRepository implements ChatRepository {
@@ -21,10 +20,6 @@ class _StubRepository implements ChatRepository {
 
   @override
   Future<List<ConversationEvent>> getEvents(String conversationId) async => [];
-
-  @override
-  Future<List<ConversationRecord>> getRecords(String conversationId) async =>
-      [];
 
   @override
   Stream<SseEvent> streamChat({
@@ -51,9 +46,6 @@ class _StubRepository implements ChatRepository {
   @override
   Future<BackendOptions> getBackends() async =>
       const BackendOptions(backends: []);
-
-  @override
-  Future<bool> toggleEndorse(String recordId) async => false;
 }
 
 Conversation _conv({

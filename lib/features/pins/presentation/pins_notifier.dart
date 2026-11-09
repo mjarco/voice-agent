@@ -8,29 +8,20 @@ class PinsNotifier extends StateNotifier<PinsListState> {
   }
 
   final PinsRepository _repository;
-  PinView _view = PinView.recent;
   String? lastActionError;
-
-  PinView get view => _view;
 
   Future<void> load() async {
     state = const PinsListLoading();
     lastActionError = null;
     try {
-      final pins = await _repository.fetchPins(_view);
-      state = PinsListLoaded(pins: pins, view: _view);
+      final pins = await _repository.fetchPins();
+      state = PinsListLoaded(pins: pins);
     } catch (e) {
       state = PinsListError(message: e.toString());
     }
   }
 
   Future<void> refresh() => load();
-
-  Future<void> setView(PinView view) {
-    if (view == _view) return Future.value();
-    _view = view;
-    return load();
-  }
 
   /// Unpin a reference. On success removes the row from the loaded list and
   /// returns true; on failure records [lastActionError] and returns false
@@ -45,7 +36,6 @@ class PinsNotifier extends StateNotifier<PinsListState> {
         state = PinsListLoaded(
           pins:
               current.pins.where((p) => p.recordId != recordId).toList(),
-          view: current.view,
         );
       }
       return true;

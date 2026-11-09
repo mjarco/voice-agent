@@ -3,7 +3,6 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/widgets/agent_markdown_style.dart';
@@ -38,7 +37,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     super.dispose();
   }
 
-  /// Pin flow for an agent message (proposal 046): suggest name+topic, confirm
+  /// Pin flow for an agent message (proposal 046): suggest a name, confirm
   /// in a dialog, then create. The notifier owns the network calls and the
   /// in-flight / pinned sets; this method only drives the dialog and SnackBars.
   Future<void> _startPin(ConversationEvent event) async {
@@ -49,7 +48,9 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     final PinSuggestion? suggestion;
     try {
       suggestion = await notifier.beginPin(event.conversationId, event.eventId);
-    } on Exception catch (e) {
+    } catch (e) {
+      // Not only Exception: a malformed answer throws a TypeError, which must
+      // not pass silently.
       messenger.showSnackBar(
         SnackBar(content: Text('Could not prepare pin: $e')),
       );
@@ -74,7 +75,6 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         event.conversationId,
         event.eventId,
         name: confirmed.name,
-        topicLabel: confirmed.topicLabel,
       );
       if (!mounted) return;
       messenger.showSnackBar(
@@ -86,7 +86,8 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
           ),
         ),
       );
-    } on Exception catch (e) {
+    } catch (e) {
+      // A TypeError from a malformed answer still gets its SnackBar.
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('Could not pin: $e')));
     }
@@ -100,7 +101,6 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
 
     final String title;
     final List<ConversationEvent> events;
-    final List<ConversationRecord> records;
     final List<ShoppingProposalRow> proposals;
     final List<ModelInfo> models;
     final List<BackendInfo> backends;
@@ -146,7 +146,6 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         ):
         title = 'New Chat';
         events = const [];
-        records = const [];
         proposals = const [];
         models = m;
         backends = b;
@@ -160,7 +159,6 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
       case ThreadLoaded(
           conversation: final conv,
           events: final e,
-          records: final r,
           proposals: final p,
           models: final m,
           backends: final b,
@@ -169,7 +167,6 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         ):
         title = conv.firstMessagePreview ?? 'New Chat';
         events = e;
-        records = r;
         proposals = p;
         models = m;
         backends = b;
@@ -183,7 +180,6 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
       case ThreadStreaming(
           conversation: final conv,
           events: final e,
-          records: final r,
           proposals: final p,
           models: final m,
           backends: final b,
@@ -194,7 +190,6 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         ):
         title = conv?.firstMessagePreview ?? 'New Chat';
         events = e;
-        records = r;
         proposals = p;
         models = m;
         backends = b;
@@ -276,19 +271,6 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
                           canPin && notifier.isPinInFlight(event.eventId),
                       onPin: canPin ? () => _startPin(event) : null,
                     ));
-                    final isLastAgent = event.role == EventRole.agent &&
-                        reversed
-                            .sublist(0, i)
-                            .every((e) => e.role != EventRole.agent);
-                    if (isLastAgent && records.isNotEmpty) {
-                      widgets.add(_RecordBadges(
-                        key: ValueKey(
-                          'badges-${event.eventId}-${records.map((r) => r.recordId).join(',')}',
-                        ),
-                        records: records,
-                        onToggleEndorse: notifier.toggleEndorse,
-                      ));
-                    }
                   }
                   return widgets;
                 })(),
@@ -487,14 +469,13 @@ class _PinButton extends StatelessWidget {
   }
 }
 
-/// User's confirmed pin name + optional topic from [_PinConfirmDialog].
+/// User's confirmed pin name from [_PinConfirmDialog].
 class _PinConfirmation {
-  const _PinConfirmation({required this.name, this.topicLabel});
+  const _PinConfirmation({required this.name});
   final String name;
-  final String? topicLabel;
 }
 
-/// Confirm dialog seeded from the backend suggestion. Edits name + topic only;
+/// Confirm dialog seeded from the backend suggestion. Edits the name only;
 /// the pin body is the verbatim message, copied server-side (proposal 046).
 class _PinConfirmDialog extends StatefulWidget {
   const _PinConfirmDialog({required this.suggestion});
@@ -508,23 +489,17 @@ class _PinConfirmDialog extends StatefulWidget {
 class _PinConfirmDialogState extends State<_PinConfirmDialog> {
   late final TextEditingController _nameController =
       TextEditingController(text: widget.suggestion.name);
-  late final TextEditingController _topicController =
-      TextEditingController(text: widget.suggestion.topicLabel ?? '');
 
   @override
   void dispose() {
     _nameController.dispose();
-    _topicController.dispose();
     super.dispose();
   }
 
   void _submit() {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
-    final topic = _topicController.text.trim();
-    Navigator.of(context).pop(
-      _PinConfirmation(name: name, topicLabel: topic.isEmpty ? null : topic),
-    );
+    Navigator.of(context).pop(_PinConfirmation(name: name));
   }
 
   @override
@@ -546,15 +521,6 @@ class _PinConfirmDialogState extends State<_PinConfirmDialog> {
             ),
             onChanged: (_) => setState(() {}),
             onSubmitted: (_) => _submit(),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            key: const Key('pin-topic-field'),
-            controller: _topicController,
-            decoration: const InputDecoration(
-              labelText: 'Topic (optional)',
-              hintText: 'Group under a topic',
-            ),
           ),
         ],
       ),
@@ -596,117 +562,6 @@ class _TypingIndicator extends StatelessWidget {
           toolProgress ?? 'Thinking\u2026',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-      ),
-    );
-  }
-}
-
-class _RecordBadges extends StatefulWidget {
-  const _RecordBadges({
-    super.key,
-    required this.records,
-    required this.onToggleEndorse,
-  });
-
-  final List<ConversationRecord> records;
-  final void Function(String recordId) onToggleEndorse;
-
-  @override
-  State<_RecordBadges> createState() => _RecordBadgesState();
-}
-
-class _RecordBadgesState extends State<_RecordBadges> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final n = widget.records.length;
-    final label = '$n knowledge item${n == 1 ? '' : 's'}';
-
-    return Padding(
-      key: const Key('thread-record-badges'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            key: const Key('thread-knowledge-toggle'),
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(4),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 16,
-                    color: theme.colorScheme.tertiary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    label,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.tertiary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-            alignment: Alignment.topLeft,
-            child: _expanded
-                ? Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: widget.records
-                          .map(
-                            (r) => _RecordBadge(
-                              record: r,
-                              onToggleEndorse: () =>
-                                  widget.onToggleEndorse(r.recordId),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RecordBadge extends StatelessWidget {
-  const _RecordBadge({
-    required this.record,
-    required this.onToggleEndorse,
-  });
-
-  final ConversationRecord record;
-  final VoidCallback onToggleEndorse;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = recordDisplayText(record);
-    return GestureDetector(
-      key: Key('badge-${record.recordId}'),
-      onTap: onToggleEndorse,
-      child: Chip(
-        avatar: Icon(
-          record.userEndorsed ? Icons.star : Icons.star_border,
-          size: 16,
-          key: Key('badge-star-${record.recordId}'),
-        ),
-        label: Text(text, style: const TextStyle(fontSize: 12)),
       ),
     );
   }

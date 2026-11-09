@@ -17,7 +17,7 @@ class _StubRepository implements PinsRepository {
   _StubRepository({this.pins = const []});
 
   @override
-  Future<List<PinSummary>> fetchPins(PinView view) async {
+  Future<List<PinSummary>> fetchPins() async {
     if (fetchError != null) throw fetchError!;
     return pins;
   }
@@ -39,10 +39,9 @@ class _StubRepository implements PinsRepository {
   }
 }
 
-PinSummary _pin(String id, {String? topic}) => PinSummary(
+PinSummary _pin(String id) => PinSummary(
       recordId: id,
       pinName: 'Pin $id',
-      topicLabel: topic,
       createdAt: DateTime.utc(2026, 6, 15),
     );
 
@@ -160,21 +159,19 @@ void main() {
       expect(find.byKey(const Key('pin-tile-b')), findsOneWidget);
     });
 
-    testWidgets('By topic groups pins under labels with a No topic section',
+    // personal-agent R2 (ADR-CORE-117): a pin has no topic, so the list is
+    // one list, newest first, each row dated.
+    testWidgets('lists pins without a view toggle or topic headers',
         (tester) async {
-      await _pump(
-        tester,
-        _StubRepository(pins: [
-          _pin('a', topic: 'Electronics'),
-          _pin('b'),
-        ]),
-      );
+      await _pump(tester, _StubRepository(pins: [_pin('a'), _pin('b')]));
 
-      await tester.tap(find.text('By topic'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Electronics'), findsOneWidget);
-      expect(find.text('No topic'), findsOneWidget);
+      expect(find.byKey(const Key('pin-tile-a')), findsOneWidget);
+      expect(find.byKey(const Key('pin-tile-b')), findsOneWidget);
+      expect(find.text('By topic'), findsNothing);
+      expect(find.text('Recent'), findsNothing);
+      expect(find.text('No topic'), findsNothing);
+      expect(find.byType(SegmentedButton<Object>), findsNothing);
+      expect(find.text('2026-06-15'), findsNWidgets(2));
     });
 
     testWidgets('tapping a pin navigates to its detail route', (tester) async {

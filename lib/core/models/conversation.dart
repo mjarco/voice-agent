@@ -28,9 +28,6 @@ class Conversation {
     required this.eventCount,
     this.lastEventAt,
     this.firstMessagePreview,
-    this.subjectRecordId,
-    this.subjectRecordText,
-    this.subjectRecordStatus,
   });
 
   final String conversationId;
@@ -40,9 +37,6 @@ class Conversation {
   final int eventCount;
   final DateTime? lastEventAt;
   final String? firstMessagePreview;
-  final String? subjectRecordId;
-  final String? subjectRecordText;
-  final String? subjectRecordStatus;
 
   factory Conversation.fromMap(Map<String, dynamic> map) {
     return Conversation(
@@ -55,9 +49,6 @@ class Conversation {
           ? DateTime.parse(map['last_event_at'] as String)
           : null,
       firstMessagePreview: map['first_message_preview'] as String?,
-      subjectRecordId: map['subject_record_id'] as String?,
-      subjectRecordText: map['subject_record_text'] as String?,
-      subjectRecordStatus: map['subject_record_status'] as String?,
     );
   }
 
@@ -70,9 +61,6 @@ class Conversation {
       'event_count': eventCount,
       'last_event_at': lastEventAt?.toIso8601String(),
       'first_message_preview': firstMessagePreview,
-      'subject_record_id': subjectRecordId,
-      'subject_record_text': subjectRecordText,
-      'subject_record_status': subjectRecordStatus,
     };
   }
 }

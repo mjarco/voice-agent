@@ -1,5 +1,4 @@
 import 'package:voice_agent/core/models/conversation.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 
@@ -49,7 +48,6 @@ class ThreadLoaded extends ThreadState {
   const ThreadLoaded({
     required this.conversation,
     required this.events,
-    required this.records,
     required this.proposals,
     required this.models,
     required this.backends,
@@ -59,7 +57,6 @@ class ThreadLoaded extends ThreadState {
 
   final Conversation conversation;
   final List<ConversationEvent> events;
-  final List<ConversationRecord> records;
   final List<ShoppingProposalRow> proposals;
   final List<ModelInfo> models;
   final List<BackendInfo> backends;
@@ -71,7 +68,6 @@ class ThreadStreaming extends ThreadState {
   const ThreadStreaming({
     this.conversation,
     required this.events,
-    required this.records,
     required this.proposals,
     required this.models,
     required this.backends,
@@ -83,7 +79,6 @@ class ThreadStreaming extends ThreadState {
 
   final Conversation? conversation;
   final List<ConversationEvent> events;
-  final List<ConversationRecord> records;
   final List<ShoppingProposalRow> proposals;
   final List<ModelInfo> models;
   final List<BackendInfo> backends;

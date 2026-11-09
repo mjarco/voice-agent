@@ -1,5 +1,4 @@
 import 'package:voice_agent/core/models/conversation.dart';
-import 'package:voice_agent/core/models/conversation_record.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
 
@@ -81,19 +80,13 @@ class ChatResult {
           .map((e) => ShoppingProposal.fromMap(e as Map<String, dynamic>))
           .toList(),
     );
-    // knowledge_extraction and warnings intentionally ignored in V1
+    // warnings intentionally ignored in V1
   }
-}
-
-String recordDisplayText(ConversationRecord r) {
-  final text = r.payload['text'] as String?;
-  return text?.isNotEmpty == true ? text! : r.subjectRef;
 }
 
 abstract class ChatRepository {
   Future<List<Conversation>> listConversations();
   Future<List<ConversationEvent>> getEvents(String conversationId);
-  Future<List<ConversationRecord>> getRecords(String conversationId);
   Stream<SseEvent> streamChat({
     required String sessionId,
     required String content,
@@ -108,5 +101,4 @@ abstract class ChatRepository {
   Future<Conversation?> getConversation(String conversationId);
   Future<List<ModelInfo>> getModels({String? backend});
   Future<BackendOptions> getBackends();
-  Future<bool> toggleEndorse(String recordId);
 }

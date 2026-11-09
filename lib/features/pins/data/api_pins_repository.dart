@@ -17,10 +17,11 @@ class ApiPinsRepository implements PinsRepository {
   final ApiClient _apiClient;
 
   @override
-  Future<List<PinSummary>> fetchPins(PinView view) async {
+  Future<List<PinSummary>> fetchPins() async {
+    // `view=recent` is the order every personal-agent version knows.
     final result = await _apiClient.get(
       '/pins',
-      queryParameters: {'view': view.queryValue},
+      queryParameters: {'view': 'recent'},
     );
     return switch (result) {
       ApiSuccess(body: final body) => _parseList(body),

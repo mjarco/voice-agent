@@ -16,7 +16,6 @@ class _FakeWriter implements PinWriter {
   final Map<String, Completer<PinSuggestion>> held = {};
   PinSuggestion suggestion = const PinSuggestion(
     name: 'Proposed',
-    topicLabel: 'Kuchnia',
     aliases: ['ciasto'],
   );
   Exception? suggestError;
@@ -266,7 +265,7 @@ void main() {
       expect(_title(tester), 'Proposed');
     });
 
-    testWidgets('saves the text as typed with the proposed topic and aliases',
+    testWidgets('saves the text as typed with the proposed aliases',
         (tester) async {
       final writer = _FakeWriter();
       await _pump(tester, writer);
@@ -282,7 +281,7 @@ void main() {
       final saved = writer.created.single;
       expect(saved.text, '  line 1\nline 2\n');
       expect(saved.name, 'Tarta');
-      expect(saved.topicLabel, 'Kuchnia');
+      expect(saved.toMap().containsKey('topic_label'), isFalse);
       expect(saved.aliases, ['ciasto']);
     });
 
@@ -304,7 +303,7 @@ void main() {
       expect(_saveEnabled(tester), isTrue);
     });
 
-    testWidgets('a changed text drops the old topic and aliases',
+    testWidgets('a changed text drops the old aliases',
         (tester) async {
       final writer = _FakeWriter();
       await _pump(tester, writer);
@@ -318,11 +317,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final saved = writer.created.single;
-      expect(saved.topicLabel, isNull);
       expect(saved.aliases, isEmpty);
     });
 
-    testWidgets('a failed proposal drops the old topic and aliases',
+    testWidgets('a failed proposal drops the old aliases',
         (tester) async {
       final writer = _FakeWriter();
       await _pump(tester, writer);
@@ -337,7 +335,6 @@ void main() {
       await tester.tap(_save);
       await tester.pumpAndSettle();
 
-      expect(writer.created.single.topicLabel, isNull);
       expect(writer.created.single.aliases, isEmpty);
     });
 
@@ -668,7 +665,6 @@ void main() {
       await tester.pump();
       await tester.pump(wait);
 
-      expect(drafts.drafts[null]?.topicLabel, 'Kuchnia');
       expect(drafts.drafts[null]?.aliases, ['ciasto']);
     });
 
@@ -679,7 +675,6 @@ void main() {
           title: 'Mine',
           text: 'kept',
           titleTyped: true,
-          topicLabel: 'Kuchnia',
           aliases: ['ciasto'],
         );
       await _pump(tester, writer, drafts: drafts);
@@ -687,7 +682,6 @@ void main() {
       await tester.tap(_save);
       await tester.pumpAndSettle();
 
-      expect(writer.created.single.topicLabel, 'Kuchnia');
       expect(writer.created.single.aliases, ['ciasto']);
     });
 

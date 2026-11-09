@@ -9,22 +9,23 @@ import 'package:voice_agent/core/models/pin.dart';
 /// the app composition root (`app_main.dart`) — the same core-port /
 /// feature-adapter seam as [HandsFreeControlPort] (ADR-ARCH-006, amended P046).
 abstract class PinWriter {
-  /// Proposes a name + matching existing topic for a message. Writes nothing.
+  /// Proposes a name for a message. Writes nothing.
   Future<PinSuggestion> suggestPin(String conversationId, String eventId);
 
   /// Pins the message identified by [request].
   Future<PinCreateResult> createPin(PinCreateRequest request);
 
-  /// Proposes a name + matching existing topic for a text that is in no
-  /// conversation yet. Writes nothing.
+  /// Proposes a name and aliases for a text that is in no conversation yet.
+  /// Writes nothing.
   Future<PinSuggestion> suggestPinFromText(String text);
 
   /// Saves the text in [request] as a pin with no conversation. The same title
   /// and text return the existing pin, so a retried save is harmless.
   Future<PinCreateResult> createTextPin(PinTextCreateRequest request);
 
-  /// Writes a new version of the pin [recordId]. A null field keeps its value.
-  /// The result carries the new `recordId`, which the caller must follow.
+  /// Edits the pin [recordId]. A null field keeps its value. The result
+  /// carries the pin's `recordId`, which the caller follows: personal-agent
+  /// before R2 gave an edit a new id, since R2 (ADR-CORE-117) the same one.
   Future<PinCreateResult> editPin(
     String recordId, {
     String? name,
