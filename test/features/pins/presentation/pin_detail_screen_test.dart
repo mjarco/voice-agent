@@ -95,6 +95,17 @@ Future<void> _pump(
                           child: const Text('Save form'),
                         ),
                         TextButton(
+                          onPressed: () => context.pop(
+                            PinDetail(
+                              recordId: pin.recordId,
+                              pinName: 'renamed',
+                              text: 'new body',
+                              createdAt: pin.createdAt,
+                            ),
+                          ),
+                          child: const Text('Save in place'),
+                        ),
+                        TextButton(
                           onPressed: () => context.pop(),
                           child: const Text('Cancel form'),
                         ),
@@ -129,6 +140,43 @@ Future<void> _pump(
 
 void main() {
   group('PinDetailScreen', () {
+    testWidgets('an edit that keeps the id shows the saved text at once',
+        (tester) async {
+      final repo = _StubRepository();
+      await _pump(tester, repo);
+      final fetches = repo.fetchCount;
+
+      await tester.tap(find.byKey(const Key('pin-detail-edit')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save in place'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('renamed')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('new body'), findsOneWidget);
+      expect(find.textContaining('body text'), findsNothing);
+      expect(repo.fetchCount, fetches);
+    });
+
+    testWidgets('a pin opened again from the list is read again',
+        (tester) async {
+      final repo = _StubRepository();
+      await _pump(tester, repo);
+      expect(repo.fetchCount, 1);
+
+      final context = tester.element(find.byType(PinDetailScreen));
+      GoRouter.of(context).go('/pins');
+      await tester.pumpAndSettle();
+      repo.pin = _pinWith('changed elsewhere');
+      GoRouter.of(tester.element(find.text('Pins list'))).go('/pins/abc');
+      await tester.pumpAndSettle();
+
+      expect(repo.fetchCount, 2);
+      expect(find.textContaining('changed elsewhere'), findsOneWidget);
+    });
+
     testWidgets('after an edit the screen follows the new record id',
         (tester) async {
       await _pump(tester, _StubRepository());

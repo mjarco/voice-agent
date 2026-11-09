@@ -23,7 +23,9 @@ final pinsNotifierProvider =
   return PinsNotifier(repository);
 });
 
-final pinDetailNotifierProvider = StateNotifierProvider.family<
+/// Disposed with its page, as the routine's: a pin opened again from the list
+/// loads afresh instead of showing what it was before an edit.
+final pinDetailNotifierProvider = StateNotifierProvider.autoDispose.family<
     PinDetailNotifier, PinDetailState, String>((ref, recordId) {
   final repository = ref.watch(pinsRepositoryProvider);
   return PinDetailNotifier(repository, recordId);

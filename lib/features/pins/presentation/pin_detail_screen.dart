@@ -13,8 +13,10 @@ import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 /// Renders the markdown body with `flutter_markdown_plus` in the chat's style;
 /// links open in the browser, tables scroll sideways, images fit the width.
 ///
-/// An edit gives the pin a new `record_id` (ADR-CORE-111 of personal-agent), so
-/// the screen keeps the current id itself and follows it.
+/// An edit used to give the pin a new `record_id` (ADR-CORE-111 of
+/// personal-agent); since pins have their own table it keeps its id
+/// (ADR-CORE-117). The screen keeps the current id itself and shows what the
+/// save answered either way.
 class PinDetailScreen extends ConsumerStatefulWidget {
   const PinDetailScreen({super.key, required this.recordId});
 
@@ -99,6 +101,7 @@ class _PinDetailScreenState extends ConsumerState<PinDetailScreen> {
     if (!mounted) return;
     if (saved != null) {
       setState(() => _recordId = saved.recordId);
+      ref.read(pinDetailNotifierProvider(_recordId).notifier).show(saved);
       return;
     }
     await ref.read(pinDetailNotifierProvider(_recordId).notifier).refresh();

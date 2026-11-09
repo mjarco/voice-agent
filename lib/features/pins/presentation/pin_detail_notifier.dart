@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/pins/domain/pins_repository.dart';
 import 'package:voice_agent/features/pins/domain/pins_state.dart';
 
@@ -27,6 +28,12 @@ class PinDetailNotifier extends StateNotifier<PinDetailState> {
   }
 
   Future<void> refresh() => load();
+
+  /// Shows the pin as the server answered a save, with no second read.
+  void show(PinDetail pin) {
+    lastActionError = null;
+    state = PinDetailLoaded(pin: pin);
+  }
 
   /// Unpin this reference. Returns true on success; on failure records
   /// [lastActionError] and returns false. The list refreshes on return per
