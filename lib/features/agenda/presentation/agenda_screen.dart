@@ -223,6 +223,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       SnackBar(
         key: Key('agenda-ticked-${item.routineId}'),
         content: Text('$verb: ${item.routineName}'),
+        // A snackbar with an action stays until dismissed unless told
+        // otherwise; the Undo must run out by itself.
+        persist: false,
         action: SnackBarAction(
           key: Key('agenda-undo-${item.routineId}'),
           label: 'Undo',

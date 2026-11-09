@@ -390,6 +390,23 @@ void main() {
       expect(repo.undone, ['rtn-inv 2026-09-10']);
     });
 
+    testWidgets('the Undo runs out by itself', (tester) async {
+      final repo = _StubRepository(response: routineAgenda([waiting]));
+      await _pumpScreen(tester, repository: repo);
+
+      await tester.tap(find.text('Invoice'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-complete-rtn-inv')));
+      await tester.pumpAndSettle();
+      expect(find.text('Done: Invoice'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Done: Invoice'), findsNothing);
+      expect(repo.undone, isEmpty);
+    });
+
     testWidgets('a second tick replaces the first one\'s Undo at once',
         (tester) async {
       final repo = _StubRepository(response: routineAgenda([waiting, task]));

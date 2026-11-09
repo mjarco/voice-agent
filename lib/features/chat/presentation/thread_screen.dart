@@ -77,9 +77,14 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         name: confirmed.name,
       );
       if (!mounted) return;
+      // The newest answer shows at once, not behind an older one.
+      messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
         SnackBar(
           content: Text('Pinned as "${created.pin.pinName}"'),
+          // A snackbar with an action stays until dismissed unless told
+          // otherwise; "Open" is an offer, not a question.
+          persist: false,
           action: SnackBarAction(
             label: 'Open',
             onPressed: () => context.push('/pins'),
@@ -89,6 +94,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     } catch (e) {
       // A TypeError from a malformed answer still gets its SnackBar.
       if (!mounted) return;
+      messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(content: Text('Could not pin: $e')));
     }
   }

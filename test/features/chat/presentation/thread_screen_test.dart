@@ -465,6 +465,24 @@ void main() {
       expect(find.text('Pinned as "Garage pinout"'), findsOneWidget);
     });
 
+    testWidgets('"Pinned as" runs out by itself', (tester) async {
+      final pin = _FakePinWriter()
+        ..suggestResult =
+            const PinSuggestion(name: 'Garage pinout');
+      await _pumpScreen(tester, repository: agentRepo(), pinWriter: pin);
+
+      await tester.tap(find.byKey(const Key('pin-button-evt-agent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pin-confirm-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Pinned as "Garage pinout"'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pinned as "Garage pinout"'), findsNothing);
+    });
+
     testWidgets('the pin button becomes filled after a successful pin',
         (tester) async {
       await _pumpScreen(tester, repository: agentRepo());
