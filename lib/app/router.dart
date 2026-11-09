@@ -160,8 +160,16 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
       routes: [
         GoRoute(
           path: ':id',
-          redirect: (context, state) =>
-              '/agenda/routines/${state.pathParameters['id']}',
+          redirect: (context, state) => state.uri.path.endsWith('/edit')
+              ? null
+              : '/agenda/routines/${state.pathParameters['id']}',
+          routes: [
+            GoRoute(
+              path: 'edit',
+              redirect: (context, state) =>
+                  '/agenda/routines/${state.pathParameters['id']}/edit',
+            ),
+          ],
         ),
       ],
     ),

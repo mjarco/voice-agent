@@ -44,6 +44,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     final notifier =
         ref.read(threadNotifierProvider(widget.conversationId).notifier);
     final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
 
     final PinSuggestion? suggestion;
     try {
@@ -87,7 +88,8 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
           persist: false,
           action: SnackBarAction(
             label: 'Open',
-            onPressed: () => context.push('/pins'),
+            // The snackbar outlives this thread's page; its router does not.
+            onPressed: () => router.push('/pins'),
           ),
         ),
       );

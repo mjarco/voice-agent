@@ -16,6 +16,7 @@ import 'package:voice_agent/core/network/shopping_proposals_port.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
+import 'package:voice_agent/features/routines/presentation/routine_form_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_providers.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_screen.dart';
@@ -172,6 +173,37 @@ void main() {
       );
       expect(tester.widget<NavigationBar>(find.byType(NavigationBar))
           .selectedIndex, 0);
+    });
+  });
+
+  group('the routines\' old addresses (ADR-ARCH-012)', () {
+    Future<void> open(WidgetTester tester, String link) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...overrides,
+            routinesRepositoryProvider
+                .overrideWithValue(FakeRoutinesRepository()),
+            pendingDeepLinkProvider.overrideWith((ref) => link),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('/routines opens the Agenda', (tester) async {
+      await open(tester, '/routines');
+
+      expect(tester.widget<NavigationBar>(find.byType(NavigationBar))
+          .selectedIndex, 0);
+      expect(find.byKey(const Key('agenda-routines-section')), findsOneWidget);
+    });
+
+    testWidgets('/routines/:id/edit opens the routine\'s form', (tester) async {
+      await open(tester, '/routines/rtn-1/edit');
+
+      expect(find.byType(RoutineFormScreen), findsOneWidget);
     });
   });
 

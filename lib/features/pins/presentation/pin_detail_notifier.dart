@@ -18,8 +18,11 @@ class PinDetailNotifier extends StateNotifier<PinDetailState> {
     lastActionError = null;
     try {
       final pin = await _repository.fetchPin(_recordId);
-      state = PinDetailLoaded(pin: pin);
+      // Disposed with its page (autoDispose): a page left before the answer
+      // takes nothing more.
+      if (mounted) state = PinDetailLoaded(pin: pin);
     } catch (e) {
+      if (!mounted) return;
       state = PinDetailError(
         message: e.toString(),
         gone: e is PinNotFoundException,

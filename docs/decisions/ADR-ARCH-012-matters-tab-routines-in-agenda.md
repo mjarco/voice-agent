@@ -29,12 +29,21 @@ routines dajmy sprawy do dolnej belki".
 2. **Routines are managed in a folded section at the end of the Agenda**,
    on every day: the count of live routines in its title, "New routine", the
    groups the Routines tab had, and "Done and ended" folded inside it. Opening
-   it reads the routines again.
+   it reads the routines again; whether it is open is kept in a provider, so a
+   change of day or a reload does not fold it. It shows in every state of the
+   day, a failed or loading one included: routines are a separate endpoint
+   and may answer when the agenda does not.
+5. **The Agenda and the section tell each other of a change**, as two
+   counters in `core/` (ADR-ARCH-008): the section bumps one after a new,
+   paused or resumed routine or a return from its pages, and the Agenda reads
+   the day again; the Agenda bumps the other after a tick, an undo or a pull,
+   and the section reads the routines again.
 3. **A routine's pages are children of the Agenda branch**:
    `/agenda/routines/new`, `/agenda/routines/:id`,
    `/agenda/routines/:id/edit`, so the bar stays visible as before.
-   `/routines` redirects to `/agenda` and `/routines/:id` to
-   `/agenda/routines/:id`, for any old link.
+   `/routines` redirects to `/agenda`, `/routines/:id` to
+   `/agenda/routines/:id` and `/routines/:id/edit` to its form, for any old
+   link.
 4. **The features stay apart (ADR-ARCH-003).** `AgendaScreen` takes a
    `footer`, and the router passes `RoutinesSection` from the routines
    feature. The agenda feature imports nothing of routines.
@@ -46,8 +55,8 @@ routines dajmy sprawy do dolnej belki".
   icon fewer. Pins stay on the Record and Chat app bars.
 - Managing routines takes one more tap (open the section), and the section
   sits below the day, so on a long day it is reached by scrolling.
-- The Agenda's error state without a cached day shows no section; routines
-  read from the same server would fail too.
+- A matter's page is read again each time it is opened, as Sprawy are now
+  opened more often; a pin's page likewise (its state is disposed with it).
 - A test or a manual plan that names the Routines tab or `/routines` needs the
   new place; the plans of `docs/manual-tests/` written before this ADR keep
   the old wording as history.

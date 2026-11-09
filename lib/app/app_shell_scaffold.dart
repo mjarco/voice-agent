@@ -165,7 +165,11 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
           if (index == _shoppingTabIndex && index != currentIndex) {
             ref.read(shoppingListChangesProvider.notifier).state++;
           }
-          if (index == _mattersTabIndex && index != currentIndex) {
+          // The first visit builds the list, which reads it; only a return
+          // reads it again.
+          if (index == _mattersTabIndex &&
+              index != currentIndex &&
+              ref.exists(mattersNotifierProvider)) {
             unawaited(ref.read(mattersNotifierProvider.notifier).refresh());
           }
           widget.navigationShell.goBranch(

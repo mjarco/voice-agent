@@ -20,6 +20,10 @@ final routinesNotifierProvider =
   return RoutinesNotifier(repository);
 });
 
+/// Whether the routines' section of the Agenda is open; kept here, so a day
+/// changed or reloaded under it does not fold it (ADR-ARCH-012).
+final routinesSectionOpenProvider = StateProvider<bool>((ref) => false);
+
 /// Disposed with its page: a version opened again (a version link, after an
 /// edit) loads afresh instead of showing what it was before.
 final routineDetailNotifierProvider = StateNotifierProvider.autoDispose

@@ -102,6 +102,19 @@ Future<void> _scrollTo(WidgetTester tester, Finder finder) =>
 
 void main() {
   group('MatterDetailScreen', () {
+    testWidgets('a matter opened again is read again, once each time',
+        (tester) async {
+      final repo = await _pump(tester);
+      expect(repo.fetches, 1);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start'));
+      await tester.pumpAndSettle();
+
+      expect(repo.fetches, 2);
+    });
+
     testWidgets('shows the state, the timeline and the links',
         (tester) async {
       await _pump(tester);

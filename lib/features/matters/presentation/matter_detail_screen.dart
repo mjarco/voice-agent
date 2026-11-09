@@ -28,6 +28,19 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
   MatterDetailNotifier get _notifier =>
       ref.read(matterDetailNotifierProvider(widget.matterId).notifier);
 
+  /// The notifier outlives the page (an entry's undo sends its delete after
+  /// the page may be gone), so a matter opened again is read again here: the
+  /// chat may have changed it meanwhile.
+  @override
+  void initState() {
+    super.initState();
+    // Built for the first time, the notifier reads the matter itself.
+    if (!ref.exists(matterDetailNotifierProvider(widget.matterId))) return;
+    Future.microtask(() {
+      if (mounted) _notifier.refresh();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(matterDetailNotifierProvider(widget.matterId));

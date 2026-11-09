@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/providers/routine_changes_provider.dart';
 import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
 import 'package:voice_agent/features/routines/presentation/routines_section.dart';
@@ -95,6 +96,50 @@ void main() {
       await _pumpScreen(tester, repo);
 
       expect(find.text('No routines or tasks yet'), findsOneWidget);
+    });
+
+    testWidgets('a tick in the Agenda reads the routines again',
+        (tester) async {
+      await _pumpScreen(tester, repo);
+      final reads = repo.fetchCount;
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(RoutinesSection)));
+
+      container.read(agendaTickedProvider.notifier).state++;
+      await tester.pumpAndSettle();
+
+      expect(repo.fetchCount, reads + 1);
+    });
+
+    testWidgets('pausing tells the Agenda', (tester) async {
+      repo.routines = [sampleRoutine(id: 'r1')];
+      await _pumpScreen(tester, repo);
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(RoutinesSection)));
+
+      await tester.tap(find.byKey(const Key('routine-pause-r1')));
+      await tester.pumpAndSettle();
+
+      expect(container.read(routinesEditedProvider), 1);
+    });
+
+    testWidgets('stays open when it is built again', (tester) async {
+      repo.routines = [sampleRoutine(id: 'r1', name: 'Trening')];
+      await _pumpScreen(tester, repo);
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(RoutinesSection)));
+      expect(container.read(routinesSectionOpenProvider), isTrue);
+
+      // A new section in its place, as after a day with other rows.
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(body: Material(child: RoutinesSection(key: ValueKey('again')))),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Trening'), findsOneWidget);
     });
 
     testWidgets('a recurring card shows the schedule in words',

@@ -9,6 +9,7 @@ import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/providers/routine_changes_provider.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
 import 'package:voice_agent/core/notifications/notification_providers.dart';
@@ -42,8 +43,17 @@ class _StubRepository implements AgendaRepository {
 
   _StubRepository({this.response});
 
+  int fetches = 0;
+  AgendaException? fetchError;
+
   @override
-  Future<AgendaResponse> fetchAgenda(String date) async =>
+  Future<AgendaResponse> fetchAgenda(String date) async {
+    fetches++;
+    if (fetchError != null) throw fetchError!;
+    return _answer(date);
+  }
+
+  AgendaResponse _answer(String date) =>
       response ??
       AgendaResponse(
         date: date,
@@ -92,12 +102,16 @@ class _StubRepository implements AgendaRepository {
 Future<void> _pumpScreen(
   WidgetTester tester, {
   _StubRepository? repository,
+  Widget? footer,
 }) async {
   final repo = repository ?? _StubRepository();
   final router = GoRouter(
     initialLocation: '/',
     routes: [
-      GoRoute(path: '/', builder: (context, state) => const AgendaScreen()),
+      GoRoute(
+        path: '/',
+        builder: (context, state) => AgendaScreen(footer: footer),
+      ),
       GoRoute(
         path: '/settings',
         builder: (context, state) => const Scaffold(body: Text('Settings')),
@@ -372,6 +386,44 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.resolved, ['rtn-task null skipped']);
+    });
+
+    testWidgets('a failed day with nothing cached still shows the footer',
+        (tester) async {
+      final repo = _StubRepository()
+        ..fetchError = AgendaException('agenda down');
+      await _pumpScreen(tester, repository: repo, footer: const Text('Footer'));
+
+      expect(find.text('Footer'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+    });
+
+    testWidgets('a change of routines elsewhere reads the day again',
+        (tester) async {
+      final repo = _StubRepository(response: routineAgenda([waiting]));
+      await _pumpScreen(tester, repository: repo);
+      final before = repo.fetches;
+
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(AgendaScreen)));
+      container.read(routinesEditedProvider.notifier).state++;
+      await tester.pumpAndSettle();
+
+      expect(repo.fetches, before + 1);
+    });
+
+    testWidgets('a tick tells the routines\' section', (tester) async {
+      final repo = _StubRepository(response: routineAgenda([waiting]));
+      await _pumpScreen(tester, repository: repo);
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(AgendaScreen)));
+
+      await tester.tap(find.text('Invoice'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-complete-rtn-inv')));
+      await tester.pumpAndSettle();
+
+      expect(container.read(agendaTickedProvider), 1);
     });
 
     testWidgets('every button has a label a screen reader can read',
