@@ -13,6 +13,8 @@
          apps under Play's policy (P040 §Permission Flow). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- An arrival wakes the G2 glasses through glass-native (voice-agent#394, GlassesWake). -->
+    <uses-permission android:name="casa.jarco.glassnative.permission.SHOW"/>
     <!-- The location log (ADR-PLATFORM-009). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -123,6 +125,8 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- glass-native must be visible for the glasses' wake to reach it (Android 11+). -->
+        <package android:name="casa.jarco.glassnative"/>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
