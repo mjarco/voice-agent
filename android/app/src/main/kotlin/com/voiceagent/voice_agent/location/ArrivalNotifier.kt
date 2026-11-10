@@ -52,6 +52,8 @@ object ArrivalNotifier {
         } catch (failure: Exception) {
             "post_failed: ${failure.javaClass.simpleName}"
         }
+        // The glasses too, whatever the phone's notification settings (voice-agent#394).
+        GlassesWake.send(context, trigger)
         val fired = JSONObject()
             .put("trigger", trigger.id)
             .put("v", trigger.version)
