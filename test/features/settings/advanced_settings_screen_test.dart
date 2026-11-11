@@ -165,9 +165,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Settings is in the app menu.
-      await tester.tap(find.byKey(const Key('app-menu')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('app-menu-settings')));
+      await tester.tap(find.byKey(const Key('app-settings')));
       await tester.pumpAndSettle();
 
       // Scroll until the tile is visible in the settings ListView

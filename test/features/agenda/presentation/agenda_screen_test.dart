@@ -182,9 +182,7 @@ void main() {
     testWidgets('the app menu opens settings', (tester) async {
       await _pumpScreen(tester);
 
-      await tester.tap(find.byKey(const Key('app-menu')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('app-menu-settings')));
+      await tester.tap(find.byKey(const Key('app-settings')));
       await tester.pumpAndSettle();
 
       expect(find.text('Settings'), findsOneWidget);

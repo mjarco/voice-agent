@@ -16,7 +16,7 @@ import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
-import 'package:voice_agent/core/widgets/app_menu_button.dart';
+import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
@@ -322,7 +322,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
             tooltip: 'History',
             onPressed: () => context.push('/record/history'),
           ),
-          const AppMenuButton(),
+          const AppBarActions(),
         ],
       ),
       body: Column(

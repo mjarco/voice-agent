@@ -156,6 +156,8 @@ void main() {
         find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.add)),
         findsNothing,
       );
+      expect(find.byKey(const Key('app-pins')), findsOneWidget);
+      expect(find.byKey(const Key('app-settings')), findsOneWidget);
       expect(find.byKey(const Key('app-menu')), findsOneWidget);
     });
 
@@ -271,9 +273,7 @@ void main() {
     testWidgets('the app menu opens settings', (tester) async {
       await _pumpScreen(tester);
 
-      await tester.tap(find.byKey(const Key('app-menu')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('app-menu-settings')));
+      await tester.tap(find.byKey(const Key('app-settings')));
       await tester.pumpAndSettle();
 
       expect(find.text('Settings'), findsOneWidget);

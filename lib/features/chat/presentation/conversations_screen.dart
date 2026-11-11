@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
-import 'package:voice_agent/core/widgets/app_menu_button.dart';
+import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
 
@@ -17,7 +17,7 @@ class ConversationsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Chat'),
-        actions: const [AppMenuButton()],
+        actions: const [AppBarActions()],
       ),
       // A new conversation from a floating "+", as in Sprawy.
       floatingActionButton: FloatingActionButton(

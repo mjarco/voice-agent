@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/providers/shopping_list_changes_provider.dart';
-import 'package:voice_agent/core/widgets/app_menu_button.dart';
+import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/core/widgets/shopping_proposal_card.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_models.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_state.dart';
@@ -163,7 +163,7 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Shopping'),
-        actions: const [AppMenuButton()],
+        actions: const [AppBarActions()],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
