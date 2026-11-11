@@ -31,16 +31,23 @@ Two facts shape the design:
 2. **ENTER transitions only**, for `still`, `walking`, `running`, `on_bicycle` and `in_vehicle`:
    entering one is leaving the previous. `MotionTransitions` registers them on each `reconcile` in
    motion mode (assumed lost after a reboot or an update, like the location request) and removes them
-   in every other mode and when the log is off. `MotionReceiver` gets them.
+   in every other mode and when the log is off. The watch renews it on each run in motion mode, since
+   Play services can drop a registration silently (ADR-PLATFORM-012); a return to the app renews it when
+   the permission changed on the settings page. `MotionReceiver` gets them.
 3. **A start of motion switches at once.** The interval by activity: a vehicle 10 s, a bicycle 15 s,
    walking or running 30 s. Another motion with another interval restarts the service with it. The
    service is started from the transition's broadcast, inside the exemption. If the start is refused,
-   the log writes `subscribe_failed` and subscribes in the background, so it keeps some readings.
+   or the service cannot hold itself in the foreground, the log writes `subscribe_failed`, ends the
+   frequent state and subscribes in the background, so it keeps some readings and the next start of
+   motion tries again.
 4. **`still` switches back after 3 minutes** without a new motion (`Motion.SETTLE_MS`), because traffic
-   lights and jams report `still` and then a vehicle again. No timer: the check runs on each frequent
-   reading and in the 30-minute watch of ADR-PLATFORM-012, which writes `motion_settled`.
-5. **The motion state starts empty** after a reboot, an update, a restart after a stop and a change
-   of mode: a motion from before says nothing of now. Motion mode starts in the background and waits
+   lights and jams report `still` and then a vehicle again. **A stop the API missed switches back
+   too:** frequent readings end when the phone has not moved 100 m for 10 minutes, or no reading came
+   for 10 minutes since they started (`Motion.STATIONARY_MS`, an anchor moved by each reading further
+   than 100 m). No timer: the checks run on each frequent reading and in the 30-minute watch of
+   ADR-PLATFORM-012, which writes `motion_settled` (detail `still since …` or `stationary since …`).
+5. **The motion state starts empty** after a reboot, an update, a restart after a stop, a change
+   of mode and the log's switch: a motion from before says nothing of now. Motion mode starts in the background and waits
    for a transition; the API promises no event for the current activity.
 6. **Readings keep the contract.** A reading's `requested_mode` is the mode in effect (`foreground`
    while moving, `background` otherwise) and `requested_interval_s` the interval in effect. Each
@@ -57,6 +64,10 @@ Two facts shape the design:
   device"): typically a minute or two of a drive in background readings. A stop costs three minutes of
   frequent readings, more when no reading comes (then up to the watch's next run, 30 minutes or
   longer under Doze).
+- A long jam (no 100 m in 10 minutes) ends the frequent readings until the next transition: a car
+  still in a jam sends none, so the rest of that drive is read in the background.
+- An older build installed over this one would read the stored mode `motion` and send it as
+  `requested_mode`, which personal-agent refuses; switch to another mode before a downgrade.
 - A wrong kind of motion (a tram as `still`, slow cycling as walking) changes only the interval or
   delays the switch; it does not lose the background readings.
 - The 30-minute stale watch of ADR-PLATFORM-012 covers motion mode while its readings are in the

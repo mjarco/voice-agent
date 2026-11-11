@@ -37,11 +37,13 @@ class MotionReceiver : BroadcastReceiver() {
                     "activity",
                     JSONObject().put("activity", activity).put("at", Instant.ofEpochMilli(atMs).toString()),
                 )
-                state = Motion.onTransition(state, activity, atMs)
+                state = Motion.onTransition(state, activity, atMs, nowMs)
             }
+            // A late batch can end in a `still` already settled: no start for nothing (deep review of D1, L1).
+            if (Motion.settleReason(state, nowMs) == Motion.SETTLED_STILL) state = state.copy(frequent = false)
             config.motion = state
-            // A start of motion, or another motion with another interval.
-            if (state.frequent && (!before.frequent || state.intervalS != before.intervalS)) {
+            // A start or an end of motion, or another motion with another interval.
+            if (state.frequent != before.frequent || (state.frequent && state.intervalS != before.intervalS)) {
                 LocationPipeline.reconcile(appContext, "motion: ${state.activity}", renewTransitions = false)
             }
         }

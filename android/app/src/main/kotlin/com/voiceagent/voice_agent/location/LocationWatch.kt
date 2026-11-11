@@ -24,6 +24,7 @@ object LocationWatch {
     const val RETRY_AFTER_MS = 2 * 60 * 60 * 1000L
 
     const val REASON = "stale_readings"
+    const val REASON_MOTION = "watch"
     private const val WORK = "location-log-watch"
     private const val PERIOD_MINUTES = 30L
 
@@ -44,8 +45,12 @@ object LocationWatch {
     fun check(context: Context, nowMs: Long = System.currentTimeMillis()) {
         val config = LocationConfig(context)
         if (!config.enabled) return
-        // Motion mode: a `still` that no frequent reading has settled yet (ADR-PLATFORM-014).
-        LocationPipeline.settleIfStill(context, config, nowMs)
+        if (config.mode == LocationConfig.MODE_MOTION) {
+            // The registration may go silently, like the location request (deep review of D1, M1).
+            MotionTransitions.subscribe(context, REASON_MOTION)
+            // A `still` or a stop that no frequent reading has settled yet (ADR-PLATFORM-014).
+            LocationPipeline.settleIfStill(context, config, nowMs)
+        }
         // Foreground mode keeps its own service, which a start from a worker
         // could tear down (deep review of D1); the watch is for background readings.
         if (config.effectiveMode != LocationConfig.MODE_BACKGROUND) return

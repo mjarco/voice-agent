@@ -59,6 +59,8 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 val enabled = call.argument<Boolean>("enabled") == true
                 if (enabled != config.enabled) {
                     config.enabled = enabled
+                    // A motion from before the pause says nothing of now (deep review of D1, H2).
+                    config.motion = Motion.State()
                     LocationPipeline.recordStatus(context, if (enabled) "start" else "stop", "switch in Settings")
                     LocationPipeline.reconcile(context, "switch")
                 }
@@ -110,6 +112,12 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
             // A return to the app: "always" may have been granted on the settings
             // page, and the triggers may be due (at most once per 5 minutes).
             "appResumed" -> {
+                // "Physical activity" may have been granted on the settings page (deep review of D1, M2).
+                if (config.enabled && config.mode == LocationConfig.MODE_MOTION &&
+                    config.lastMotionPermission != MotionTransitions.permissionGranted(context)
+                ) {
+                    LocationPipeline.reconcile(context, "motion_permission")
+                }
                 GeofenceRegistry.permissionMayHaveChanged(context)
                 TriggerPuller.appResumed(context)
             }

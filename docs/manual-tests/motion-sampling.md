@@ -26,6 +26,7 @@ Status legend: as in [`p040-agenda-notifications.md`](p040-agenda-notifications.
 | T5 | A drive switches to 10 s; a stop at lights does not switch back | pending |
 | T6 | Standing 3 minutes switches back to the background | pending |
 | T7 | After a reboot the mode starts in the background and registers again | pending |
+| T8 | A stop the API missed ends the frequent readings after 10 minutes | pending |
 
 ## Setup
 
@@ -149,8 +150,28 @@ until the next motion.
 
 **On failure:** `LocationBootReceiver` (motion state reset).
 
+### T8. A stop the API missed
+
+**Status:** pending
+
+**Do:** after a drive, leave the phone in the parked car or on a desk without moving it; read the
+log 15 minutes later.
+
+**Why:** item 4 (the stationary settle).
+
+**Expected:** either `motion_settled` `still since …` about 3 minutes after an `activity` `still`, or,
+with no `still` row, `motion_settled` `stationary since …` about 10 minutes after the last reading
+more than 100 m away.
+
+**On failure:** `Motion.onReading`, `LocationPipeline.recordReadings` (the anchor).
+
+## Before a downgrade
+
+Switch the mode to "Tylko w tle" before installing an older build over this one: an older build
+would send `requested_mode` `motion`, which personal-agent refuses.
+
 ## When this plan is done
 
-Must-pass: T1, T3, T4, T6, T7. T2 and T5 are must-pass for the logic; the API's delays and
+Must-pass: T1, T3, T4, T6, T7, T8. T2 and T5 are must-pass for the logic; the API's delays and
 classification in T4–T5 are recorded, not judged (a slow or wrong classification is a limitation of
 the device's recognition, not a failure of the app).

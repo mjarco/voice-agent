@@ -59,12 +59,25 @@ class LocationConfig(context: Context) {
             activity = prefs.getString("motion_activity", null),
             atMs = prefs.getLong("motion_at", 0),
             intervalS = prefs.getInt("motion_interval_s", BACKGROUND_INTERVAL_S),
+            anchorLat = if (prefs.contains("motion_anchor_lat")) Double.fromBits(prefs.getLong("motion_anchor_lat", 0)) else null,
+            anchorLon = if (prefs.contains("motion_anchor_lon")) Double.fromBits(prefs.getLong("motion_anchor_lon", 0)) else null,
+            anchorAtMs = prefs.getLong("motion_anchor_at", 0),
         )
         set(value) = prefs.edit()
             .putBoolean("motion_frequent", value.frequent)
             .putString("motion_activity", value.activity)
             .putLong("motion_at", value.atMs)
             .putInt("motion_interval_s", value.intervalS)
+            .putLong("motion_anchor_at", value.anchorAtMs)
+            .apply {
+                if (value.anchorLat != null && value.anchorLon != null) {
+                    putLong("motion_anchor_lat", value.anchorLat.toBits())
+                    putLong("motion_anchor_lon", value.anchorLon.toBits())
+                } else {
+                    remove("motion_anchor_lat")
+                    remove("motion_anchor_lon")
+                }
+            }
             .apply()
 
     /** The activity permission as last written to the log, so a change is written once. */

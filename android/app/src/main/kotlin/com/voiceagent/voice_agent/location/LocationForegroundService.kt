@@ -58,6 +58,8 @@ class LocationForegroundService : Service() {
             val appContext = applicationContext
             LocationPipeline.write(appContext) {
                 LocationPipeline.recordStatus(appContext, "subscribe_failed", failure.toString())
+                // Motion mode must not stay "frequent" with no subscription at all.
+                LocationPipeline.fallBackFromForeground(appContext, LocationConfig(appContext), "service")
             }
             stopSelf()
             return START_NOT_STICKY

@@ -117,6 +117,12 @@ object LocationPipeline {
             store.enqueue(payload)
             config.lastReadingAtMs = location.time
         }
+        // Motion mode: where the phone last moved, for the stationary settle.
+        if (config.mode == LocationConfig.MODE_MOTION && locations.isNotEmpty()) {
+            var motion = config.motion
+            for (location in locations) motion = Motion.onReading(motion, location.latitude, location.longitude, location.time)
+            config.motion = motion
+        }
     }
 
     /** Writes a status row for anything that changed since the last look. */
@@ -212,16 +218,29 @@ object LocationPipeline {
 
     /**
      * Motion mode: ends the frequent readings once `still` has lasted
-     * [Motion.SETTLE_MS]. Called on each frequent reading and by the watch, so
-     * no timer of its own is needed. Runs on the pipeline's thread.
+     * [Motion.SETTLE_MS], or the phone has not moved for [Motion.STATIONARY_MS].
+     * Called on each frequent reading and by the watch, so no timer of its own
+     * is needed. Runs on the pipeline's thread.
      */
     fun settleIfStill(context: Context, config: LocationConfig, nowMs: Long = System.currentTimeMillis()) {
         if (config.mode != LocationConfig.MODE_MOTION) return
         val motion = config.motion
-        if (!Motion.shouldSettle(motion, nowMs)) return
+        val reason = Motion.settleReason(motion, nowMs) ?: return
         config.motion = motion.copy(frequent = false)
-        recordStatus(context, "motion_settled", "still since ${Instant.ofEpochMilli(motion.atMs)}")
-        reconcile(context, "still", renewTransitions = false)
+        val since = if (reason == Motion.SETTLED_STILL) motion.atMs else motion.anchorAtMs
+        recordStatus(context, "motion_settled", "$reason since ${Instant.ofEpochMilli(since)}")
+        reconcile(context, reason, renewTransitions = false)
+    }
+
+    /**
+     * Motion mode: the foreground service could not start or hold itself
+     * (deep review of D1, H1 and M3). The log goes back to background readings
+     * and the next start of motion tries again.
+     */
+    fun fallBackFromForeground(context: Context, config: LocationConfig, reason: String) {
+        if (config.mode != LocationConfig.MODE_MOTION) return
+        if (config.motion.frequent) config.motion = config.motion.copy(frequent = false)
+        subscribeInBackground(context, config, "fallback, $reason")
     }
 
     fun unsubscribe(context: Context) {
@@ -236,7 +255,7 @@ object LocationPipeline {
         intent.cancel()
     }
 
-    private fun subscribeInBackground(context: Context, config: LocationConfig, reason: String) {
+    fun subscribeInBackground(context: Context, config: LocationConfig, reason: String) {
         context.stopService(Intent(context, LocationForegroundService::class.java))
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, config.intervalSeconds * 1000L)
             .setMinUpdateIntervalMillis(FASTEST_BACKGROUND_INTERVAL_MS)
@@ -266,7 +285,7 @@ object LocationPipeline {
             // both land here: the next app start tries again.
             recordStatus(context, "subscribe_failed", failure.toString())
             // Motion mode keeps the background readings rather than none.
-            if (config.mode == LocationConfig.MODE_MOTION) subscribeInBackground(context, config, "fallback, $reason")
+            fallBackFromForeground(context, config, reason)
         }
     }
 
