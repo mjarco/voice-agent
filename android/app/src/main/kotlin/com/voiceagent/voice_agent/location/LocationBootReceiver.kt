@@ -24,10 +24,11 @@ class LocationBootReceiver : BroadcastReceiver() {
             appContext,
             done = { GeofenceRegistry.reconcileLater(appContext, reason) { pending.finish() } },
         ) {
+            // Play services may drop the request about to be made (ADR-PLATFORM-013);
+            // scheduled first, so a failing reconcile cannot skip it.
+            if (reason == APP_UPDATED) LocationWatch.scheduleAfterUpdate(appContext)
             if (LocationConfig(appContext).enabled) LocationPipeline.recordStatus(appContext, reason)
             LocationPipeline.reconcile(appContext, reason)
-            // Play services may drop the request just made (ADR-PLATFORM-013).
-            if (reason == APP_UPDATED) LocationWatch.scheduleAfterUpdate(appContext)
         }
     }
 

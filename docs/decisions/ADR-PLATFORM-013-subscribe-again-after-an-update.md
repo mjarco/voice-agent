@@ -21,7 +21,8 @@ kept their request.
 1. **`MY_PACKAGE_REPLACED` also enqueues a one-time job, 60 seconds later**
    (`LocationAfterUpdateWorker`, unique work `location-log-after-update`, `REPLACE`, no constraint).
    It runs `LocationWatch.afterUpdate` on the pipeline's thread, which runs `reconcile` with the
-   reason `after_update`. That writes a `subscribed` row.
+   reason `after_update`. That writes a `subscribed` row. The receiver enqueues it before its own
+   `reconcile`, so a failure there cannot skip it.
 2. **Background mode only**, for the reason of ADR-PLATFORM-012 item 1: a start of the foreground
    service from a worker can be refused or stop the running service.
 3. **Once, unconditionally.** It does not check whether the request is still there: the app cannot
@@ -31,8 +32,12 @@ kept their request.
 
 ## Consequences
 
-- After an install the log should lose a minute or two of readings, not about an hour. The minute
-  is a margin chosen against one observed clearing (117 ms); a slower clearing falls to the watch.
+- After an install while the phone is in use (by hand, over adb) the log should lose a minute or two
+  of readings, not about an hour. The minute is a margin chosen against one observed clearing
+  (117 ms); a slower clearing falls to the watch.
+- An update in Doze (a Play auto-update at night) may see the job deferred to the next maintenance
+  window, no sooner than the watch.
+- Only the location request is taken out again, not the geofences: at the 1.29.1 install Play
+  services' geofencer kept its request for the app.
 - Every update writes one more `subscribed` row (`background, after_update`).
-- The job may be deferred like any job; after an install the phone is usually awake.
 - Foreground mode still waits for the next process start.
