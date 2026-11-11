@@ -97,7 +97,7 @@ List<Override> _baseOverrides() => [
 ];
 
 Future<void> _navigateToSettings(WidgetTester tester) async {
-  await tester.tap(find.byIcon(Icons.settings));
+  await tester.tap(find.byKey(const Key('app-settings')));
   await tester.pumpAndSettle();
 }
 

@@ -141,21 +141,24 @@ void main() {
       );
     });
 
-    testWidgets('renders add, pins, and settings icons', (tester) async {
+    testWidgets('renders the floating add and the app menu',
+        (tester) async {
       await _pumpScreen(tester);
 
       expect(
-        find.byKey(const Key('conversations-new-icon')),
+        find.descendant(
+          of: find.byType(FloatingActionButton),
+          matching: find.byIcon(Icons.add),
+        ),
         findsOneWidget,
       );
       expect(
-        find.byKey(const Key('conversations-pins-icon')),
-        findsOneWidget,
+        find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.add)),
+        findsNothing,
       );
-      expect(
-        find.byKey(const Key('conversations-settings-icon')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('app-pins')), findsOneWidget);
+      expect(find.byKey(const Key('app-settings')), findsOneWidget);
+      expect(find.byKey(const Key('app-places')), findsOneWidget);
     });
 
     testWidgets('every button has a label a screen reader can read',
@@ -174,10 +177,10 @@ void main() {
       expect(find.byKey(const Key('conversations-matters-icon')), findsNothing);
     });
 
-    testWidgets('add icon navigates to /chat/new', (tester) async {
+    testWidgets('the floating add navigates to /chat/new', (tester) async {
       await _pumpScreen(tester);
 
-      await tester.tap(find.byKey(const Key('conversations-new-icon')));
+      await tester.tap(find.byKey(const Key('conversations-new')));
       await tester.pumpAndSettle();
 
       expect(find.text('Thread new'), findsOneWidget);
@@ -214,6 +217,35 @@ void main() {
       expect(find.text('7 messages'), findsOneWidget);
     });
 
+    testWidgets('each conversation is its own card (va-polish)',
+        (tester) async {
+      final repo = _StubRepository(
+        conversations: [
+          _conv(id: 'conv-1', preview: 'Hello there'),
+          _conv(id: 'conv-2', preview: 'Second chat'),
+        ],
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      for (final text in ['Hello there', 'Second chat']) {
+        expect(
+          find.ancestor(of: find.text(text), matching: find.byType(Card)),
+          findsOneWidget,
+        );
+      }
+    });
+
+    test('conversationTimeLabel: hour today, day before, year before', () {
+      final now = DateTime(2026, 11, 11, 15, 0);
+      expect(conversationTimeLabel(DateTime(2026, 11, 11, 9, 5), now), '09:05');
+      expect(conversationTimeLabel(DateTime(2026, 11, 3, 9, 5), now), '03.11');
+      expect(
+        conversationTimeLabel(DateTime(2025, 12, 30, 9, 5), now),
+        '30.12.2025',
+      );
+    });
+
     testWidgets('conversation tile shows fallback preview when null',
         (tester) async {
       final repo = _StubRepository(
@@ -238,10 +270,10 @@ void main() {
       expect(find.text('Thread conv-42'), findsOneWidget);
     });
 
-    testWidgets('settings icon navigates to settings', (tester) async {
+    testWidgets('the Settings icon opens settings', (tester) async {
       await _pumpScreen(tester);
 
-      await tester.tap(find.byKey(const Key('conversations-settings-icon')));
+      await tester.tap(find.byKey(const Key('app-settings')));
       await tester.pumpAndSettle();
 
       expect(find.text('Settings'), findsOneWidget);

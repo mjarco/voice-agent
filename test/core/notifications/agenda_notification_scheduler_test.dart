@@ -106,114 +106,33 @@ void main() {
         overdue: overdue,
       );
 
-  group('summaries', () {
-    test('empty response → 4 summary slots scheduled for today', () async {
-      // 2026-05-17 08:00 Warsaw — all 4 slots still in future
+  group('no daily summaries (off-roadmap 2026-11-11-va-polish)', () {
+    test('an empty agenda schedules nothing', () async {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       await scheduler.reconcile(
         responseFor('2026-05-17'),
         sessionActive: false,
       );
-      expect(service.scheduleCount, 4);
+      expect(service.scheduleCount, 0);
+      expect(await service.currentlyScheduled(), isEmpty);
+    });
+
+    test('the summaries an older build queued are cancelled once', () async {
+      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
+      await scheduler.reconcile(
+        responseFor('2026-05-17'),
+        sessionActive: false,
+      );
+      expect(
+        service.calls.where((c) => c.startsWith('cancel(')).toList(),
+        ['cancel(1000)', 'cancel(1001)', 'cancel(1002)', 'cancel(1003)'],
+      );
+      service.calls.clear();
+      await scheduler.reconcile(
+        responseFor('2026-05-17'),
+        sessionActive: false,
+      );
       expect(service.cancelCount, 0);
-      // IDs 1000-1003
-      final snapshot = await service.currentlyScheduled();
-      expect(snapshot.keys, containsAll([1000, 1001, 1002, 1003]));
-    });
-
-    test('past slot is scheduled for tomorrow', () async {
-      // 13:00 — Morning (09:00) and Noon (12:00) are past
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 13, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17'),
-        sessionActive: false,
-      );
-      final snapshot = await service.currentlyScheduled();
-      final morning = snapshot[1000]!;
-      final noon = snapshot[1001]!;
-      final afternoon = snapshot[1002]!;
-      expect(morning.fireAt.day, 18); // tomorrow
-      expect(morning.fireAt.hour, 9);
-      expect(noon.fireAt.day, 18);
-      expect(noon.fireAt.hour, 12);
-      expect(afternoon.fireAt.day, 17); // still today
-      expect(afternoon.fireAt.hour, 15);
-    });
-
-    test('body: all-zero counts → "nothing scheduled today"', () async {
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17'),
-        sessionActive: false,
-      );
-      final snapshot = await service.currentlyScheduled();
-      expect(snapshot[1000]!.body, 'Morning: nothing scheduled today');
-    });
-
-    test('body: counts the routine rows, overdue among them', () async {
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17', routineItems: [
-          routine('r1', name: 'Walk'),
-          routine('r2', name: 'Call', kind: RoutineKind.oneOff),
-          routine('r3', name: 'Rent', overdue: true),
-        ]),
-        sessionActive: false,
-      );
-      final snapshot = await service.currentlyScheduled();
-      expect(snapshot[1000]!.body, 'Morning: 3 open, 1 overdue');
-    });
-
-    test('body: no overdue term without an overdue row', () async {
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17', routineItems: [
-          routine('r1', name: 'Walk', startTime: null),
-          routine('r2', name: 'Call', kind: RoutineKind.oneOff),
-        ]),
-        sessionActive: false,
-      );
-      final snapshot = await service.currentlyScheduled();
-      expect(snapshot[1000]!.body, 'Morning: 2 open');
-    });
-
-    test('slot labels are Morning/Noon/Afternoon/Evening', () async {
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17'),
-        sessionActive: false,
-      );
-      final snapshot = await service.currentlyScheduled();
-      expect(snapshot[1000]!.body, startsWith('Morning:'));
-      expect(snapshot[1001]!.body, startsWith('Noon:'));
-      expect(snapshot[1002]!.body, startsWith('Afternoon:'));
-      expect(snapshot[1003]!.body, startsWith('Evening:'));
-    });
-
-    test('payload is /agenda for all summaries', () async {
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17'),
-        sessionActive: false,
-      );
-      final snapshot = await service.currentlyScheduled();
-      for (final id in [1000, 1001, 1002, 1003]) {
-        expect(snapshot[id]!.payload, '/agenda');
-      }
-    });
-
-    test('summaries fire in Warsaw local time, not UTC', () async {
-      // 2026-05-17 08:00 local Warsaw is 06:00 UTC (summer time, CEST = UTC+2).
-      // Verify Morning summary fires at 09:00 *Warsaw*, not 09:00 UTC.
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      await scheduler.reconcile(
-        responseFor('2026-05-17'),
-        sessionActive: false,
-      );
-      final snapshot = await service.currentlyScheduled();
-      final morning = snapshot[1000]!;
-      expect(morning.fireAt.location.name, 'Europe/Warsaw');
-      expect(morning.fireAt.hour, 9);
     });
   });
 
@@ -298,8 +217,7 @@ void main() {
   });
 
   group('session gating', () {
-    test('sessionActive=true → summaries scheduled, occurrences skipped',
-        () async {
+    test('sessionActive=true → occurrences skipped', () async {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       await scheduler.reconcile(
         responseFor('2026-05-17', routineItems: [
@@ -309,11 +227,7 @@ void main() {
         sessionActive: true,
       );
       final snapshot = await service.currentlyScheduled();
-      expect(
-        snapshot.keys.where((id) => id < 2000000).toSet(),
-        {1000, 1001, 1002, 1003},
-      );
-      expect(snapshot.keys.where((id) => id >= 3000000), isEmpty);
+      expect(snapshot, isEmpty);
     });
 
     test('session edge true→false: occurrences re-added on next reconcile',
@@ -329,8 +243,7 @@ void main() {
       expect(service.cancelCount, 0);
     });
 
-    test('session edge false→true: occurrences canceled, summaries kept',
-        () async {
+    test('session edge false→true: occurrences canceled', () async {
       final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
       final response = responseFor('2026-05-17', routineItems: [
         routine('r1', name: 'Suppress me', startTime: '14:30'),
@@ -341,9 +254,7 @@ void main() {
       expect(service.cancelCount, 1);
       expect(service.scheduleCount, 0);
       final snapshot = await service.currentlyScheduled();
-      expect(snapshot.keys.where((id) => id >= 3000000), isEmpty);
-      // summaries still present
-      expect(snapshot.keys, containsAll([1000, 1001, 1002, 1003]));
+      expect(snapshot, isEmpty);
     });
   });
 
@@ -377,34 +288,8 @@ void main() {
         sessionActive: false,
       );
       expect(service.cancelCount, 1);
-      // The summaries count the rows, so their four bodies change too;
-      // the kept reminder is not rescheduled.
-      expect(service.scheduleCount, 4);
-    });
-
-    test('body drift (count change) triggers cancel+reschedule for summary',
-        () async {
-      final scheduler = buildScheduler(now: DateTime(2026, 5, 17, 8, 0));
-      // First call: 1 routine row, no hour (no reminder)
-      await scheduler.reconcile(
-        responseFor('2026-05-17', routineItems: [
-          routine('r1', name: 'A', startTime: null),
-        ]),
-        sessionActive: false,
-      );
-      service.calls.clear();
-      // Second call: 2 rows — summary body changes from "1 open" to "2 open"
-      await scheduler.reconcile(
-        responseFor('2026-05-17', routineItems: [
-          routine('r1', name: 'A', startTime: null),
-          routine('r2', name: 'B', startTime: null),
-        ]),
-        sessionActive: false,
-      );
-      // All 4 summary bodies change. Diff should re-schedule all 4 (plugin's
-      // schedule replaces on existing id, so cancel is not strictly needed,
-      // but reschedule must happen for each changed body).
-      expect(service.scheduleCount, 4);
+      // The kept reminder is not rescheduled.
+      expect(service.scheduleCount, 0);
     });
   });
 

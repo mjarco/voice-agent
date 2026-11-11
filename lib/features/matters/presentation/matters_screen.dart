@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/matter.dart';
+import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/features/matters/domain/matters_state.dart';
 import 'package:voice_agent/features/matters/presentation/matter_dialogs.dart';
 import 'package:voice_agent/features/matters/presentation/matters_notifier.dart';
@@ -28,8 +29,13 @@ class MattersScreen extends ConsumerWidget {
     final notifier = ref.read(mattersNotifierProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sprawy')),
+      appBar: AppBar(
+        title: const Text('Sprawy'),
+        actions: const [AppBarActions()],
+      ),
       floatingActionButton: FloatingActionButton(
+        // Own tag: several tabs keep a "+" mounted at once.
+        heroTag: 'matters-new',
         key: const Key('matters-add'),
         tooltip: 'Nowa sprawa',
         onPressed: () async {
@@ -67,7 +73,7 @@ class MattersScreen extends ConsumerWidget {
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         // Room for the "+" button, so it covers no row.
-        padding: const EdgeInsets.only(bottom: 88),
+        padding: const EdgeInsets.only(top: 4, bottom: 88),
         children: [
           if (proposed.isEmpty && matters.isEmpty) const _EmptyState(),
           if (proposed.isNotEmpty) ...[
@@ -200,22 +206,27 @@ class _MatterTile extends StatelessWidget {
     final detail = matter.nextStep.isNotEmpty
         ? 'Następny krok: ${matter.nextStep}'
         : matter.lastEntry;
-    return ListTile(
-      title: Text(matter.title),
-      subtitle: Text(
-        [matter.status.label, if (detail.isNotEmpty) detail].join(' · '),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
+    // A card per matter, as the proposed ones have, so the rows read apart.
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        title: Text(matter.title),
+        subtitle: Text(
+          [matter.status.label, if (detail.isNotEmpty) detail].join(' · '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: matter.standingStill
+            ? Text(
+                standingStillLabel(matter.daysStill(now)),
+                key: Key('matter-still-${matter.id}'),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.error),
+              )
+            : null,
+        onTap: onTap,
       ),
-      trailing: matter.standingStill
-          ? Text(
-              standingStillLabel(matter.daysStill(now)),
-              key: Key('matter-still-${matter.id}'),
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
-            )
-          : null,
-      onTap: onTap,
     );
   }
 }

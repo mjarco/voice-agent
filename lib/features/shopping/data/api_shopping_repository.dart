@@ -51,10 +51,13 @@ class ApiShoppingRepository implements ShoppingRepository {
   }
 
   @override
-  Future<void> setTypes(String id, List<String> storeTypes) async {
+  Future<void> edit(String id, {String? text, List<String>? storeTypes}) async {
     _body(await _apiClient.patch(
       '$_items/$id',
-      data: {'store_types': storeTypes},
+      data: {
+        'text': ?text,
+        'store_types': ?storeTypes,
+      },
     ));
   }
 
@@ -79,7 +82,10 @@ class ApiShoppingRepository implements ShoppingRepository {
   String? _body(ApiResult result) {
     return switch (result) {
       ApiSuccess(body: final body) => body,
-      ApiPermanentFailure(statusCode: 409) => throw ShoppingConflictException(),
+      ApiPermanentFailure(statusCode: 409, body: final body) =>
+        throw _errorCode(body) == 'text_taken'
+            ? ShoppingConflictException('Already on the list')
+            : ShoppingConflictException(),
       ApiPermanentFailure(message: final msg, statusCode: final code) =>
         throw ShoppingGeneralException('Server error $code: $msg'),
       ApiTransientFailure(reason: final reason) =>
@@ -87,6 +93,19 @@ class ApiShoppingRepository implements ShoppingRepository {
       ApiNotConfigured() =>
         throw ShoppingGeneralException('API not configured'),
     };
+  }
+
+  /// The `error.code` of an error envelope, null when there is none.
+  static String? _errorCode(String? body) {
+    if (body == null) return null;
+    try {
+      final json = jsonDecode(body);
+      if (json is! Map<String, dynamic>) return null;
+      final error = json['error'];
+      return error is Map<String, dynamic> ? error['code'] as String? : null;
+    } on FormatException {
+      return null;
+    }
   }
 
   dynamic _data(String? body) {

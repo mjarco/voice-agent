@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/models/agenda.dart';
+import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
 import 'package:voice_agent/core/observability/telemetry.dart';
@@ -68,6 +69,23 @@ void main() {
         routineItems: const [],
       );
 
+  AgendaResponse oneRoutineResponse() => AgendaResponse(
+        date: '2026-05-18',
+        granularity: 'day',
+        from: '2026-05-18T00:00:00Z',
+        to: '2026-05-18T23:59:59Z',
+        routineItems: const [
+          AgendaRoutineItem(
+            routineId: 'r1',
+            routineName: 'Walk',
+            kind: RoutineKind.recurring,
+            scheduledFor: '2026-05-18',
+            startTime: '14:30',
+            overdue: false,
+          ),
+        ],
+      );
+
   test('reconcile opens agenda.reconcile span with response context attrs',
       () async {
     await scheduler.reconcile(emptyResponse(), sessionActive: false);
@@ -84,29 +102,29 @@ void main() {
 
   test('reconcile emits agenda.reconcile.diff event with diff sizes',
       () async {
-    await scheduler.reconcile(emptyResponse(), sessionActive: false);
+    await scheduler.reconcile(oneRoutineResponse(), sessionActive: false);
 
     final span = recording.spans.single;
     final diffEvents =
         span.events.where((e) => e.name == 'agenda.reconcile.diff');
     expect(diffEvents, hasLength(1));
     final diff = diffEvents.single;
-    // Empty response → 4 summaries scheduled, 0 to cancel.
-    expect(diff.attrs['desired'], 4);
+    // One future routine → one reminder scheduled, 0 to cancel.
+    expect(diff.attrs['desired'], 1);
     expect(diff.attrs['current'], 0);
     expect(diff.attrs['to_cancel'], 0);
-    expect(diff.attrs['to_schedule'], 4);
+    expect(diff.attrs['to_schedule'], 1);
   });
 
   test(
       'reconcile increments agenda.notifications.scheduled counter on first run',
       () async {
-    await scheduler.reconcile(emptyResponse(), sessionActive: false);
+    await scheduler.reconcile(oneRoutineResponse(), sessionActive: false);
 
     final scheduled = recording.counters
         .where((c) => c.name == 'agenda.notifications.scheduled');
     expect(scheduled, hasLength(1));
-    expect(scheduled.single.delta, 4);
+    expect(scheduled.single.delta, 1);
 
     final cancelled = recording.counters
         .where((c) => c.name == 'agenda.notifications.cancelled');

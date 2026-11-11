@@ -138,13 +138,42 @@ void main() {
     expect(client.lastData, {'via': 'phone', 'store_type': 'diy'});
   });
 
-  test('setTypes patches the set', () async {
-    await repository.setTypes('i1', ['diy']);
+  test('edit patches only what changed', () async {
+    await repository.edit('i1', storeTypes: ['diy']);
 
     expect(client.lastMethod, 'PATCH');
+    expect(client.lastPath, '/shopping/items/i1');
     expect(client.lastData, {
       'store_types': ['diy'],
     });
+
+    await repository.edit('i1', text: 'kabel HDMI 2 m');
+    expect(client.lastData, {'text': 'kabel HDMI 2 m'});
+
+    await repository.edit('i1', text: 'kabel', storeTypes: ['diy']);
+    expect(client.lastData, {
+      'text': 'kabel',
+      'store_types': ['diy'],
+    });
+  });
+
+  test('409 text_taken says the text is already on the list', () async {
+    client.nextResult = const ApiPermanentFailure(
+      statusCode: 409,
+      message: 'another item to buy has this text',
+      body: '{"error":{"code":"text_taken","message":"x"}}',
+    );
+
+    expect(
+      () => repository.edit('i1', text: 'mleko'),
+      throwsA(
+        isA<ShoppingConflictException>().having(
+          (e) => e.message,
+          'message',
+          'Already on the list',
+        ),
+      ),
+    );
   });
 
   test('remove deletes the item', () async {

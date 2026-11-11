@@ -16,6 +16,7 @@ import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
+import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/domain/segment_job.dart';
@@ -316,27 +317,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
                   },
           ),
           IconButton(
-            key: const Key('record-places-button'),
-            icon: const Icon(Icons.place_outlined),
-            tooltip: 'Miejsca',
-            onPressed: () => context.push('/places'),
-          ),
-          IconButton(
-            key: const Key('record-pins-button'),
-            icon: const Icon(Icons.push_pin_outlined),
-            tooltip: 'Pins',
-            onPressed: () => context.push('/pins'),
-          ),
-          IconButton(
+            key: const Key('record-history-button'),
             icon: const Icon(Icons.history),
             tooltip: 'History',
             onPressed: () => context.push('/record/history'),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
-            onPressed: () => context.push('/settings'),
-          ),
+          const AppBarActions(),
         ],
       ),
       body: Column(

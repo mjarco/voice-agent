@@ -20,7 +20,7 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
         _configService = configService,
         _ref = ref,
         super(const AgendaInitial()) {
-    _selectedDate = DateTime.now();
+    _selectedDate = _today();
     _setupSessionListener();
     loadAgenda();
   }
@@ -35,6 +35,11 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
 
   String get _dateString =>
       '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+
+  static DateTime _today() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
 
   bool get isToday {
     final now = DateTime.now();
@@ -63,6 +68,10 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
   }
 
   Future<void> loadAgenda() async {
+    // Past days are not shown (off-roadmap 2026-11-11-va-polish, the owner:
+    // "Zablokujmy taki widok"); what is overdue shows on today. A screen
+    // left open overnight comes back to today here.
+    if (_selectedDate.isBefore(_today())) _selectedDate = _today();
     final cached = await _repository.getCachedAgenda(_dateString);
     state = AgendaLoading(cached: cached);
 
@@ -122,6 +131,7 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
     await loadAgenda();
   }
 
+  /// A day before today selects today (see [loadAgenda]).
   void selectDate(DateTime date) {
     _selectedDate = DateTime(date.year, date.month, date.day);
     loadAgenda();
@@ -129,10 +139,21 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
 
   void goToToday() => selectDate(DateTime.now());
 
-  void previousDay() =>
-      selectDate(_selectedDate.subtract(const Duration(days: 1)));
+  /// False on today: the agenda of past days is not shown.
+  bool get canGoBack => _selectedDate.isAfter(_today());
 
-  void nextDay() => selectDate(_selectedDate.add(const Duration(days: 1)));
+  /// Back one day, never before today.
+  void previousDay() {
+    if (!canGoBack) return;
+    selectDate(_dayAfter(_selectedDate, -1));
+  }
+
+  void nextDay() => selectDate(_dayAfter(_selectedDate, 1));
+
+  /// The calendar day [days] away; not a multiple of 24 h, which misses a day
+  /// or repeats one across a clock change.
+  static DateTime _dayAfter(DateTime day, int days) =>
+      DateTime(day.year, day.month, day.day + days);
 
   /// Ticks off the [item] (done or skipped) through resolve: a recurring
   /// routine on its day, a one-off on its due day. Returns null when it was

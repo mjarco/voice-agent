@@ -119,6 +119,9 @@ class _FakeNotificationService implements NotificationService {
   final Map<int, ScheduledNotification> _snapshot = {};
   bool permitted = true;
 
+  /// Every reconcile asks first, so this counts the reconciles.
+  int permissionChecks = 0;
+
   Map<int, ScheduledNotification> get snapshot => Map.unmodifiable(_snapshot);
 
   @override
@@ -126,7 +129,10 @@ class _FakeNotificationService implements NotificationService {
   @override
   Future<bool> requestPermission() async => permitted;
   @override
-  Future<bool> isPermitted() async => permitted;
+  Future<bool> isPermitted() async {
+    permissionChecks++;
+    return permitted;
+  }
   @override
   Future<void> schedule(ScheduledNotification n) async => _snapshot[n.id] = n;
   @override
@@ -225,24 +231,51 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       repo.fetchCount = 0;
-      notifier.selectDate(DateTime(2026, 4, 20));
+      notifier.selectDate(DateTime(2030, 4, 20));
       await Future<void>.delayed(Duration.zero);
 
-      expect(notifier.selectedDate, DateTime(2026, 4, 20));
+      expect(notifier.selectedDate, DateTime(2030, 4, 20));
       expect(repo.fetchCount, 1);
     });
 
-    test('previousDay moves back one day', () async {
+    test('a day before today selects today', () async {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      final before = notifier.selectedDate;
+      notifier.selectDate(DateTime(2025, 1, 1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.isToday, isTrue);
+    });
+
+    test('previousDay does nothing on today', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.canGoBack, isFalse);
+      repo.fetchCount = 0;
+      notifier.previousDay();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.isToday, isTrue);
+      expect(repo.fetchCount, 0);
+    });
+
+    test('previousDay moves back one day from a later day', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      final today = notifier.selectedDate;
+      notifier.nextDay();
+      notifier.nextDay();
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.canGoBack, isTrue);
       notifier.previousDay();
       await Future<void>.delayed(Duration.zero);
 
       expect(
         notifier.selectedDate,
-        DateTime(before.year, before.month, before.day - 1),
+        DateTime(today.year, today.month, today.day + 1),
       );
     });
 
@@ -264,7 +297,7 @@ void main() {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      notifier.selectDate(DateTime(2025, 1, 1));
+      notifier.selectDate(DateTime(2030, 1, 1));
       await Future<void>.delayed(Duration.zero);
 
       notifier.goToToday();
@@ -432,9 +465,8 @@ void main() {
       buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      // The pure scheduler always writes the 4 summary IDs at minimum.
-      expect(notifications.snapshot.keys, containsAll([1000, 1001, 1002, 1003]),
-          reason: 'reconciler should have scheduled the 4 daily summaries');
+      expect(notifications.permissionChecks, 1,
+          reason: 'the reconciler should have run once');
     });
 
     test('reconcile does NOT fire on error(cached)', () async {
@@ -448,7 +480,7 @@ void main() {
       buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      expect(notifications.snapshot, isEmpty,
+      expect(notifications.permissionChecks, 0,
           reason: 'stale cache must not drive OS notification scheduling');
     });
 
@@ -457,14 +489,14 @@ void main() {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      // Clear what initial today-load scheduled.
-      await notifications.cancelAll();
+      // Forget the initial today-load's reconcile.
+      notifications.permissionChecks = 0;
 
       // Navigate to a non-today date.
       notifier.selectDate(DateTime(2030, 1, 1));
       await Future<void>.delayed(Duration.zero);
 
-      expect(notifications.snapshot, isEmpty,
+      expect(notifications.permissionChecks, 0,
           reason: 'non-today responses are for browsing, not scheduling');
     });
 
@@ -508,7 +540,6 @@ void main() {
       repo.nextFetchResult = _responseWithItems();
       buildNotifier();
       await Future<void>.delayed(Duration.zero);
-      // Snapshot is now populated with summaries (and a routine reminder).
       repo.fetchCount = 0;
 
       container.read(sessionActiveProvider.notifier).state = true;

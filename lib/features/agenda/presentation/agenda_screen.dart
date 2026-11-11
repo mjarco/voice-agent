@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/providers/routine_changes_provider.dart';
+import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_state.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_notifier.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
@@ -29,21 +29,14 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Agenda'),
-        actions: [
-          IconButton(
-            key: const Key('agenda-settings-icon'),
-            icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
+        actions: const [AppBarActions()],
       ),
       body: Column(
         children: [
           _DateNavigationBar(
             date: notifier.selectedDate,
             isToday: notifier.isToday,
-            onPrevious: notifier.previousDay,
+            onPrevious: notifier.canGoBack ? notifier.previousDay : null,
             onNext: notifier.nextDay,
             onToday: notifier.goToToday,
           ),
@@ -309,7 +302,9 @@ class _DateNavigationBar extends StatelessWidget {
 
   final DateTime date;
   final bool isToday;
-  final VoidCallback onPrevious;
+
+  /// Null on today: past days are not shown.
+  final VoidCallback? onPrevious;
   final VoidCallback onNext;
   final VoidCallback onToday;
 

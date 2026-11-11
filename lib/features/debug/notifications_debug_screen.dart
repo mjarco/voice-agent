@@ -10,7 +10,7 @@ import 'package:voice_agent/core/notifications/notification_providers.dart';
 /// "fire in 2 s" action that cancels and re-schedules the entry with a
 /// near-instant fire time — useful for verifying tap → deep-link paths
 /// (T3, T4 in the P040 manual test plan) without waiting for the next
-/// 09/12/15/19 summary.
+/// routine reminder.
 ///
 /// Mounted only under `kDebugMode`. Guarded at route-definition time in
 /// `app/router.dart` so the screen is unreachable on release builds.

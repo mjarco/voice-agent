@@ -212,4 +212,86 @@ void main() {
     expect(repository.server['p1']!.latitude, 50);
     expect(repository.server['p1']!.accuracyM, isNull);
   });
+
+  group('the place you stand in (va-polish)', () {
+    Place place(String id, String name, double lat, double lon,
+            {List<String> tags = const []}) =>
+        Place(
+          id: id,
+          name: name,
+          latitude: lat,
+          longitude: lon,
+          accuracyM: 10,
+          radiusM: 150,
+          tags: tags,
+          storeTypes: const [],
+          createdAt: DateTime.utc(2026, 11, 1),
+          updatedAt: DateTime.utc(2026, 11, 1),
+        );
+
+    test('containing picks the nearest place whose radius holds the reading',
+        () {
+      // ~0.0009 deg of latitude is ~100 m.
+      final near = place('n', 'Near', 52.2501, 21.01);
+      final edge = place('e', 'Edge', 52.2512, 21.01);
+      final far = place('f', 'Far', 52.26, 21.01);
+      expect(Place.containing([far, edge, near], _reading)?.id, 'n');
+      expect(Place.containing([far, edge], _reading)?.id, 'e');
+      expect(Place.containing([far], _reading), isNull);
+      expect(near.distanceTo(52.25, 21.01), closeTo(11.1, 0.5));
+    });
+
+    testWidgets('inside a known place it shows it and adds a tag', (
+      tester,
+    ) async {
+      repository.server['n'] = place('n', 'Biedronka', 52.2501, 21.01,
+          tags: ['sklep']);
+      await pump(tester);
+
+      expect(find.byKey(const Key('places-here')), findsOneWidget);
+      expect(find.text('Jesteś w: Biedronka'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('places-here-add-tag')));
+      await tester.pumpAndSettle();
+      // A suggestion the place already has is not offered.
+      expect(find.widgetWithText(ActionChip, 'sklep'), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('places-here-tag')),
+        ' osiedle ',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('places-here-tag-save')));
+      await tester.pumpAndSettle();
+
+      expect(repository.server['n']!.tags, ['sklep', 'osiedle']);
+      expect(find.text('sklep, osiedle'), findsWidgets);
+    });
+
+    testWidgets('tags typed with commas split; a tag it has is not doubled', (
+      tester,
+    ) async {
+      repository.server['n'] = place('n', 'Biedronka', 52.2501, 21.01,
+          tags: ['sklep']);
+      await pump(tester);
+
+      await tester.tap(find.byKey(const Key('places-here-add-tag')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('places-here-tag')),
+        'Sklep, osiedle , park',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('places-here-tag-save')));
+      await tester.pumpAndSettle();
+
+      expect(repository.server['n']!.tags, ['sklep', 'osiedle', 'park']);
+    });
+
+    testWidgets('outside every place there is no card', (tester) async {
+      repository.server['f'] = place('f', 'Daleko', 52.26, 21.01);
+      await pump(tester);
+
+      expect(find.byKey(const Key('places-here')), findsNothing);
+    });
+  });
 }

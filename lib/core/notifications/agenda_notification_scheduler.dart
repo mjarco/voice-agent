@@ -31,13 +31,21 @@ class AgendaNotificationScheduler {
   /// (granted → denied edge triggers cancelAll once, per ADR-NOTIF-001).
   bool? _previouslyPermitted;
 
+  /// Whether this process already cancelled the [_retiredSummaryIds].
+  bool _retiredCancelled = false;
+
   static const String _deepLinkAgenda = '/agenda';
-  static const String _summaryTitle = 'Agenda';
+
+  /// The four daily summaries (9, 12, 15, 19) were removed for now on the
+  /// owner's word (off-roadmap 2026-11-11-va-polish). The snapshot is in
+  /// memory, so the ones an older build queued are cancelled by id once per
+  /// process; the ids stay reserved (ADR-NOTIF-001).
+  static const List<int> _retiredSummaryIds = [1000, 1001, 1002, 1003];
 
   /// Reconcile the OS notification queue against [response].
   ///
   /// [sessionActive] gates routine-occurrence reminders (suppressed while a
-  /// hands-free session is running). Summaries are scheduled regardless.
+  /// hands-free session is running).
   ///
   /// Emits `agenda.reconcile` span (dev-flavor telemetry per ADR-OBS-001)
   /// with events for permission short-circuit, revocation cancelAll, and
@@ -68,6 +76,13 @@ class AgendaNotificationScheduler {
         span.addEvent('agenda.reconcile.permission_denied');
         span.end(status: SpanStatus.ok);
         return;
+      }
+
+      if (!_retiredCancelled) {
+        for (final id in _retiredSummaryIds) {
+          await _service.cancel(id);
+        }
+        _retiredCancelled = true;
       }
 
       final now = tz.TZDateTime.from(_clock(), _location);
@@ -118,19 +133,6 @@ class AgendaNotificationScheduler {
   ) {
     final out = <ScheduledNotification>[];
 
-    // Four daily summaries — always scheduled, even during active session.
-    final counts = _SummaryCounts.from(response.routineItems);
-    for (final slot in _SummarySlot.values) {
-      final fireAt = _nextSlotFireTime(now, slot.hour);
-      out.add(ScheduledNotification(
-        id: slot.id,
-        title: _summaryTitle,
-        body: _summaryBody(slot.label, counts),
-        fireAt: fireAt,
-        payload: _deepLinkAgenda,
-      ));
-    }
-
     // Routine occurrences — gated by sessionActive.
     if (!sessionActive) {
       for (final r in response.routineItems) {
@@ -148,12 +150,6 @@ class AgendaNotificationScheduler {
       }
     }
     return out;
-  }
-
-  tz.TZDateTime _nextSlotFireTime(tz.TZDateTime now, int slotHour) {
-    final today = tz.TZDateTime(_location, now.year, now.month, now.day, slotHour);
-    if (today.isAfter(now)) return today;
-    return today.add(const Duration(days: 1));
   }
 
   tz.TZDateTime? _parseRoutineFireTime(String date, String hhmm) {
@@ -175,46 +171,6 @@ class AgendaNotificationScheduler {
       return null;
     }
     return tz.TZDateTime(_location, year, month, day, hour, minute);
-  }
-
-  String _summaryBody(String slotLabel, _SummaryCounts c) {
-    if (c.isEmpty) return '$slotLabel: nothing scheduled today';
-    final parts = ['${c.open} open'];
-    if (c.overdue > 0) parts.add('${c.overdue} overdue');
-    return '$slotLabel: ${parts.join(', ')}';
-  }
-}
-
-/// Fixed-time daily summary slots. IDs partitioned 1000–1003 per ADR-NOTIF-001.
-enum _SummarySlot {
-  morning(id: 1000, label: 'Morning', hour: 9),
-  noon(id: 1001, label: 'Noon', hour: 12),
-  afternoon(id: 1002, label: 'Afternoon', hour: 15),
-  evening(id: 1003, label: 'Evening', hour: 19);
-
-  const _SummarySlot({required this.id, required this.label, required this.hour});
-  final int id;
-  final String label;
-  final int hour;
-}
-
-class _SummaryCounts {
-  const _SummaryCounts({required this.open, required this.overdue});
-
-  final int open;
-  final int overdue;
-
-  bool get isEmpty => open == 0;
-
-  /// The agenda lists only what is still to do (ADR-CORE-116 of
-  /// personal-agent): a ticked-off routine leaves it, so there is no done
-  /// count. open = every routine row, overdue = the rows past their day or
-  /// window, counted among open.
-  factory _SummaryCounts.from(List<AgendaRoutineItem> items) {
-    return _SummaryCounts(
-      open: items.length,
-      overdue: items.where((i) => i.overdue).length,
-    );
   }
 }
 

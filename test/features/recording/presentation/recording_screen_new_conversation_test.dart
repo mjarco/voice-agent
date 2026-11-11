@@ -467,7 +467,7 @@ void main() {
   });
 
   group('Pins button (quick access from landing screen)', () {
-    testWidgets('exists in the Record AppBar', (tester) async {
+    testWidgets('is an icon in the Record AppBar', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: _baseOverrides(),
@@ -476,7 +476,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('record-pins-button')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byKey(const Key('app-pins')),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('tap navigates to the Pins screen', (tester) async {
@@ -491,7 +497,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('record-pins-button')));
+      await tester.tap(find.byKey(const Key('app-pins')));
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(AppBar, 'Pins'), findsOneWidget);
