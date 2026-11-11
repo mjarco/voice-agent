@@ -214,6 +214,35 @@ void main() {
       expect(find.text('7 messages'), findsOneWidget);
     });
 
+    testWidgets('each conversation is its own card (va-polish)',
+        (tester) async {
+      final repo = _StubRepository(
+        conversations: [
+          _conv(id: 'conv-1', preview: 'Hello there'),
+          _conv(id: 'conv-2', preview: 'Second chat'),
+        ],
+      );
+
+      await _pumpScreen(tester, repository: repo);
+
+      for (final text in ['Hello there', 'Second chat']) {
+        expect(
+          find.ancestor(of: find.text(text), matching: find.byType(Card)),
+          findsOneWidget,
+        );
+      }
+    });
+
+    test('conversationTimeLabel: hour today, day before, year before', () {
+      final now = DateTime(2026, 11, 11, 15, 0);
+      expect(conversationTimeLabel(DateTime(2026, 11, 11, 9, 5), now), '09:05');
+      expect(conversationTimeLabel(DateTime(2026, 11, 3, 9, 5), now), '03.11');
+      expect(
+        conversationTimeLabel(DateTime(2025, 12, 30, 9, 5), now),
+        '30.12.2025',
+      );
+    });
+
     testWidgets('conversation tile shows fallback preview when null',
         (tester) async {
       final repo = _StubRepository(

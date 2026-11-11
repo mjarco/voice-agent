@@ -67,7 +67,7 @@ class MattersScreen extends ConsumerWidget {
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         // Room for the "+" button, so it covers no row.
-        padding: const EdgeInsets.only(bottom: 88),
+        padding: const EdgeInsets.only(top: 4, bottom: 88),
         children: [
           if (proposed.isEmpty && matters.isEmpty) const _EmptyState(),
           if (proposed.isNotEmpty) ...[
@@ -200,22 +200,27 @@ class _MatterTile extends StatelessWidget {
     final detail = matter.nextStep.isNotEmpty
         ? 'Następny krok: ${matter.nextStep}'
         : matter.lastEntry;
-    return ListTile(
-      title: Text(matter.title),
-      subtitle: Text(
-        [matter.status.label, if (detail.isNotEmpty) detail].join(' · '),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
+    // A card per matter, as the proposed ones have, so the rows read apart.
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        title: Text(matter.title),
+        subtitle: Text(
+          [matter.status.label, if (detail.isNotEmpty) detail].join(' · '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: matter.standingStill
+            ? Text(
+                standingStillLabel(matter.daysStill(now)),
+                key: Key('matter-still-${matter.id}'),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.error),
+              )
+            : null,
+        onTap: onTap,
       ),
-      trailing: matter.standingStill
-          ? Text(
-              standingStillLabel(matter.daysStill(now)),
-              key: Key('matter-still-${matter.id}'),
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
-            )
-          : null,
-      onTap: onTap,
     );
   }
 }
