@@ -206,6 +206,29 @@ void main() {
     expect(repo.lastSetTypes, isNull, reason: 'the types did not change');
   });
 
+  testWidgets('an item without types may have its text corrected alone', (
+    tester,
+  ) async {
+    final repo = FakeShoppingRepository()
+      ..toBuy = [sampleItem(storeTypes: [], typesSource: null)];
+    await _pump(tester, repo);
+
+    await tester.tap(find.text('kabel HDMI'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('shopping-edit-text')),
+      'kabel HDMI 2 m',
+    );
+    await tester.pump();
+    final save = find.byKey(const Key('shopping-edit-save'));
+    expect(tester.widget<FilledButton>(save).onPressed, isNotNull);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(repo.lastEditText, 'kabel HDMI 2 m');
+    expect(repo.lastSetTypes, isNull);
+  });
+
   testWidgets('saving with nothing changed sends nothing', (tester) async {
     final repo = FakeShoppingRepository();
     await _pump(tester, repo);

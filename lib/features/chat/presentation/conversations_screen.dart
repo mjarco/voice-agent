@@ -21,6 +21,8 @@ class ConversationsScreen extends ConsumerWidget {
       ),
       // A new conversation from a floating "+", as in Sprawy.
       floatingActionButton: FloatingActionButton(
+        // Own tag: several tabs keep a "+" mounted at once.
+        heroTag: 'conversations-new',
         key: const Key('conversations-new'),
         tooltip: 'New conversation',
         onPressed: () async {

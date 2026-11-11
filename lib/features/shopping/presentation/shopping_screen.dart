@@ -489,7 +489,12 @@ class _ItemSheetState extends State<_ItemSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final canSave = _types.isNotEmpty && _text.text.trim().isNotEmpty;
+    // An item without types (still tagging, or never tagged) may have its
+    // text corrected alone; types, once changed, may not be emptied.
+    final typesChanged = !(_types.length == widget.item.storeTypes.length &&
+        _types.containsAll(widget.item.storeTypes));
+    final canSave = _text.text.trim().isNotEmpty &&
+        (_types.isNotEmpty || !typesChanged);
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(

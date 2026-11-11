@@ -204,12 +204,23 @@ class _PlacesScreenState extends ConsumerState<PlacesScreen> {
       context: context,
       builder: (_) => _AddTagDialog(place: place),
     );
-    if (tag == null || tag.isEmpty || place.tags.contains(tag) || !mounted) {
-      return;
-    }
+    if (tag == null || !mounted) return;
+    // The place as it is now: a sync may have changed or removed it while
+    // the dialog was open.
+    final current = ref
+        .read(placesNotifierProvider)
+        .places
+        .where((p) => p.id == place.id)
+        .firstOrNull;
+    if (current == null) return;
+    final known = current.tags.map((t) => t.toLowerCase()).toSet();
+    final added = _parseTags(tag, const {})
+        .where((t) => known.add(t.toLowerCase()))
+        .toList();
+    if (added.isEmpty) return;
     await ref
         .read(placesNotifierProvider.notifier)
-        .save(place.copyWith(tags: [...place.tags, tag]));
+        .save(current.copyWith(tags: [...current.tags, ...added]));
   }
 
   Future<void> _edit(Place place) => showModalBottomSheet<void>(

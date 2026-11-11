@@ -34,6 +34,8 @@ class MattersScreen extends ConsumerWidget {
         actions: const [AppBarActions()],
       ),
       floatingActionButton: FloatingActionButton(
+        // Own tag: several tabs keep a "+" mounted at once.
+        heroTag: 'matters-new',
         key: const Key('matters-add'),
         tooltip: 'Nowa sprawa',
         onPressed: () async {

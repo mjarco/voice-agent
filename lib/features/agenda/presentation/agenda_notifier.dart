@@ -145,10 +145,15 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
   /// Back one day, never before today.
   void previousDay() {
     if (!canGoBack) return;
-    selectDate(_selectedDate.subtract(const Duration(days: 1)));
+    selectDate(_dayAfter(_selectedDate, -1));
   }
 
-  void nextDay() => selectDate(_selectedDate.add(const Duration(days: 1)));
+  void nextDay() => selectDate(_dayAfter(_selectedDate, 1));
+
+  /// The calendar day [days] away; not a multiple of 24 h, which misses a day
+  /// or repeats one across a clock change.
+  static DateTime _dayAfter(DateTime day, int days) =>
+      DateTime(day.year, day.month, day.day + days);
 
   /// Ticks off the [item] (done or skipped) through resolve: a recurring
   /// routine on its day, a one-off on its due day. Returns null when it was

@@ -267,6 +267,26 @@ void main() {
       expect(find.text('sklep, osiedle'), findsWidgets);
     });
 
+    testWidgets('tags typed with commas split; a tag it has is not doubled', (
+      tester,
+    ) async {
+      repository.server['n'] = place('n', 'Biedronka', 52.2501, 21.01,
+          tags: ['sklep']);
+      await pump(tester);
+
+      await tester.tap(find.byKey(const Key('places-here-add-tag')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('places-here-tag')),
+        'Sklep, osiedle , park',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('places-here-tag-save')));
+      await tester.pumpAndSettle();
+
+      expect(repository.server['n']!.tags, ['sklep', 'osiedle', 'park']);
+    });
+
     testWidgets('outside every place there is no card', (tester) async {
       repository.server['f'] = place('f', 'Daleko', 52.26, 21.01);
       await pump(tester);
