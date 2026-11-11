@@ -231,24 +231,51 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       repo.fetchCount = 0;
-      notifier.selectDate(DateTime(2026, 4, 20));
+      notifier.selectDate(DateTime(2030, 4, 20));
       await Future<void>.delayed(Duration.zero);
 
-      expect(notifier.selectedDate, DateTime(2026, 4, 20));
+      expect(notifier.selectedDate, DateTime(2030, 4, 20));
       expect(repo.fetchCount, 1);
     });
 
-    test('previousDay moves back one day', () async {
+    test('a day before today selects today', () async {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      final before = notifier.selectedDate;
+      notifier.selectDate(DateTime(2025, 1, 1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.isToday, isTrue);
+    });
+
+    test('previousDay does nothing on today', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.canGoBack, isFalse);
+      repo.fetchCount = 0;
+      notifier.previousDay();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.isToday, isTrue);
+      expect(repo.fetchCount, 0);
+    });
+
+    test('previousDay moves back one day from a later day', () async {
+      final notifier = buildNotifier();
+      await Future<void>.delayed(Duration.zero);
+
+      final today = notifier.selectedDate;
+      notifier.nextDay();
+      notifier.nextDay();
+      await Future<void>.delayed(Duration.zero);
+      expect(notifier.canGoBack, isTrue);
       notifier.previousDay();
       await Future<void>.delayed(Duration.zero);
 
       expect(
         notifier.selectedDate,
-        DateTime(before.year, before.month, before.day - 1),
+        DateTime(today.year, today.month, today.day + 1),
       );
     });
 
@@ -270,7 +297,7 @@ void main() {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      notifier.selectDate(DateTime(2025, 1, 1));
+      notifier.selectDate(DateTime(2030, 1, 1));
       await Future<void>.delayed(Duration.zero);
 
       notifier.goToToday();

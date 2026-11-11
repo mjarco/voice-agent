@@ -279,21 +279,38 @@ void main() {
       expect(find.text('Meditate'), findsOneWidget);
     });
 
-    testWidgets('tapping previous day changes date', (tester) async {
+    testWidgets('previous day is disabled on today', (tester) async {
       await _pumpScreen(tester);
 
-      final beforeText = tester
+      final prev = tester.widget<IconButton>(
+        find.byKey(const Key('agenda-prev-day')),
+      );
+      expect(prev.onPressed, isNull);
+    });
+
+    testWidgets('previous day goes back from a later day, down to today', (
+      tester,
+    ) async {
+      await _pumpScreen(tester);
+
+      String label() => tester
           .widget<Text>(find.byKey(const Key('agenda-date-label')))
           .data!;
+      final todayText = label();
+
+      await tester.tap(find.byKey(const Key('agenda-next-day')));
+      await tester.pumpAndSettle();
+      expect(label(), isNot(equals(todayText)));
 
       await tester.tap(find.byKey(const Key('agenda-prev-day')));
       await tester.pumpAndSettle();
-
-      final afterText = tester
-          .widget<Text>(find.byKey(const Key('agenda-date-label')))
-          .data!;
-
-      expect(afterText, isNot(equals(beforeText)));
+      expect(label(), todayText);
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('agenda-prev-day')))
+            .onPressed,
+        isNull,
+      );
     });
 
     testWidgets('Today button is hidden when showing today', (tester) async {
@@ -307,7 +324,7 @@ void main() {
     ) async {
       await _pumpScreen(tester);
 
-      await tester.tap(find.byKey(const Key('agenda-prev-day')));
+      await tester.tap(find.byKey(const Key('agenda-next-day')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('agenda-today-btn')), findsOneWidget);

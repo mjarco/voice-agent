@@ -43,7 +43,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           _DateNavigationBar(
             date: notifier.selectedDate,
             isToday: notifier.isToday,
-            onPrevious: notifier.previousDay,
+            onPrevious: notifier.canGoBack ? notifier.previousDay : null,
             onNext: notifier.nextDay,
             onToday: notifier.goToToday,
           ),
@@ -309,7 +309,9 @@ class _DateNavigationBar extends StatelessWidget {
 
   final DateTime date;
   final bool isToday;
-  final VoidCallback onPrevious;
+
+  /// Null on today: past days are not shown.
+  final VoidCallback? onPrevious;
   final VoidCallback onNext;
   final VoidCallback onToday;
 
