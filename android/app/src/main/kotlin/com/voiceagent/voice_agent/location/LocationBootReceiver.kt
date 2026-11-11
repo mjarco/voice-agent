@@ -14,7 +14,7 @@ class LocationBootReceiver : BroadcastReceiver() {
         val appContext = context.applicationContext
         val reason = when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED -> bootReason(appContext)
-            Intent.ACTION_MY_PACKAGE_REPLACED -> "app_updated"
+            Intent.ACTION_MY_PACKAGE_REPLACED -> APP_UPDATED
             else -> return
         }
         val pending = goAsync()
@@ -24,8 +24,11 @@ class LocationBootReceiver : BroadcastReceiver() {
             appContext,
             done = { GeofenceRegistry.reconcileLater(appContext, reason) { pending.finish() } },
         ) {
+            // Play services may drop the request about to be made (ADR-PLATFORM-013);
+            // scheduled first, so a failing reconcile cannot skip it.
+            if (reason == APP_UPDATED) LocationWatch.scheduleAfterUpdate(appContext)
             val config = LocationConfig(appContext)
-            // Motion from before the restart says nothing of now; the next transition will.
+            // Motion from before the restart says nothing of now; the next transition will (ADR-PLATFORM-014).
             config.motion = Motion.State()
             if (config.enabled) LocationPipeline.recordStatus(appContext, reason)
             LocationPipeline.reconcile(appContext, reason)
@@ -42,5 +45,9 @@ class LocationBootReceiver : BroadcastReceiver() {
         val rebooted = boots != config.lastBootCount
         config.lastBootCount = boots
         return if (rebooted) "reboot" else RegistrationPlan.REASON_RESTART_AFTER_STOP
+    }
+
+    private companion object {
+        const val APP_UPDATED = "app_updated"
     }
 }

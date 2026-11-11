@@ -70,8 +70,10 @@ Two facts shape the design:
   `requested_mode`, which personal-agent refuses; switch to another mode before a downgrade.
 - A wrong kind of motion (a tram as `still`, slow cycling as walking) changes only the interval or
   delays the switch; it does not lose the background readings.
-- The 30-minute stale watch of ADR-PLATFORM-012 covers motion mode while its readings are in the
-  background, and not while the service runs, as in foreground mode.
+- The 30-minute stale watch of ADR-PLATFORM-012 and the after-update re-subscription of
+  ADR-PLATFORM-013 cover motion mode while its readings are in the background, and not while the
+  service runs, as in foreground mode. The after-update one also renews the transition registration,
+  which the same update may drop.
 - Not verified on a device when decided: the exemption's start of the service, the API's delays and
   mistakes on the Pixel, the registration's fate after a reboot. The manual plan
   `docs/manual-tests/motion-sampling.md` covers them.

@@ -2,6 +2,8 @@ package com.voiceagent.voice_agent.location
 
 import android.content.Context
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.time.Instant
@@ -27,6 +29,15 @@ object LocationWatch {
     const val REASON_MOTION = "watch"
     private const val WORK = "location-log-watch"
     private const val PERIOD_MINUTES = 30L
+
+    /**
+     * Play services clears an updated package's requests after the app has
+     * already subscribed again (ADR-PLATFORM-013: 117 ms later at the 1.29.1
+     * install), so a second subscription follows an update by this long.
+     */
+    const val AFTER_UPDATE_DELAY_SECONDS = 60L
+    const val AFTER_UPDATE_REASON = "after_update"
+    private const val AFTER_UPDATE_WORK = "location-log-after-update"
 
     /**
      * Whether to re-subscribe now. A fresh subscription gets its own
@@ -66,6 +77,29 @@ object LocationWatch {
                 .put("last_subscribed_at", instantOrNull(lastSubscribed)),
         )
         LocationPipeline.reconcile(context, REASON)
+    }
+
+    /**
+     * The second subscription after an update is for background readings only,
+     * like the watch: background mode, and motion mode while it reads in the
+     * background (ADR-PLATFORM-014), so [effectiveMode] decides.
+     */
+    fun resubscribesAfterUpdate(enabled: Boolean, effectiveMode: String): Boolean =
+        enabled && effectiveMode == LocationConfig.MODE_BACKGROUND
+
+    /** Runs on the pipeline's thread, [AFTER_UPDATE_DELAY_SECONDS] after `MY_PACKAGE_REPLACED`. */
+    fun afterUpdate(context: Context) {
+        val config = LocationConfig(context)
+        if (!resubscribesAfterUpdate(config.enabled, config.effectiveMode)) return
+        LocationPipeline.reconcile(context, AFTER_UPDATE_REASON)
+    }
+
+    /** Called at `MY_PACKAGE_REPLACED`; the worker reads the configuration when it runs. */
+    fun scheduleAfterUpdate(context: Context) {
+        val request = OneTimeWorkRequestBuilder<LocationAfterUpdateWorker>()
+            .setInitialDelay(AFTER_UPDATE_DELAY_SECONDS, TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(AFTER_UPDATE_WORK, ExistingWorkPolicy.REPLACE, request)
     }
 
     /**
