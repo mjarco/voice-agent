@@ -21,9 +21,12 @@ requests is the likeliest reading, but two earlier updates (2026-11-08, 2026-11-
 
 ## Decision
 
-1. **A periodic job watches the readings.** `LocationWatchWorker` runs every 30 minutes, with no
-   constraint, while the log is on (scheduled by `reconcile`, kept if already there; cancelled when
-   the log is off). It runs `LocationWatch.check` on the pipeline's thread.
+1. **A periodic job watches the readings, in background mode.** `LocationWatchWorker` runs every 30
+   minutes, with no constraint, while the log is on (scheduled by `reconcile` with the policy
+   `UPDATE`, so a changed period reaches phones that have the job; cancelled when the log is off). It
+   runs `LocationWatch.check` on the pipeline's thread, which does nothing in foreground mode: there a
+   start of the foreground service from a worker can be refused or can make the running service stop
+   itself, leaving the log worse off.
 2. **Stale means 30 minutes without a reading**, counted from the later of the last reading and the
    last subscription, so a fresh subscription gets its own half hour. In 8.4 days of the log
    (2026-11-01 to 2026-11-10) only 6 gaps were longer.
@@ -36,11 +39,14 @@ requests is the likeliest reading, but two earlier updates (2026-11-08, 2026-11-
 
 ## Consequences
 
-- A lost subscription costs at most about an hour of readings instead of lasting until the next
-  process start.
+- A lost subscription usually costs about an hour of readings (30 minutes stale plus up to a period)
+  instead of lasting until the next process start; Doze and app standby can defer the job longer.
 - A real long gap (the phone off, location off, a still phone where Play services gives nothing)
   writes a `readings_stale` and a `subscribed` row every two hours; personal-agent stores status values
   as text with no list, so no contract changes.
 - A re-subscription asks for a fix (seen as a short GPS request), a small cost during stale stretches only.
-- In foreground mode the watch's `reconcile` may try to start the foreground service from the
-  background; Android may refuse it, which is written as `subscribe_failed` as before (ADR-PLATFORM-009).
+- Foreground mode is not watched: a silent loss there still lasts until the next process start.
+- The rule mixes clocks: the last reading is the fix's time, the rest the phone's clock. A clock moved
+  by hand can delay the watch or bring one false stale row; both pass on their own.
+- `lastSubscribedAtMs` is written when the request is sent, before Play services answers; a failed
+  request is still written as `subscribe_failed` (ADR-PLATFORM-009) and the next try waits its turn.

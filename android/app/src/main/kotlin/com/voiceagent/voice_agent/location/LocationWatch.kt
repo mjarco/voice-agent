@@ -13,7 +13,8 @@ import org.json.JSONObject
  * can drop the app's location request with no callback (after the update to
  * 1.29.0 it held only the geofences), and the app re-subscribes only when its
  * process starts, so a long-lived process stayed without readings for a day.
- * A periodic job re-subscribes when no reading has come for a while.
+ * A periodic job re-subscribes when no reading has come for a while, in
+ * background mode only.
  */
 object LocationWatch {
     /** Six background intervals: normal gaps stay under it, a lost request does not. */
@@ -42,7 +43,9 @@ object LocationWatch {
     /** Runs on the pipeline's thread. */
     fun check(context: Context, nowMs: Long = System.currentTimeMillis()) {
         val config = LocationConfig(context)
-        if (!config.enabled) return
+        // Foreground mode keeps its own service, which a start from a worker
+        // could tear down (deep review of D1); the watch is for background mode.
+        if (!config.enabled || config.mode != LocationConfig.MODE_BACKGROUND) return
         val lastReading = config.lastReadingAtMs
         val lastSubscribed = config.lastSubscribedAtMs
         if (!isStale(nowMs, lastReading, lastSubscribed, config.lastStaleAtMs)) return
@@ -57,10 +60,13 @@ object LocationWatch {
         LocationPipeline.reconcile(context, REASON)
     }
 
-    /** Kept if already there, so each reconcile may call it. */
+    /**
+     * Each reconcile may call it: UPDATE keeps the job's schedule but carries a
+     * changed period to phones that already have the job.
+     */
     fun schedule(context: Context) {
         val request = PeriodicWorkRequestBuilder<LocationWatchWorker>(PERIOD_MINUTES, TimeUnit.MINUTES).build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.KEEP, request)
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
     fun cancel(context: Context) {
