@@ -26,6 +26,7 @@ object LocationWatch {
     const val RETRY_AFTER_MS = 2 * 60 * 60 * 1000L
 
     const val REASON = "stale_readings"
+    const val REASON_MOTION = "watch"
     private const val WORK = "location-log-watch"
     private const val PERIOD_MINUTES = 30L
 
@@ -54,9 +55,16 @@ object LocationWatch {
     /** Runs on the pipeline's thread. */
     fun check(context: Context, nowMs: Long = System.currentTimeMillis()) {
         val config = LocationConfig(context)
+        if (!config.enabled) return
+        if (config.mode == LocationConfig.MODE_MOTION) {
+            // The registration may go silently, like the location request (deep review of D1, M1).
+            MotionTransitions.subscribe(context, REASON_MOTION)
+            // A `still` or a stop that no frequent reading has settled yet (ADR-PLATFORM-014).
+            LocationPipeline.settleIfStill(context, config, nowMs)
+        }
         // Foreground mode keeps its own service, which a start from a worker
-        // could tear down (deep review of D1); the watch is for background mode.
-        if (!config.enabled || config.mode != LocationConfig.MODE_BACKGROUND) return
+        // could tear down (deep review of D1); the watch is for background readings.
+        if (config.effectiveMode != LocationConfig.MODE_BACKGROUND) return
         val lastReading = config.lastReadingAtMs
         val lastSubscribed = config.lastSubscribedAtMs
         if (!isStale(nowMs, lastReading, lastSubscribed, config.lastStaleAtMs)) return
@@ -71,14 +79,18 @@ object LocationWatch {
         LocationPipeline.reconcile(context, REASON)
     }
 
-    /** The second subscription after an update is for background mode only, like the watch. */
-    fun resubscribesAfterUpdate(enabled: Boolean, mode: String): Boolean =
-        enabled && mode == LocationConfig.MODE_BACKGROUND
+    /**
+     * The second subscription after an update is for background readings only,
+     * like the watch: background mode, and motion mode while it reads in the
+     * background (ADR-PLATFORM-014), so [effectiveMode] decides.
+     */
+    fun resubscribesAfterUpdate(enabled: Boolean, effectiveMode: String): Boolean =
+        enabled && effectiveMode == LocationConfig.MODE_BACKGROUND
 
     /** Runs on the pipeline's thread, [AFTER_UPDATE_DELAY_SECONDS] after `MY_PACKAGE_REPLACED`. */
     fun afterUpdate(context: Context) {
         val config = LocationConfig(context)
-        if (!resubscribesAfterUpdate(config.enabled, config.mode)) return
+        if (!resubscribesAfterUpdate(config.enabled, config.effectiveMode)) return
         LocationPipeline.reconcile(context, AFTER_UPDATE_REASON)
     }
 

@@ -29,6 +29,11 @@ void main() {
           'geofencesAtMs': 2000,
           'triggerCount': 4,
           'triggersCheckedAtMs': 3000,
+          'effectiveMode': 'foreground',
+          'intervalSeconds': 10,
+          'motionPermission': true,
+          'motionActivity': 'in_vehicle',
+          'motionAtMs': 4000,
         };
       }
       return null;
@@ -55,6 +60,18 @@ void main() {
       state.triggersCheckedAt,
       DateTime.fromMillisecondsSinceEpoch(3000),
     );
+    expect(state.effectiveMode, LocationLogMode.foreground);
+    expect(state.intervalSeconds, 10);
+    expect(state.motionPermission, isTrue);
+    expect(state.motionActivity, MotionActivity.inVehicle);
+    expect(state.motionAt, DateTime.fromMillisecondsSinceEpoch(4000));
+  });
+
+  test('the motion mode and its activities come from the wire', () {
+    expect(LocationLogMode.fromWire('motion'), LocationLogMode.motion);
+    expect(LocationLogMode.fromWire('unknown'), LocationLogMode.background);
+    expect(MotionActivity.fromWire('on_bicycle'), MotionActivity.onBicycle);
+    expect(MotionActivity.fromWire('tilting'), isNull);
   });
 
   test('commands carry their arguments', () async {

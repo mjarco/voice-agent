@@ -35,6 +35,11 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 "enabled" to config.enabled,
                 "mode" to config.mode,
                 "foregroundIntervalSeconds" to config.foregroundIntervalSeconds,
+                "effectiveMode" to config.effectiveMode,
+                "intervalSeconds" to config.intervalSeconds,
+                "motionPermission" to MotionTransitions.permissionGranted(context),
+                "motionActivity" to config.motion.activity,
+                "motionAtMs" to config.motion.atMs,
                 "permission" to LocationPipeline.permission(context),
                 "lastReadingAtMs" to config.lastReadingAtMs,
                 "lastSentAtMs" to config.lastSentAtMs,
@@ -54,6 +59,8 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 val enabled = call.argument<Boolean>("enabled") == true
                 if (enabled != config.enabled) {
                     config.enabled = enabled
+                    // A motion from before the pause says nothing of now (deep review of D1, H2).
+                    config.motion = Motion.State()
                     LocationPipeline.recordStatus(context, if (enabled) "start" else "stop", "switch in Settings")
                     LocationPipeline.reconcile(context, "switch")
                 }
@@ -82,9 +89,15 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
             }
             "setMode" -> {
                 val mode = call.argument<String>("mode")
-                require(mode == LocationConfig.MODE_BACKGROUND || mode == LocationConfig.MODE_FOREGROUND)
+                require(
+                    mode == LocationConfig.MODE_BACKGROUND ||
+                        mode == LocationConfig.MODE_FOREGROUND ||
+                        mode == LocationConfig.MODE_MOTION,
+                )
                 if (mode != config.mode) {
                     config.mode = mode
+                    // Each mode starts from the background readings; motion waits for a transition.
+                    config.motion = Motion.State()
                     if (config.enabled) LocationPipeline.reconcile(context, "mode changed")
                 }
             }
@@ -99,6 +112,12 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
             // A return to the app: "always" may have been granted on the settings
             // page, and the triggers may be due (at most once per 5 minutes).
             "appResumed" -> {
+                // "Physical activity" may have been granted on the settings page (deep review of D1, M2).
+                if (config.enabled && config.mode == LocationConfig.MODE_MOTION &&
+                    config.lastMotionPermission != MotionTransitions.permissionGranted(context)
+                ) {
+                    LocationPipeline.reconcile(context, "motion_permission")
+                }
                 GeofenceRegistry.permissionMayHaveChanged(context)
                 TriggerPuller.appResumed(context)
             }

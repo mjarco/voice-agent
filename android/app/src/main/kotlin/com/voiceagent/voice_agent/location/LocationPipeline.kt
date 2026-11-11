@@ -109,12 +109,19 @@ object LocationPipeline {
                 .put("recorded_at", Instant.ofEpochMilli(location.time).toString())
                 .put("latitude", location.latitude)
                 .put("longitude", location.longitude)
-                .put("requested_mode", config.mode)
+                // Personal-agent takes only foreground or background (ADR-PLATFORM-014).
+                .put("requested_mode", config.effectiveMode)
                 .put("requested_interval_s", config.intervalSeconds)
             if (location.hasAccuracy()) payload.put("accuracy_m", location.accuracy.toDouble())
             if (location.hasSpeed()) payload.put("speed_mps", location.speed.toDouble())
             store.enqueue(payload)
             config.lastReadingAtMs = location.time
+        }
+        // Motion mode: where the phone last moved, for the stationary settle.
+        if (config.mode == LocationConfig.MODE_MOTION && locations.isNotEmpty()) {
+            var motion = config.motion
+            for (location in locations) motion = Motion.onReading(motion, location.latitude, location.longitude, location.time)
+            config.motion = motion
         }
     }
 
@@ -129,6 +136,13 @@ object LocationPipeline {
         if (config.lastBatterySaver != saver) {
             if (config.lastBatterySaver != null) recordStatus(context, "battery_saver", if (saver) "on" else "off")
             config.lastBatterySaver = saver
+        }
+        if (config.mode == LocationConfig.MODE_MOTION) {
+            val motionPermission = MotionTransitions.permissionGranted(context)
+            if (config.lastMotionPermission != motionPermission) {
+                recordStatus(context, "motion_permission", if (motionPermission) "granted" else "denied")
+                config.lastMotionPermission = motionPermission
+            }
         }
         val locationOn = locationEnabled(context)
         if (config.lastLocationOn != locationOn) {
@@ -176,7 +190,7 @@ object LocationPipeline {
      * subscription is assumed lost after a reboot, an update or a force stop, so
      * this runs at each of those and at each app start.
      */
-    fun reconcile(context: Context, reason: String) {
+    fun reconcile(context: Context, reason: String, renewTransitions: Boolean = true) {
         val config = LocationConfig(context)
         recordExits(context, config)
         if (!config.enabled) {
@@ -187,7 +201,14 @@ object LocationPipeline {
         }
         recordChanges(context, config)
         LocationWatch.schedule(context)
-        if (config.mode == LocationConfig.MODE_FOREGROUND) {
+        if (config.mode == LocationConfig.MODE_MOTION) {
+            // A transition's own reconcile does not renew what just delivered it.
+            if (renewTransitions) MotionTransitions.subscribe(context, reason)
+        } else {
+            MotionTransitions.unsubscribe(context)
+            if (config.motion.frequent) config.motion = Motion.State()
+        }
+        if (config.effectiveMode == LocationConfig.MODE_FOREGROUND) {
             subscribeInForeground(context, config, reason)
         } else {
             subscribeInBackground(context, config, reason)
@@ -195,7 +216,35 @@ object LocationPipeline {
         scheduleDrainIfNeeded(context)
     }
 
+    /**
+     * Motion mode: ends the frequent readings once `still` has lasted
+     * [Motion.SETTLE_MS], or the phone has not moved for [Motion.STATIONARY_MS].
+     * Called on each frequent reading and by the watch, so no timer of its own
+     * is needed. Runs on the pipeline's thread.
+     */
+    fun settleIfStill(context: Context, config: LocationConfig, nowMs: Long = System.currentTimeMillis()) {
+        if (config.mode != LocationConfig.MODE_MOTION) return
+        val motion = config.motion
+        val reason = Motion.settleReason(motion, nowMs) ?: return
+        config.motion = motion.copy(frequent = false)
+        val since = if (reason == Motion.SETTLED_STILL) motion.atMs else motion.anchorAtMs
+        recordStatus(context, "motion_settled", "$reason since ${Instant.ofEpochMilli(since)}")
+        reconcile(context, reason, renewTransitions = false)
+    }
+
+    /**
+     * Motion mode: the foreground service could not start or hold itself
+     * (deep review of D1, H1 and M3). The log goes back to background readings
+     * and the next start of motion tries again.
+     */
+    fun fallBackFromForeground(context: Context, config: LocationConfig, reason: String) {
+        if (config.mode != LocationConfig.MODE_MOTION) return
+        if (config.motion.frequent) config.motion = config.motion.copy(frequent = false)
+        subscribeInBackground(context, config, "fallback, $reason")
+    }
+
     fun unsubscribe(context: Context) {
+        MotionTransitions.unsubscribe(context)
         stopBackgroundUpdates(context)
         context.stopService(Intent(context, LocationForegroundService::class.java))
     }
@@ -206,7 +255,7 @@ object LocationPipeline {
         intent.cancel()
     }
 
-    private fun subscribeInBackground(context: Context, config: LocationConfig, reason: String) {
+    fun subscribeInBackground(context: Context, config: LocationConfig, reason: String) {
         context.stopService(Intent(context, LocationForegroundService::class.java))
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, config.intervalSeconds * 1000L)
             .setMinUpdateIntervalMillis(FASTEST_BACKGROUND_INTERVAL_MS)
@@ -219,7 +268,7 @@ object LocationPipeline {
                     executor.execute { recordStatus(context, "subscribe_failed", failure.message ?: "unknown") }
                 }
             config.lastSubscribedAtMs = System.currentTimeMillis()
-            recordStatus(context, "subscribed", "background, $reason")
+            recordStatus(context, "subscribed", "${modeLabel(config)}background, $reason")
         } catch (failure: SecurityException) {
             recordStatus(context, "subscribe_failed", "permission: ${failure.message}")
         }
@@ -230,13 +279,18 @@ object LocationPipeline {
         try {
             ContextCompat.startForegroundService(context, Intent(context, LocationForegroundService::class.java))
             config.lastSubscribedAtMs = System.currentTimeMillis()
-            recordStatus(context, "subscribed", "foreground every ${config.intervalSeconds} s, $reason")
+            recordStatus(context, "subscribed", "${modeLabel(config)}foreground every ${config.intervalSeconds} s, $reason")
         } catch (failure: RuntimeException) {
             // ForegroundServiceStartNotAllowedException and SecurityException
             // both land here: the next app start tries again.
             recordStatus(context, "subscribe_failed", failure.toString())
+            // Motion mode keeps the background readings rather than none.
+            fallBackFromForeground(context, config, reason)
         }
     }
+
+    private fun modeLabel(config: LocationConfig) =
+        if (config.mode == LocationConfig.MODE_MOTION) "motion, " else ""
 
     fun scheduleDrain(context: Context) {
         val request = OneTimeWorkRequestBuilder<LocationDrainWorker>()

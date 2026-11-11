@@ -27,7 +27,10 @@ class LocationBootReceiver : BroadcastReceiver() {
             // Play services may drop the request about to be made (ADR-PLATFORM-013);
             // scheduled first, so a failing reconcile cannot skip it.
             if (reason == APP_UPDATED) LocationWatch.scheduleAfterUpdate(appContext)
-            if (LocationConfig(appContext).enabled) LocationPipeline.recordStatus(appContext, reason)
+            val config = LocationConfig(appContext)
+            // Motion from before the restart says nothing of now; the next transition will (ADR-PLATFORM-014).
+            config.motion = Motion.State()
+            if (config.enabled) LocationPipeline.recordStatus(appContext, reason)
             LocationPipeline.reconcile(appContext, reason)
         }
     }

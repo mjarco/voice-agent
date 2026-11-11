@@ -56,9 +56,10 @@ class LocationWatchTest {
 
     @Test
     fun anUpdateIsFollowedByASecondSubscriptionInBackgroundModeOnly() {
-        assertTrue(resubscribesAfterUpdate(enabled = true, mode = LocationConfig.MODE_BACKGROUND))
-        assertFalse(resubscribesAfterUpdate(enabled = true, mode = LocationConfig.MODE_FOREGROUND))
-        assertFalse(resubscribesAfterUpdate(enabled = false, mode = LocationConfig.MODE_BACKGROUND))
+        // Motion mode passes its mode in effect: background while standing (ADR-PLATFORM-014).
+        assertTrue(resubscribesAfterUpdate(enabled = true, effectiveMode = LocationConfig.MODE_BACKGROUND))
+        assertFalse(resubscribesAfterUpdate(enabled = true, effectiveMode = LocationConfig.MODE_FOREGROUND))
+        assertFalse(resubscribesAfterUpdate(enabled = false, effectiveMode = LocationConfig.MODE_BACKGROUND))
     }
 
     @Test

@@ -36,6 +36,8 @@ class LocationForegroundService : Service() {
                     LocationPipeline.recordChanges(appContext, config)
                     LocationPipeline.recordReadings(appContext, locations, config)
                     LocationPipeline.sendNow(appContext)
+                    // Motion mode ends its frequent readings here once `still` has lasted.
+                    LocationPipeline.settleIfStill(appContext, config)
                 }
             }
         }
@@ -45,7 +47,7 @@ class LocationForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
-            val notification = buildNotification()
+            val notification = buildNotification(LocationConfig(this))
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
             } else {
@@ -56,6 +58,8 @@ class LocationForegroundService : Service() {
             val appContext = applicationContext
             LocationPipeline.write(appContext) {
                 LocationPipeline.recordStatus(appContext, "subscribe_failed", failure.toString())
+                // Motion mode must not stay "frequent" with no subscription at all.
+                LocationPipeline.fallBackFromForeground(appContext, LocationConfig(appContext), "service")
             }
             stopSelf()
             return START_NOT_STICKY
@@ -69,7 +73,7 @@ class LocationForegroundService : Service() {
         fused.removeLocationUpdates(callback)
         val request = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
-            config.foregroundIntervalSeconds * 1000L,
+            config.intervalSeconds * 1000L,
         ).build()
         val appContext = applicationContext
         fused.requestLocationUpdates(request, callback, Looper.getMainLooper())
@@ -85,7 +89,7 @@ class LocationForegroundService : Service() {
         super.onDestroy()
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(config: LocationConfig): Notification {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
@@ -104,7 +108,13 @@ class LocationForegroundService : Service() {
         return builder
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentTitle("Dziennik lokalizacji")
-            .setContentText("Zapisuję lokalizację")
+            .setContentText(
+                if (config.mode == LocationConfig.MODE_MOTION) {
+                    "W ruchu: odczyt co ${config.intervalSeconds} s"
+                } else {
+                    "Zapisuję lokalizację"
+                },
+            )
             .setOngoing(true)
             .setContentIntent(open)
             .build()
