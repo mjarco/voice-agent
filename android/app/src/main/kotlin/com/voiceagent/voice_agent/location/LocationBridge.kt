@@ -35,6 +35,11 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
                 "enabled" to config.enabled,
                 "mode" to config.mode,
                 "foregroundIntervalSeconds" to config.foregroundIntervalSeconds,
+                "effectiveMode" to config.effectiveMode,
+                "intervalSeconds" to config.intervalSeconds,
+                "motionPermission" to MotionTransitions.permissionGranted(context),
+                "motionActivity" to config.motion.activity,
+                "motionAtMs" to config.motion.atMs,
                 "permission" to LocationPipeline.permission(context),
                 "lastReadingAtMs" to config.lastReadingAtMs,
                 "lastSentAtMs" to config.lastSentAtMs,
@@ -82,9 +87,15 @@ class LocationBridge(context: Context) : MethodChannel.MethodCallHandler {
             }
             "setMode" -> {
                 val mode = call.argument<String>("mode")
-                require(mode == LocationConfig.MODE_BACKGROUND || mode == LocationConfig.MODE_FOREGROUND)
+                require(
+                    mode == LocationConfig.MODE_BACKGROUND ||
+                        mode == LocationConfig.MODE_FOREGROUND ||
+                        mode == LocationConfig.MODE_MOTION,
+                )
                 if (mode != config.mode) {
                     config.mode = mode
+                    // Each mode starts from the background readings; motion waits for a transition.
+                    config.motion = Motion.State()
                     if (config.enabled) LocationPipeline.reconcile(context, "mode changed")
                 }
             }

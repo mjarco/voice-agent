@@ -32,9 +32,45 @@ class LocationConfig(context: Context) {
         get() = prefs.getInt("foreground_interval_s", DEFAULT_FOREGROUND_INTERVAL_S)
         set(value) = prefs.edit().putInt("foreground_interval_s", value).apply()
 
+    /**
+     * What the subscription is now: foreground or background. In motion mode
+     * it follows [motion] (ADR-PLATFORM-014); personal-agent takes only these
+     * two values as a reading's `requested_mode`.
+     */
+    val effectiveMode: String
+        get() = when {
+            mode == MODE_FOREGROUND -> MODE_FOREGROUND
+            mode == MODE_MOTION && motion.frequent -> MODE_FOREGROUND
+            else -> MODE_BACKGROUND
+        }
+
     /** The interval asked for in the current mode. */
     val intervalSeconds: Int
-        get() = if (mode == MODE_FOREGROUND) foregroundIntervalSeconds else BACKGROUND_INTERVAL_S
+        get() = when {
+            mode == MODE_FOREGROUND -> foregroundIntervalSeconds
+            mode == MODE_MOTION && motion.frequent -> motion.intervalS
+            else -> BACKGROUND_INTERVAL_S
+        }
+
+    /** Sampling by motion: the last transition and whether readings are frequent now. */
+    var motion: Motion.State
+        get() = Motion.State(
+            frequent = prefs.getBoolean("motion_frequent", false),
+            activity = prefs.getString("motion_activity", null),
+            atMs = prefs.getLong("motion_at", 0),
+            intervalS = prefs.getInt("motion_interval_s", BACKGROUND_INTERVAL_S),
+        )
+        set(value) = prefs.edit()
+            .putBoolean("motion_frequent", value.frequent)
+            .putString("motion_activity", value.activity)
+            .putLong("motion_at", value.atMs)
+            .putInt("motion_interval_s", value.intervalS)
+            .apply()
+
+    /** The activity permission as last written to the log, so a change is written once. */
+    var lastMotionPermission: Boolean?
+        get() = if (prefs.contains("last_motion_permission")) prefs.getBoolean("last_motion_permission", false) else null
+        set(value) = prefs.edit().putBoolean("last_motion_permission", value ?: false).apply()
 
     var apiUrl: String?
         get() = prefs.getString("api_url", null)
@@ -119,6 +155,9 @@ class LocationConfig(context: Context) {
     companion object {
         const val MODE_BACKGROUND = "background"
         const val MODE_FOREGROUND = "foreground"
+
+        /** Background, and foreground while the phone recognises motion (ADR-PLATFORM-014). */
+        const val MODE_MOTION = "motion"
         const val BACKGROUND_INTERVAL_S = 300
         const val DEFAULT_FOREGROUND_INTERVAL_S = 30
 

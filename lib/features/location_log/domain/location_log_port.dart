@@ -20,4 +20,7 @@ abstract class LocationLogPort {
   Future<void> appResumed();
   Future<void> openAppSettings();
   Future<void> requestPermissions();
+
+  /// "Physical activity" for motion mode (ADR-PLATFORM-014); true when granted.
+  Future<bool> requestMotionPermission();
 }

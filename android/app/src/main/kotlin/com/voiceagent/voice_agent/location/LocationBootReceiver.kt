@@ -24,7 +24,10 @@ class LocationBootReceiver : BroadcastReceiver() {
             appContext,
             done = { GeofenceRegistry.reconcileLater(appContext, reason) { pending.finish() } },
         ) {
-            if (LocationConfig(appContext).enabled) LocationPipeline.recordStatus(appContext, reason)
+            val config = LocationConfig(appContext)
+            // Motion from before the restart says nothing of now; the next transition will.
+            config.motion = Motion.State()
+            if (config.enabled) LocationPipeline.recordStatus(appContext, reason)
             LocationPipeline.reconcile(appContext, reason)
         }
     }

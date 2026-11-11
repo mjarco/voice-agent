@@ -43,9 +43,12 @@ object LocationWatch {
     /** Runs on the pipeline's thread. */
     fun check(context: Context, nowMs: Long = System.currentTimeMillis()) {
         val config = LocationConfig(context)
+        if (!config.enabled) return
+        // Motion mode: a `still` that no frequent reading has settled yet (ADR-PLATFORM-014).
+        LocationPipeline.settleIfStill(context, config, nowMs)
         // Foreground mode keeps its own service, which a start from a worker
-        // could tear down (deep review of D1); the watch is for background mode.
-        if (!config.enabled || config.mode != LocationConfig.MODE_BACKGROUND) return
+        // could tear down (deep review of D1); the watch is for background readings.
+        if (config.effectiveMode != LocationConfig.MODE_BACKGROUND) return
         val lastReading = config.lastReadingAtMs
         val lastSubscribed = config.lastSubscribedAtMs
         if (!isStale(nowMs, lastReading, lastSubscribed, config.lastStaleAtMs)) return

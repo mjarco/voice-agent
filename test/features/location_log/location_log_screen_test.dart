@@ -12,6 +12,7 @@ class _FakePort implements LocationLogPort {
   LocationLogState state;
   final calls = <String>[];
   Object? alertsFailure;
+  bool motionGranted = true;
 
   @override
   Future<LocationLogState> getState() async => state;
@@ -33,13 +34,18 @@ class _FakePort implements LocationLogPort {
   Future<void> setForegroundInterval(int seconds) async =>
       calls.add('interval:$seconds');
   @override
-  Future<void> reconcile() async {}
+  Future<void> reconcile() async => calls.add('reconcile');
   @override
   Future<void> appResumed() async {}
   @override
   Future<void> openAppSettings() async => calls.add('openAppSettings');
   @override
   Future<void> requestPermissions() async => calls.add('requestPermissions');
+  @override
+  Future<bool> requestMotionPermission() async {
+    calls.add('requestMotionPermission');
+    return motionGranted;
+  }
 }
 
 LocationLogState _state({
@@ -53,6 +59,11 @@ LocationLogState _state({
   DateTime? geofencesAt,
   int triggers = 0,
   DateTime? triggersAt,
+  LocationLogMode effectiveMode = LocationLogMode.background,
+  int interval = 300,
+  bool motionPermission = true,
+  MotionActivity? motionActivity,
+  DateTime? motionAt,
 }) => LocationLogState(
   enabled: enabled,
   mode: mode,
@@ -65,6 +76,11 @@ LocationLogState _state({
   geofencesAt: geofencesAt,
   triggerCount: triggers,
   triggersCheckedAt: triggersAt,
+  effectiveMode: effectiveMode,
+  intervalSeconds: interval,
+  motionPermission: motionPermission,
+  motionActivity: motionActivity,
+  motionAt: motionAt,
 );
 
 bool _switchValue(WidgetTester tester, String key) =>
@@ -138,6 +154,86 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  group('Według ruchu', () {
+    testWidgets('choosing it asks for physical activity, then sets the mode', (
+      tester,
+    ) async {
+      final port = _FakePort(_state());
+      await _pump(tester, port);
+      expect(find.byKey(const Key('location-log-motion')), findsNothing);
+      await tester.tap(find.byKey(const Key('location-log-mode-motion')));
+      await tester.pump();
+      expect(port.calls, ['requestMotionPermission', 'setMode:motion']);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a refused permission still sets the mode', (tester) async {
+      final port = _FakePort(_state())..motionGranted = false;
+      await _pump(tester, port);
+      await tester.tap(find.byKey(const Key('location-log-mode-motion')));
+      await tester.pump();
+      expect(port.calls, ['requestMotionPermission', 'setMode:motion']);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('shows the activity and the frequent interval while moving', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _FakePort(
+          _state(
+            enabled: true,
+            mode: LocationLogMode.motion,
+            effectiveMode: LocationLogMode.foreground,
+            interval: 10,
+            motionActivity: MotionActivity.inVehicle,
+            motionAt: DateTime(2026, 11, 11, 17, 3, 9),
+          ),
+        ),
+      );
+      expect(find.text('Ruch: w pojeździe od 11.11 17:03:09'), findsOneWidget);
+      expect(find.text('Odczyt co 10 s'), findsOneWidget);
+      expect(find.byKey(const Key('location-log-interval')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('before any transition it says so, with background readings', (
+      tester,
+    ) async {
+      await _pump(tester, _FakePort(_state(mode: LocationLogMode.motion)));
+      expect(find.text('Ruch: jeszcze nie rozpoznany'), findsOneWidget);
+      expect(find.text('Odczyty w tle'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('without the permission it offers to grant it', (
+      tester,
+    ) async {
+      final port = _FakePort(
+        _state(mode: LocationLogMode.motion, motionPermission: false),
+      )..motionGranted = false;
+      await _pump(tester, port);
+      expect(
+        find.text('Brak uprawnienia: aktywność fizyczna'),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('location-log-motion')),
+          matching: find.text('Nadaj'),
+        ),
+      );
+      await tester.pump();
+      expect(port.calls, [
+        'requestMotionPermission',
+        'openAppSettings',
+        'reconcile',
+      ]);
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
 
   group('Alerty w sklepach', () {
     testWidgets('is off by default and apart from the log switch', (

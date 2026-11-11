@@ -34,6 +34,8 @@ class _FakePort implements LocationLogPort {
   Future<void> openAppSettings() async {}
   @override
   Future<void> requestPermissions() async {}
+  @override
+  Future<bool> requestMotionPermission() async => false;
 }
 
 void main() {

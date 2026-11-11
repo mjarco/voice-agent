@@ -45,6 +45,10 @@ class LocationLogChannel implements LocationLogPort {
   @override
   Future<void> openAppSettings() => _channel.invokeMethod('openAppSettings');
 
+  @override
+  Future<bool> requestMotionPermission() async =>
+      (await Permission.activityRecognition.request()).isGranted;
+
   /// The while-in-use dialog first: Android 11+ refuses "all the time" until
   /// that is granted, and then shows it on a settings page, not in a dialog.
   @override

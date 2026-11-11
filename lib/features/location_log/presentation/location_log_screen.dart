@@ -69,6 +69,14 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
     await _port.setAlertsEnabled(enabled);
   });
 
+  /// Motion mode asks for "Physical activity" first. Without it the native
+  /// side keeps background readings and writes `motion_permission`; the line
+  /// under the modes then offers "Nadaj".
+  Future<void> _setMode(LocationLogMode mode) => _run(() async {
+    if (mode == LocationLogMode.motion) await _port.requestMotionPermission();
+    await _port.setMode(mode);
+  });
+
   Future<void> _setEnabled(bool enabled, LocationLogState state) =>
       _run(() async {
         if (enabled && state.permission == LocationLogPermission.none) {
@@ -104,7 +112,7 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
         RadioGroup<LocationLogMode>(
           groupValue: state.mode,
           onChanged: (mode) {
-            if (mode != null) _run(() => _port.setMode(mode));
+            if (mode != null) _setMode(mode);
           },
           child: const Column(
             children: [
@@ -122,9 +130,38 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
                 ),
                 value: LocationLogMode.foreground,
               ),
+              RadioListTile<LocationLogMode>(
+                key: Key('location-log-mode-motion'),
+                title: Text('Według ruchu'),
+                subtitle: Text(
+                  'W tle, a w ruchu co 10–30 s ze stałym powiadomieniem',
+                ),
+                value: LocationLogMode.motion,
+              ),
             ],
           ),
         ),
+        if (state.mode == LocationLogMode.motion)
+          ListTile(
+            key: const Key('location-log-motion'),
+            title: Text(_motionLine(state)),
+            subtitle: Text(
+              state.effectiveMode == LocationLogMode.foreground
+                  ? 'Odczyt co ${state.intervalSeconds} s'
+                  : 'Odczyty w tle',
+            ),
+            trailing: state.motionPermission
+                ? null
+                : TextButton(
+                    onPressed: () => _run(() async {
+                      if (!await _port.requestMotionPermission()) {
+                        await _port.openAppSettings();
+                      }
+                      await _port.reconcile();
+                    }),
+                    child: const Text('Nadaj'),
+                  ),
+          ),
         if (state.mode == LocationLogMode.foreground)
           ListTile(
             title: const Text('Odczyt co'),
@@ -201,6 +238,20 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
         LocationLogPermission.approximate => 'Uprawnienie: przybliżona',
         LocationLogPermission.none => 'Brak uprawnienia',
       };
+
+  String _motionLine(LocationLogState state) {
+    if (!state.motionPermission) return 'Brak uprawnienia: aktywność fizyczna';
+    final activity = state.motionActivity;
+    if (activity == null) return 'Ruch: jeszcze nie rozpoznany';
+    final name = switch (activity) {
+      MotionActivity.still => 'stoisz',
+      MotionActivity.walking => 'idziesz',
+      MotionActivity.running => 'biegniesz',
+      MotionActivity.onBicycle => 'na rowerze',
+      MotionActivity.inVehicle => 'w pojeździe',
+    };
+    return 'Ruch: $name od ${_time(state.motionAt)}';
+  }
 
   String _statusLine(LocationLogState state) =>
       'Ostatni odczyt: ${_time(state.lastReadingAt)}\n'
