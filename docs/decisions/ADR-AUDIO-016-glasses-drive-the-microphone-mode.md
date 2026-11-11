@@ -41,4 +41,7 @@ from Off sent by another app may be refused by Android.
   into Standby, or start a session, exactly as the notification's buttons do; it cannot read
   anything. The same level as glass-native's wake permission.
 - A start from Off while voice-agent is in the background depends on Android allowing the
-  microphone service to start; the device probe of the task (D5) answers it.
+  microphone service to start. The owner ran the page on the Pixel on 2026-11-11 and found it
+  working, so glass-native offers Włącz in Off; the case is T5 of the manual plan
+  [glasses-control.md](../manual-tests/glasses-control.md), and a refusal there switches the page
+  to "Włącz w telefonie" (`VA_START_FROM_OFF` in glass-native) without changing this decision.
