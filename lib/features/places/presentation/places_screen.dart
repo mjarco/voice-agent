@@ -125,6 +125,13 @@ class _PlacesScreenState extends ConsumerState<PlacesScreen> {
               onSettings: () =>
                   ref.read(placeReadingPortProvider).openSettings(),
             ),
+            if (reading != null && !_readingNow)
+              if (Place.containing(state.places, reading) case final here?)
+                _HereCard(
+                  place: here,
+                  types: state.storeTypes,
+                  onAddTag: () => _addTag(here),
+                ),
             const SizedBox(height: 12),
             TextField(
               key: const Key('places-name'),
@@ -189,6 +196,20 @@ class _PlacesScreenState extends ConsumerState<PlacesScreen> {
         ),
       ),
     );
+  }
+
+  /// A tag for the place you stand in, without opening its editor.
+  Future<void> _addTag(Place place) async {
+    final tag = await showDialog<String>(
+      context: context,
+      builder: (_) => _AddTagDialog(place: place),
+    );
+    if (tag == null || tag.isEmpty || place.tags.contains(tag) || !mounted) {
+      return;
+    }
+    await ref
+        .read(placesNotifierProvider.notifier)
+        .save(place.copyWith(tags: [...place.tags, tag]));
   }
 
   Future<void> _edit(Place place) => showModalBottomSheet<void>(
@@ -277,6 +298,149 @@ class _ReadingCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The known place you stand in, with its tags, and a way to add one.
+class _HereCard extends StatelessWidget {
+  const _HereCard({
+    required this.place,
+    required this.types,
+    required this.onAddTag,
+  });
+
+  final Place place;
+  final List<PlaceStoreType> types;
+  final VoidCallback onAddTag;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final labels = {for (final t in types) t.id: t.label};
+    final details = [
+      ...place.storeTypes.map((id) => labels[id] ?? id),
+      ...place.tags,
+    ];
+    return Card(
+      key: const Key('places-here'),
+      color: theme.colorScheme.secondaryContainer,
+      margin: const EdgeInsets.only(top: 12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.place),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Jesteś w: ${place.name}',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 32, top: 4),
+              child: Text(
+                details.isEmpty ? 'Bez tagów' : details.join(', '),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                key: const Key('places-here-add-tag'),
+                onPressed: onAddTag,
+                icon: const Icon(Icons.sell_outlined),
+                label: const Text('Dodaj tag'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One tag, typed or picked from the suggestions the place does not have.
+class _AddTagDialog extends StatefulWidget {
+  const _AddTagDialog({required this.place});
+
+  final Place place;
+
+  @override
+  State<_AddTagDialog> createState() => _AddTagDialogState();
+}
+
+class _AddTagDialogState extends State<_AddTagDialog> {
+  final _tag = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _tag.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _tag.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final suggestions = [
+      for (final t in _suggestedTags)
+        if (!widget.place.tags.contains(t)) t,
+    ];
+    final tag = _tag.text.trim();
+    return AlertDialog(
+      title: Text('Tag dla: ${widget.place.name}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const Key('places-here-tag'),
+            controller: _tag,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Tag',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (_) {
+              if (tag.isNotEmpty) Navigator.of(context).pop(tag);
+            },
+          ),
+          if (suggestions.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              children: [
+                for (final s in suggestions)
+                  ActionChip(
+                    label: Text(s),
+                    onPressed: () => _tag.text = s,
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Anuluj'),
+        ),
+        FilledButton(
+          key: const Key('places-here-tag-save'),
+          onPressed: tag.isEmpty ? null : () => Navigator.of(context).pop(tag),
+          child: const Text('Dodaj'),
+        ),
+      ],
     );
   }
 }
