@@ -40,8 +40,8 @@ from Off sent by another app may be refused by Android.
 - Any installed app may request a `normal` permission. It could then switch the microphone off or
   into Standby, or start a session, exactly as the notification's buttons do; it cannot read
   anything. The same level as glass-native's wake permission.
-- A start from Off while voice-agent is in the background depends on Android allowing the
-  microphone service to start. The owner ran the page on the Pixel on 2026-11-11 and found it
-  working, so glass-native offers Włącz in Off; the case is T5 of the manual plan
-  [glasses-control.md](../manual-tests/glasses-control.md), and a refusal there switches the page
-  to "Włącz w telefonie" (`VA_START_FROM_OFF` in glass-native) without changing this decision.
+- A start from Off while voice-agent is in the background is refused by Android (Pixel 11 Pro,
+  Android 17, 2026-11-11: `startForegroundService() not allowed … BFGS denied`; T5 of the manual
+  plan [glasses-control.md](../manual-tests/glasses-control.md)). glass-native therefore shows
+  "Włącz w telefonie" in Off and the glasses do Pauza and Włącz from Standby. The mapping of
+  listening to `startSession` stays: it works while voice-agent is in the foreground.

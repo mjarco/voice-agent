@@ -4,8 +4,9 @@ Design: [ADR-AUDIO-016](../decisions/ADR-AUDIO-016-glasses-drive-the-microphone-
 glass-native's `docs/va-control-protocol.md`; workspace off-roadmap task
 `2026-11-11-glasses-start-conversation`.
 
-**Overall status:** in-progress — the owner ran it on 2026-11-11 with the dev app and reported "jest
-ok" without naming cases; only T3 has its own evidence.
+**Overall status:** in-progress — the owner ran it on 2026-11-11 and reported "jest ok" without
+naming cases; T3 has its own evidence; T5 failed as Android forbids, and the page no longer offers
+it (glass-native D6).
 
 **Why now:** the commands come from another app as broadcasts, the microphone service may be started
 from the background, and the page is seen only on the glasses; none of it can be checked off the
@@ -27,7 +28,7 @@ Status legend: as in [`p040-agenda-notifications.md`](p040-agenda-notifications.
 | T2 | Włącz from Standby resumes listening | owner's run 2026-11-11, not itemised |
 | T3 | Pauza from Listening goes to Standby, and the page follows | passed (2026-11-11, Pixel 11 Pro, Android 17, dev 1.32.0) |
 | T4 | Wyłącz ends the session from Listening and from Standby | owner's run 2026-11-11, not itemised |
-| T5 | Włącz from Off with voice-agent in the background starts a session | owner's run 2026-11-11, not itemised |
+| T5 | Włącz from Off with voice-agent in the background starts a session | failed (2026-11-11, Pixel 11 Pro, Android 17, dev 1.32.0): Android refuses the service; documented limitation |
 | T6 | A change made on the phone reaches the page | owner's run 2026-11-11, not itemised |
 | T7 | voice-agent swiped away: the page says so | pending |
 
@@ -112,7 +113,10 @@ SHOW permission.
 
 ### T5. Włącz from Off with voice-agent in the background starts a session
 
-**Status:** owner's run 2026-11-11, not itemised
+**Status:** failed (2026-11-11, Pixel 11 Pro, Android 17, dev 1.32.0): the owner: "gdy voice-agent
+jest wyłączony to nie da się włączyć"; logcat `startForegroundService() not allowed … BFGS denied`
+(uidState LAST). Documented limitation: glass-native now shows `Włącz w telefonie` in Off, with no
+move (its D6, `VA_START_FROM_OFF = false`). Run again only if that constant is turned back on.
 
 **Do:**
 1. voice-agent Off, sent to the background (Home), screen on.
