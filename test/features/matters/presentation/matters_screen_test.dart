@@ -121,6 +121,26 @@ void main() {
       expect(find.text('czeka · wysłano maila'), findsOneWidget);
     });
 
+    testWidgets('each matter is its own card (va-polish)', (tester) async {
+      await _pump(
+        tester,
+        FakeMattersRepository(matters: [
+          _m('a', MatterStatus.active),
+          _m('b', MatterStatus.active),
+        ]),
+      );
+
+      for (final id in ['a', 'b']) {
+        expect(
+          find.descendant(
+            of: find.byKey(Key('matter-tile-$id')),
+            matching: find.byType(Card),
+          ),
+          findsOneWidget,
+        );
+      }
+    });
+
     testWidgets('a standing-still matter says for how long', (tester) async {
       await _pump(
         tester,

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 /// A place the owner named (personal-agent ADR-API-112). The phone makes the id,
 /// so a repeated save changes nothing.
 class Place {
@@ -74,6 +76,35 @@ class Place {
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
+
+  /// Metres from this place's centre to the point (haversine, mean Earth
+  /// radius); enough at the scale of a shop.
+  double distanceTo(double latitude, double longitude) {
+    const earthM = 6371000.0;
+    double rad(double deg) => deg * math.pi / 180;
+    final dLat = rad(latitude - this.latitude);
+    final dLon = rad(longitude - this.longitude);
+    final a = math.pow(math.sin(dLat / 2), 2) +
+        math.cos(rad(this.latitude)) *
+            math.cos(rad(latitude)) *
+            math.pow(math.sin(dLon / 2), 2);
+    return 2 * earthM * math.asin(math.sqrt(a));
+  }
+
+  /// The place [reading] stands in: of those whose radius holds it, the one
+  /// with the nearest centre. Null when it stands in none.
+  static Place? containing(Iterable<Place> places, PlaceReading reading) {
+    Place? best;
+    var bestM = double.infinity;
+    for (final place in places) {
+      final m = place.distanceTo(reading.latitude, reading.longitude);
+      if (m <= place.radiusM && m < bestM) {
+        best = place;
+        bestM = m;
+      }
+    }
+    return best;
+  }
 
   /// Takes the whole position, so an old accuracy never outlives its reading.
   Place movedTo(PlaceReading reading) => Place(

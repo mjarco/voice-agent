@@ -19,6 +19,8 @@ class PinsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Pins')),
       floatingActionButton: FloatingActionButton(
+        // Own tag: several tabs keep a "+" mounted at once.
+        heroTag: 'pins-new',
         key: const Key('pins-add'),
         tooltip: 'New pin',
         onPressed: () async {

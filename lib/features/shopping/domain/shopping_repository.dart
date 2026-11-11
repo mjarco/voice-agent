@@ -24,7 +24,9 @@ abstract class ShoppingRepository {
   Future<ShoppingCatalogue> fetchCatalogue();
   Future<List<ShoppingItem>> fetchItems(ShoppingView view, {String? storeType});
   Future<ShoppingAddResult> addItem(String text, {List<String> storeTypes});
-  Future<void> setTypes(String id, List<String> storeTypes);
+  /// Corrects an item's text, its store types, or both; null leaves that part
+  /// as it is (personal-agent ADR-API-121).
+  Future<void> edit(String id, {String? text, List<String>? storeTypes});
   Future<void> markBought(String id, {String? storeType});
   Future<ShoppingItem> restore(String id);
   Future<void> remove(String id);

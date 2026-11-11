@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
+import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
 
@@ -16,30 +17,20 @@ class ConversationsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Chat'),
-        actions: [
-          IconButton(
-            key: const Key('conversations-new-icon'),
-            icon: const Icon(Icons.add),
-            tooltip: 'New conversation',
-            onPressed: () async {
-              ref.invalidate(threadNotifierProvider('new'));
-              await context.push('/chat/new');
-              notifier.refresh();
-            },
-          ),
-          IconButton(
-            key: const Key('conversations-pins-icon'),
-            icon: const Icon(Icons.push_pin_outlined),
-            tooltip: 'Pins',
-            onPressed: () => context.push('/pins'),
-          ),
-          IconButton(
-            key: const Key('conversations-settings-icon'),
-            icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
+        actions: const [AppBarActions()],
+      ),
+      // A new conversation from a floating "+", as in Sprawy.
+      floatingActionButton: FloatingActionButton(
+        // Own tag: several tabs keep a "+" mounted at once.
+        heroTag: 'conversations-new',
+        key: const Key('conversations-new'),
+        tooltip: 'New conversation',
+        onPressed: () async {
+          ref.invalidate(threadNotifierProvider('new'));
+          await context.push('/chat/new');
+          notifier.refresh();
+        },
+        child: const Icon(Icons.add),
       ),
       body: switch (state) {
         ChatListLoading() =>
@@ -50,10 +41,12 @@ class ConversationsScreen extends ConsumerWidget {
               : RefreshIndicator(
                   onRefresh: notifier.refresh,
                   child: ListView.builder(
+                    padding: const EdgeInsets.only(top: 4, bottom: 88),
                     itemCount: conversations.length,
                     itemBuilder: (context, index) {
                       return _ConversationTile(
                         conversation: conversations[index],
+                        now: DateTime.now(),
                         onTap: () async {
                           await context
                               .push('/chat/${conversations[index].conversationId}');
@@ -73,10 +66,12 @@ class ConversationsScreen extends ConsumerWidget {
 class _ConversationTile extends StatelessWidget {
   const _ConversationTile({
     required this.conversation,
+    required this.now,
     required this.onTap,
   });
 
   final Conversation conversation;
+  final DateTime now;
   final VoidCallback onTap;
 
   @override
@@ -84,13 +79,37 @@ class _ConversationTile extends StatelessWidget {
     final preview =
         conversation.firstMessagePreview ?? 'New conversation';
     final subtitle = '${conversation.eventCount} messages';
+    final at = (conversation.lastEventAt ?? conversation.createdAt).toLocal();
 
-    return ListTile(
-      title: Text(preview),
-      subtitle: Text(subtitle),
-      onTap: onTap,
+    // A card per conversation, as in Sprawy, so the rows read apart.
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        title: Text(
+          preview,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(subtitle),
+        trailing: Text(
+          conversationTimeLabel(at, now),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        onTap: onTap,
+      ),
     );
   }
+}
+
+/// The hour for today, the day and month for this year, the full date before.
+String conversationTimeLabel(DateTime at, DateTime now) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  if (at.year == now.year && at.month == now.month && at.day == now.day) {
+    return '${two(at.hour)}:${two(at.minute)}';
+  }
+  if (at.year == now.year) return '${two(at.day)}.${two(at.month)}';
+  return '${two(at.day)}.${two(at.month)}.${at.year}';
 }
 
 class _EmptyState extends StatelessWidget {
