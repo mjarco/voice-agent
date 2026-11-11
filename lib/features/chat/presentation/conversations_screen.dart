@@ -18,16 +18,6 @@ class ConversationsScreen extends ConsumerWidget {
         title: const Text('Chat'),
         actions: [
           IconButton(
-            key: const Key('conversations-new-icon'),
-            icon: const Icon(Icons.add),
-            tooltip: 'New conversation',
-            onPressed: () async {
-              ref.invalidate(threadNotifierProvider('new'));
-              await context.push('/chat/new');
-              notifier.refresh();
-            },
-          ),
-          IconButton(
             key: const Key('conversations-pins-icon'),
             icon: const Icon(Icons.push_pin_outlined),
             tooltip: 'Pins',
@@ -40,6 +30,17 @@ class ConversationsScreen extends ConsumerWidget {
             onPressed: () => context.push('/settings'),
           ),
         ],
+      ),
+      // A new conversation from a floating "+", as in Sprawy.
+      floatingActionButton: FloatingActionButton(
+        key: const Key('conversations-new'),
+        tooltip: 'New conversation',
+        onPressed: () async {
+          ref.invalidate(threadNotifierProvider('new'));
+          await context.push('/chat/new');
+          notifier.refresh();
+        },
+        child: const Icon(Icons.add),
       ),
       body: switch (state) {
         ChatListLoading() =>

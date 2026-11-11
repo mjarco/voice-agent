@@ -141,12 +141,20 @@ void main() {
       );
     });
 
-    testWidgets('renders add, pins, and settings icons', (tester) async {
+    testWidgets('renders the floating add, pins, and settings icons',
+        (tester) async {
       await _pumpScreen(tester);
 
       expect(
-        find.byKey(const Key('conversations-new-icon')),
+        find.descendant(
+          of: find.byType(FloatingActionButton),
+          matching: find.byIcon(Icons.add),
+        ),
         findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.add)),
+        findsNothing,
       );
       expect(
         find.byKey(const Key('conversations-pins-icon')),
@@ -174,10 +182,10 @@ void main() {
       expect(find.byKey(const Key('conversations-matters-icon')), findsNothing);
     });
 
-    testWidgets('add icon navigates to /chat/new', (tester) async {
+    testWidgets('the floating add navigates to /chat/new', (tester) async {
       await _pumpScreen(tester);
 
-      await tester.tap(find.byKey(const Key('conversations-new-icon')));
+      await tester.tap(find.byKey(const Key('conversations-new')));
       await tester.pumpAndSettle();
 
       expect(find.text('Thread new'), findsOneWidget);
