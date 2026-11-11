@@ -179,12 +179,12 @@ void main() {
       );
     });
 
-    testWidgets('renders gear icon that navigates to settings', (tester) async {
+    testWidgets('the app menu opens settings', (tester) async {
       await _pumpScreen(tester);
 
-      expect(find.byKey(const Key('agenda-settings-icon')), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('agenda-settings-icon')));
+      await tester.tap(find.byKey(const Key('app-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('app-menu-settings')));
       await tester.pumpAndSettle();
 
       expect(find.text('Settings'), findsOneWidget);

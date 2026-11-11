@@ -424,6 +424,9 @@ All navigation uses GoRouter:
 - P020 established the 5-branch route structure. Feature work (P021–P024)
   **replaced placeholder screens** in existing routes — new features do not
   add new top-level routes.
+- The top bar of a tab: its title, the tab's own actions, then `AppMenuButton`
+  (`core/widgets/`), the same menu on every tab, with Miejsca, Pins and
+  Settings.
 - Infrequently accessed screens (e.g., Settings) are top-level GoRoutes outside
   the shell. Navigate to them with `context.push()` (not `context.go()`) to
   preserve shell state.
@@ -589,11 +592,11 @@ screens within this structure — it does not add routes.
 | `/agenda/routines/:id` | ADR-ARCH-012 (child of /agenda) | RoutineDetailScreen; `edit` child: RoutineFormScreen |
 | `/routines`, `/routines/:id` | ADR-ARCH-012 (outside shell) | redirects to `/agenda` and `/agenda/routines/:id` |
 | `/chat` | 020 (shell branch 4) | 024 (ChatPlaceholderScreen → real screen) |
-| `/places` | outside shell | places (PlacesScreen) — reached from Shopping + Record app bars |
+| `/places` | outside shell | places (PlacesScreen) — reached from the app menu of every tab (`AppMenuButton`) |
 | `/matters` | ADR-ARCH-012 (shell branch 3, was Routines) | MattersScreen, the "Sprawy" tab |
 | `/matters/new` | R3 matters (child of /matters) | MatterFormScreen — pops with the saved MatterDetail |
 | `/matters/:id` | R3 matters (child of /matters) | MatterDetailScreen |
-| `/pins` | 045 (outside shell) | 045 (PinsScreen) — reached from Record + Chat app bars |
+| `/pins` | 045 (outside shell) | 045 (PinsScreen) — reached from the app menu of every tab (`AppMenuButton`) |
 | `/pins/new` | voice-agent#386 (child of /pins) | voice-agent#386 (PinFormScreen) — `extra`: starting text |
 | `/pins/:id` | 045 (child of /pins) | 045 (PinDetailScreen) |
 | `/pins/:id/edit` | voice-agent#386 (child of /pins/:id) | voice-agent#386 (PinFormScreen) — `extra`: the PinDetail |

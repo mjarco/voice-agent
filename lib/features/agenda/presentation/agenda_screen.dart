@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/providers/routine_changes_provider.dart';
+import 'package:voice_agent/core/widgets/app_menu_button.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_state.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_notifier.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
@@ -29,14 +29,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Agenda'),
-        actions: [
-          IconButton(
-            key: const Key('agenda-settings-icon'),
-            icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
+        actions: const [AppMenuButton()],
       ),
       body: Column(
         children: [

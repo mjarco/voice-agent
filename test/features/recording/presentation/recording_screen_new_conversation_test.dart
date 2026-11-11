@@ -467,7 +467,7 @@ void main() {
   });
 
   group('Pins button (quick access from landing screen)', () {
-    testWidgets('exists in the Record AppBar', (tester) async {
+    testWidgets('is in the app menu of the Record AppBar', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: _baseOverrides(),
@@ -476,7 +476,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('record-pins-button')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('app-menu')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('app-menu-pins')), findsOneWidget);
     });
 
     testWidgets('tap navigates to the Pins screen', (tester) async {
@@ -491,7 +493,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('record-pins-button')));
+      await tester.tap(find.byKey(const Key('app-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('app-menu-pins')));
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(AppBar, 'Pins'), findsOneWidget);

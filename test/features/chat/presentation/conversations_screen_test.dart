@@ -141,7 +141,7 @@ void main() {
       );
     });
 
-    testWidgets('renders the floating add, pins, and settings icons',
+    testWidgets('renders the floating add and the app menu',
         (tester) async {
       await _pumpScreen(tester);
 
@@ -156,14 +156,7 @@ void main() {
         find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.add)),
         findsNothing,
       );
-      expect(
-        find.byKey(const Key('conversations-pins-icon')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('conversations-settings-icon')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('app-menu')), findsOneWidget);
     });
 
     testWidgets('every button has a label a screen reader can read',
@@ -275,10 +268,12 @@ void main() {
       expect(find.text('Thread conv-42'), findsOneWidget);
     });
 
-    testWidgets('settings icon navigates to settings', (tester) async {
+    testWidgets('the app menu opens settings', (tester) async {
       await _pumpScreen(tester);
 
-      await tester.tap(find.byKey(const Key('conversations-settings-icon')));
+      await tester.tap(find.byKey(const Key('app-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('app-menu-settings')));
       await tester.pumpAndSettle();
 
       expect(find.text('Settings'), findsOneWidget);

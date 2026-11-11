@@ -18,8 +18,8 @@ List<String> _parseTags(String raw, Set<String> chosen) => {
   ...raw.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty),
 }.toList();
 
-/// Names where you stand, and lists the places. Reached from the Shopping and
-/// Record app bars.
+/// Names where you stand, and lists the places. Reached from the app menu of
+/// every tab.
 class PlacesScreen extends ConsumerStatefulWidget {
   const PlacesScreen({super.key});
 

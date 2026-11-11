@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/matter.dart';
+import 'package:voice_agent/core/widgets/app_menu_button.dart';
 import 'package:voice_agent/features/matters/domain/matters_state.dart';
 import 'package:voice_agent/features/matters/presentation/matter_dialogs.dart';
 import 'package:voice_agent/features/matters/presentation/matters_notifier.dart';
@@ -28,7 +29,10 @@ class MattersScreen extends ConsumerWidget {
     final notifier = ref.read(mattersNotifierProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sprawy')),
+      appBar: AppBar(
+        title: const Text('Sprawy'),
+        actions: const [AppMenuButton()],
+      ),
       floatingActionButton: FloatingActionButton(
         key: const Key('matters-add'),
         tooltip: 'Nowa sprawa',

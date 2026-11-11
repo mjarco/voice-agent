@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/providers/shopping_list_changes_provider.dart';
+import 'package:voice_agent/core/widgets/app_menu_button.dart';
 import 'package:voice_agent/core/widgets/shopping_proposal_card.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_models.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_state.dart';
@@ -156,19 +156,7 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Shopping'),
-        actions: [
-          IconButton(
-            key: const Key('shopping-places-button'),
-            icon: const Icon(Icons.place_outlined),
-            tooltip: 'Miejsca',
-            onPressed: () => context.push('/places'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
+        actions: const [AppMenuButton()],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
