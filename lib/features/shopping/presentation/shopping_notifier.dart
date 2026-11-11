@@ -197,8 +197,9 @@ class ShoppingNotifier extends StateNotifier<ShoppingState> {
             (t == 'other' && item.storeTypes.isEmpty),
       );
 
-  Future<bool> setTypes(String id, List<String> storeTypes) =>
-      _act(() => _repository.setTypes(id, storeTypes));
+  /// A corrected text, corrected types, or both; null leaves that part.
+  Future<bool> edit(String id, {String? text, List<String>? storeTypes}) =>
+      _act(() => _repository.edit(id, text: text, storeTypes: storeTypes));
 
   /// Under a place's types, where it was bought is the item's first of them.
   Future<bool> markBought(String id) =>

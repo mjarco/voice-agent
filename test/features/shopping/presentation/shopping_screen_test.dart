@@ -177,8 +177,45 @@ void main() {
     await tester.tap(save);
     await tester.pumpAndSettle();
 
-    expect(repo.lastSetTypesId, 'i1');
+    expect(repo.lastEditId, 'i1');
+    expect(repo.lastEditText, isNull, reason: 'the text did not change');
     expect(repo.lastSetTypes, ['grocery']);
+  });
+
+  testWidgets('a tap corrects the text; an empty one cannot be saved', (
+    tester,
+  ) async {
+    final repo = FakeShoppingRepository();
+    await _pump(tester, repo);
+
+    await tester.tap(find.text('kabel HDMI'));
+    await tester.pumpAndSettle();
+    final field = find.byKey(const Key('shopping-edit-text'));
+    final save = find.byKey(const Key('shopping-edit-save'));
+    await tester.enterText(field, '   ');
+    await tester.pump();
+    expect(tester.widget<FilledButton>(save).onPressed, isNull);
+
+    await tester.enterText(field, ' kabel HDMI 2 m ');
+    await tester.pump();
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(repo.lastEditId, 'i1');
+    expect(repo.lastEditText, 'kabel HDMI 2 m');
+    expect(repo.lastSetTypes, isNull, reason: 'the types did not change');
+  });
+
+  testWidgets('saving with nothing changed sends nothing', (tester) async {
+    final repo = FakeShoppingRepository();
+    await _pump(tester, repo);
+
+    await tester.tap(find.text('kabel HDMI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shopping-edit-save')));
+    await tester.pumpAndSettle();
+
+    expect(repo.editCalls, 0);
   });
 
   testWidgets('removing asks first', (tester) async {

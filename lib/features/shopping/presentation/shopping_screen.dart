@@ -120,8 +120,15 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
       if (confirmed && mounted) {
         await _act(item.id, () => notifier.remove(item.id));
       }
-    } else {
-      await _act(item.id, () => notifier.setTypes(item.id, result.types));
+    } else if (result.text != null || result.types != null) {
+      await _act(
+        item.id,
+        () => notifier.edit(
+          item.id,
+          text: result.text,
+          storeTypes: result.types,
+        ),
+      );
     }
   }
 
@@ -428,16 +435,22 @@ class _ItemTypes extends StatelessWidget {
 }
 
 class _ItemSheetResult {
-  const _ItemSheetResult.types(this.types) : remove = false;
+  const _ItemSheetResult.edit({this.text, this.types}) : remove = false;
   const _ItemSheetResult.remove()
-      : types = const [],
+      : text = null,
+        types = null,
         remove = true;
 
-  final List<String> types;
+  /// The corrected text, null when it did not change.
+  final String? text;
+
+  /// The corrected types, null when they did not change.
+  final List<String>? types;
   final bool remove;
 }
 
-/// Corrects an item's store types; an item to buy can also be removed here.
+/// Corrects an item's text and store types; an item to buy can also be
+/// removed here.
 class _ItemSheet extends StatefulWidget {
   const _ItemSheet({required this.item, required this.catalogue});
 
@@ -450,19 +463,55 @@ class _ItemSheet extends StatefulWidget {
 
 class _ItemSheetState extends State<_ItemSheet> {
   late final Set<String> _types = widget.item.storeTypes.toSet();
+  late final _text = TextEditingController(text: widget.item.text);
+
+  @override
+  void initState() {
+    super.initState();
+    _text.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  _ItemSheetResult _result() {
+    final text = _text.text.trim();
+    final typesChanged = !(_types.length == widget.item.storeTypes.length &&
+        _types.containsAll(widget.item.storeTypes));
+    return _ItemSheetResult.edit(
+      text: text == widget.item.text ? null : text,
+      types: typesChanged ? _types.toList() : null,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final canSave = _types.isNotEmpty && _text.text.trim().isNotEmpty;
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          16 + MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              widget.item.text,
-              style: Theme.of(context).textTheme.titleMedium,
+            TextField(
+              key: const Key('shopping-edit-text'),
+              controller: _text,
+              maxLength: 200,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Item',
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -492,10 +541,9 @@ class _ItemSheetState extends State<_ItemSheet> {
                 const Spacer(),
                 FilledButton(
                   key: const Key('shopping-edit-save'),
-                  onPressed: _types.isEmpty
-                      ? null
-                      : () => Navigator.of(context)
-                          .pop(_ItemSheetResult.types(_types.toList())),
+                  onPressed: canSave
+                      ? () => Navigator.of(context).pop(_result())
+                      : null,
                   child: const Text('Save'),
                 ),
               ],

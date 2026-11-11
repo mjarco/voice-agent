@@ -47,8 +47,10 @@ class FakeShoppingRepository implements ShoppingRepository {
   String? lastBoughtStoreType;
   String? lastRemovedId;
   String? lastRestoredId;
-  String? lastSetTypesId;
+  String? lastEditId;
+  String? lastEditText;
   List<String>? lastSetTypes;
+  int editCalls = 0;
 
   void _failIfAsked() {
     final error = nextWriteError;
@@ -96,9 +98,11 @@ class FakeShoppingRepository implements ShoppingRepository {
   }
 
   @override
-  Future<void> setTypes(String id, List<String> storeTypes) async {
+  Future<void> edit(String id, {String? text, List<String>? storeTypes}) async {
     _failIfAsked();
-    lastSetTypesId = id;
+    editCalls++;
+    lastEditId = id;
+    lastEditText = text;
     lastSetTypes = storeTypes;
   }
 
