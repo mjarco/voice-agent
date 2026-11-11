@@ -16,6 +16,7 @@ class MainActivity : FlutterActivity() {
     private var notificationActionBridge: NotificationActionBridge? = null
     private var shareBridge: ShareBridge? = null
     private var arrivalTapBridge: ArrivalTapBridge? = null
+    private var glassesControlBridge: GlassesControlBridge? = null
 
     /** A recreated activity gets its starting intent again. */
     private var recreated = false
@@ -67,6 +68,13 @@ class MainActivity : FlutterActivity() {
         arrivalChannel.setMethodCallHandler(arrival)
         arrivalTapBridge = arrival
         if (!recreated) arrival.accept(intent)
+
+        val glasses = GlassesControlBridge(this)
+        glassesControlBridge = glasses
+        MethodChannel(messenger, "com.voiceagent/glasses_control")
+            .setMethodCallHandler(glasses)
+        EventChannel(messenger, "com.voiceagent/glasses_control/events")
+            .setStreamHandler(glasses)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -85,6 +93,8 @@ class MainActivity : FlutterActivity() {
         notificationActionBridge = null
         shareBridge = null
         arrivalTapBridge = null
+        glassesControlBridge?.dispose()
+        glassesControlBridge = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 }
