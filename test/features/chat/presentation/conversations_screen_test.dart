@@ -158,7 +158,7 @@ void main() {
       );
       expect(find.byKey(const Key('app-pins')), findsOneWidget);
       expect(find.byKey(const Key('app-settings')), findsOneWidget);
-      expect(find.byKey(const Key('app-menu')), findsOneWidget);
+      expect(find.byKey(const Key('app-places')), findsOneWidget);
     });
 
     testWidgets('every button has a label a screen reader can read',
@@ -270,7 +270,7 @@ void main() {
       expect(find.text('Thread conv-42'), findsOneWidget);
     });
 
-    testWidgets('the app menu opens settings', (tester) async {
+    testWidgets('the Settings icon opens settings', (tester) async {
       await _pumpScreen(tester);
 
       await tester.tap(find.byKey(const Key('app-settings')));

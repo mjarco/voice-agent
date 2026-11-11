@@ -425,8 +425,8 @@ All navigation uses GoRouter:
   **replaced placeholder screens** in existing routes — new features do not
   add new top-level routes.
 - The top bar of a tab: its title, the tab's own actions, then `AppBarActions`
-  (`core/widgets/`), the same on every tab: Pins and Settings as icons, always
-  in sight, and a menu with Miejsca.
+  (`core/widgets/`), the same icons on every tab: Miejsca, Pins, Settings
+  (Settings at the right edge); no overflow menu.
 - Infrequently accessed screens (e.g., Settings) are top-level GoRoutes outside
   the shell. Navigate to them with `context.push()` (not `context.go()`) to
   preserve shell state.
@@ -592,7 +592,7 @@ screens within this structure — it does not add routes.
 | `/agenda/routines/:id` | ADR-ARCH-012 (child of /agenda) | RoutineDetailScreen; `edit` child: RoutineFormScreen |
 | `/routines`, `/routines/:id` | ADR-ARCH-012 (outside shell) | redirects to `/agenda` and `/agenda/routines/:id` |
 | `/chat` | 020 (shell branch 4) | 024 (ChatPlaceholderScreen → real screen) |
-| `/places` | outside shell | places (PlacesScreen) — reached from the menu of every tab (`AppBarActions`) |
+| `/places` | outside shell | places (PlacesScreen) — an icon in the bar of every tab (`AppBarActions`) |
 | `/matters` | ADR-ARCH-012 (shell branch 3, was Routines) | MattersScreen, the "Sprawy" tab |
 | `/matters/new` | R3 matters (child of /matters) | MatterFormScreen — pops with the saved MatterDetail |
 | `/matters/:id` | R3 matters (child of /matters) | MatterDetailScreen |

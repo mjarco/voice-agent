@@ -179,7 +179,7 @@ void main() {
       );
     });
 
-    testWidgets('the app menu opens settings', (tester) async {
+    testWidgets('the Settings icon opens settings', (tester) async {
       await _pumpScreen(tester);
 
       await tester.tap(find.byKey(const Key('app-settings')));
