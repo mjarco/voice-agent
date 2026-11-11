@@ -48,6 +48,16 @@ class LocationConfig(context: Context) {
         get() = prefs.getLong("last_reading_at", 0)
         set(value) = prefs.edit().putLong("last_reading_at", value).apply()
 
+    /** When the pipeline last asked for location updates, in either mode (ADR-PLATFORM-012). */
+    var lastSubscribedAtMs: Long
+        get() = prefs.getLong("last_subscribed_at", 0)
+        set(value) = prefs.edit().putLong("last_subscribed_at", value).apply()
+
+    /** When the watch last found the readings stale and re-subscribed. */
+    var lastStaleAtMs: Long
+        get() = prefs.getLong("last_stale_at", 0)
+        set(value) = prefs.edit().putLong("last_stale_at", value).apply()
+
     var lastSentAtMs: Long
         get() = prefs.getLong("last_sent_at", 0)
         set(value) = prefs.edit().putLong("last_sent_at", value).apply()
