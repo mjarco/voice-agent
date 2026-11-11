@@ -114,12 +114,9 @@ class LocalNotificationService implements NotificationService {
 
   @override
   Future<void> schedule(ScheduledNotification n) async {
-    // Summary IDs (1000–1003) use inexact scheduling (drift of minutes is
-    // fine for daily summaries). Routine occurrence IDs (3M+) use exact
-    // scheduling — the user expects the reminder near the appointment time.
-    final scheduleMode = (n.id >= 1000 && n.id <= 1003)
-        ? AndroidScheduleMode.inexactAllowWhileIdle
-        : AndroidScheduleMode.exactAllowWhileIdle;
+    // Routine reminders use exact scheduling: the user expects the reminder
+    // near the appointment time.
+    const scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
 
     await _plugin.zonedSchedule(
       n.id,
@@ -135,7 +132,7 @@ class LocalNotificationService implements NotificationService {
         android: AndroidNotificationDetails(
           'agenda',
           'Agenda',
-          channelDescription: 'Daily summaries and routine reminders',
+          channelDescription: 'Routine reminders',
           importance: Importance.defaultImportance,
         ),
       ),

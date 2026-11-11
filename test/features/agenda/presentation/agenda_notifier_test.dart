@@ -119,6 +119,9 @@ class _FakeNotificationService implements NotificationService {
   final Map<int, ScheduledNotification> _snapshot = {};
   bool permitted = true;
 
+  /// Every reconcile asks first, so this counts the reconciles.
+  int permissionChecks = 0;
+
   Map<int, ScheduledNotification> get snapshot => Map.unmodifiable(_snapshot);
 
   @override
@@ -126,7 +129,10 @@ class _FakeNotificationService implements NotificationService {
   @override
   Future<bool> requestPermission() async => permitted;
   @override
-  Future<bool> isPermitted() async => permitted;
+  Future<bool> isPermitted() async {
+    permissionChecks++;
+    return permitted;
+  }
   @override
   Future<void> schedule(ScheduledNotification n) async => _snapshot[n.id] = n;
   @override
@@ -432,9 +438,8 @@ void main() {
       buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      // The pure scheduler always writes the 4 summary IDs at minimum.
-      expect(notifications.snapshot.keys, containsAll([1000, 1001, 1002, 1003]),
-          reason: 'reconciler should have scheduled the 4 daily summaries');
+      expect(notifications.permissionChecks, 1,
+          reason: 'the reconciler should have run once');
     });
 
     test('reconcile does NOT fire on error(cached)', () async {
@@ -448,7 +453,7 @@ void main() {
       buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      expect(notifications.snapshot, isEmpty,
+      expect(notifications.permissionChecks, 0,
           reason: 'stale cache must not drive OS notification scheduling');
     });
 
@@ -457,14 +462,14 @@ void main() {
       final notifier = buildNotifier();
       await Future<void>.delayed(Duration.zero);
 
-      // Clear what initial today-load scheduled.
-      await notifications.cancelAll();
+      // Forget the initial today-load's reconcile.
+      notifications.permissionChecks = 0;
 
       // Navigate to a non-today date.
       notifier.selectDate(DateTime(2030, 1, 1));
       await Future<void>.delayed(Duration.zero);
 
-      expect(notifications.snapshot, isEmpty,
+      expect(notifications.permissionChecks, 0,
           reason: 'non-today responses are for browsing, not scheduling');
     });
 
@@ -508,7 +513,6 @@ void main() {
       repo.nextFetchResult = _responseWithItems();
       buildNotifier();
       await Future<void>.delayed(Duration.zero);
-      // Snapshot is now populated with summaries (and a routine reminder).
       repo.fetchCount = 0;
 
       container.read(sessionActiveProvider.notifier).state = true;
