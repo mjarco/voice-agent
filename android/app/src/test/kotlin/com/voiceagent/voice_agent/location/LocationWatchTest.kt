@@ -1,8 +1,10 @@
 package com.voiceagent.voice_agent.location
 
+import com.voiceagent.voice_agent.location.LocationWatch.AFTER_UPDATE_DELAY_SECONDS
 import com.voiceagent.voice_agent.location.LocationWatch.RETRY_AFTER_MS
 import com.voiceagent.voice_agent.location.LocationWatch.STALE_AFTER_MS
 import com.voiceagent.voice_agent.location.LocationWatch.isStale
+import com.voiceagent.voice_agent.location.LocationWatch.resubscribesAfterUpdate
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -50,5 +52,20 @@ class LocationWatchTest {
     @Test
     fun aLogThatNeverSubscribedIsStale() {
         assertTrue(isStale(now, 0, 0, 0))
+    }
+
+    @Test
+    fun anUpdateIsFollowedByASecondSubscriptionInBackgroundModeOnly() {
+        assertTrue(resubscribesAfterUpdate(enabled = true, mode = LocationConfig.MODE_BACKGROUND))
+        assertFalse(resubscribesAfterUpdate(enabled = true, mode = LocationConfig.MODE_FOREGROUND))
+        assertFalse(resubscribesAfterUpdate(enabled = false, mode = LocationConfig.MODE_BACKGROUND))
+    }
+
+    @Test
+    fun theSecondSubscriptionWaitsPastPlayServicesClearingTheUpdate() {
+        // Cleared 117 ms after the subscription at the 1.29.1 install
+        // (ADR-PLATFORM-013); a minute leaves a wide margin.
+        assertTrue(AFTER_UPDATE_DELAY_SECONDS >= 60)
+        assertTrue(AFTER_UPDATE_DELAY_SECONDS * 1000 < STALE_AFTER_MS)
     }
 }
