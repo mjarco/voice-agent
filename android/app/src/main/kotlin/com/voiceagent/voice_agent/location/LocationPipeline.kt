@@ -181,10 +181,12 @@ object LocationPipeline {
         recordExits(context, config)
         if (!config.enabled) {
             unsubscribe(context)
+            LocationWatch.cancel(context)
             scheduleDrainIfNeeded(context)
             return
         }
         recordChanges(context, config)
+        LocationWatch.schedule(context)
         if (config.mode == LocationConfig.MODE_FOREGROUND) {
             subscribeInForeground(context, config, reason)
         } else {
@@ -216,6 +218,7 @@ object LocationPipeline {
                 .addOnFailureListener { failure ->
                     executor.execute { recordStatus(context, "subscribe_failed", failure.message ?: "unknown") }
                 }
+            config.lastSubscribedAtMs = System.currentTimeMillis()
             recordStatus(context, "subscribed", "background, $reason")
         } catch (failure: SecurityException) {
             recordStatus(context, "subscribe_failed", "permission: ${failure.message}")
@@ -226,6 +229,7 @@ object LocationPipeline {
         stopBackgroundUpdates(context)
         try {
             ContextCompat.startForegroundService(context, Intent(context, LocationForegroundService::class.java))
+            config.lastSubscribedAtMs = System.currentTimeMillis()
             recordStatus(context, "subscribed", "foreground every ${config.intervalSeconds} s, $reason")
         } catch (failure: RuntimeException) {
             // ForegroundServiceStartNotAllowedException and SecurityException
