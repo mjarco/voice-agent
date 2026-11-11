@@ -10,6 +10,8 @@ import 'package:voice_agent/core/audio_focus/audio_focus_provider.dart';
 import 'package:voice_agent/core/background/background_service.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/glasses_control/glasses_control_port.dart';
+import 'package:voice_agent/core/glasses_control/glasses_control_provider.dart';
 import 'package:voice_agent/core/media_button/media_button_provider.dart';
 import 'package:voice_agent/core/notification_actions/notification_action_port.dart';
 import 'package:voice_agent/core/notification_actions/notification_action_provider.dart';
@@ -127,10 +129,15 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         .read(notificationActionProvider)
         .actions
         .listen(_onNotificationAction);
+    _glassesCommandSub = _ref
+        .read(glassesControlProvider)
+        .commands
+        .listen(_onGlassesCommand);
   }
 
   StreamSubscription<AudioFocusLoss>? _focusLossSub;
   StreamSubscription<NotificationAction>? _notificationActionSub;
+  StreamSubscription<GlassesCommand>? _glassesCommandSub;
 
   void Function()? _ttsListenerCleanup;
 
@@ -215,6 +222,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     });
     if (next == null) return false;
     _ref.read(micModeProvider.notifier).state = next;
+    // The glasses' control page shows the mode (ADR-AUDIO-016).
+    unawaited(_ref.read(glassesControlProvider).reportMode(next));
     return true;
   }
 
@@ -408,6 +417,32 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         unawaited(resumeSession());
       case NotificationAction.stop:
         unawaited(stopSession());
+    }
+  }
+
+  /// A command from the glasses' control page in glass-native
+  /// (ADR-AUDIO-016): the same moves as the notification's buttons, plus a
+  /// start from Off. A command that already holds, or that does not fit
+  /// the mode, changes nothing; glass-native learns the mode from
+  /// [GlassesControlPort.reportMode] either way.
+  void _onGlassesCommand(GlassesCommand command) {
+    if (!mounted || !_micModes) return;
+    Telemetry.instance.event('hf.glasses_command', attrs: {
+      'command': command.name,
+      'mode': micMode.name,
+    });
+    switch (command) {
+      case GlassesCommand.listening:
+        if (micMode == MicMode.off) {
+          unawaited(startSession());
+        } else if (micMode == MicMode.standby &&
+            !_suspendedForManualRecording) {
+          unawaited(resumeSession());
+        }
+      case GlassesCommand.standby:
+        if (micMode == MicMode.listening) unawaited(pauseSession());
+      case GlassesCommand.off:
+        if (micMode != MicMode.off) unawaited(stopSession());
     }
   }
 
@@ -926,6 +961,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     _ttsListenerCleanup?.call();
     unawaited(_focusLossSub?.cancel());
     unawaited(_notificationActionSub?.cancel());
+    unawaited(_glassesCommandSub?.cancel());
     unawaited(_engagementSub?.cancel());
     unawaited(_engagement.dispose());
     // Clean up WAV files for any remaining unprocessed jobs.

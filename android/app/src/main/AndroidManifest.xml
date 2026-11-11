@@ -15,6 +15,11 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <!-- An arrival wakes the G2 glasses through glass-native (voice-agent#394, GlassesWake). -->
     <uses-permission android:name="casa.jarco.glassnative.permission.SHOW"/>
+    <!-- glass-native drives the microphone mode from the glasses (ADR-AUDIO-016). -->
+    <permission
+        android:name="${applicationId}.permission.MIC"
+        android:label="Switch Voice Agent's microphone mode"
+        android:protectionLevel="normal"/>
     <!-- The location log (ADR-PLATFORM-009). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -119,6 +124,15 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
+        <!-- The glasses' control page in glass-native (ADR-AUDIO-016). -->
+        <receiver
+            android:name=".GlassesControlReceiver"
+            android:exported="true"
+            android:permission="${applicationId}.permission.MIC">
+            <intent-filter>
+                <action android:name="com.voiceagent.voice_agent.action.MIC"/>
             </intent-filter>
         </receiver>
         <!-- Don't delete the meta-data below.
