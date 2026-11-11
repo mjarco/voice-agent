@@ -16,6 +16,8 @@ import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/media_button/media_button_port.dart';
 import 'package:voice_agent/core/media_button/media_button_provider.dart';
+import 'package:voice_agent/core/glasses_control/glasses_control_port.dart';
+import 'package:voice_agent/core/glasses_control/glasses_control_provider.dart';
 import 'package:voice_agent/core/notification_actions/notification_action_port.dart';
 import 'package:voice_agent/core/notification_actions/notification_action_provider.dart';
 import 'package:voice_agent/core/models/transcript_result.dart';
@@ -155,6 +157,22 @@ class _Actions implements NotificationActionPort {
   Stream<NotificationAction> get actions => _ctrl.stream;
 }
 
+class _Glasses implements GlassesControlPort {
+  final StreamController<GlassesCommand> _ctrl =
+      StreamController<GlassesCommand>.broadcast();
+
+  /// Every mode reported to glass-native, in order.
+  final List<MicMode> reported = [];
+
+  void send(GlassesCommand command) => _ctrl.add(command);
+
+  @override
+  Stream<GlassesCommand> get commands => _ctrl.stream;
+
+  @override
+  Future<void> reportMode(MicMode mode) async => reported.add(mode);
+}
+
 class _Tts implements TtsService {
   final ValueNotifier<bool> speaking = ValueNotifier(false);
   int stops = 0;
@@ -291,6 +309,7 @@ class _Harness {
       audioFocusProvider.overrideWithValue(focus),
       mediaButtonProvider.overrideWithValue(mediaButton),
       notificationActionProvider.overrideWithValue(actions),
+      glassesControlProvider.overrideWithValue(glasses),
       handsFreeEngineProvider.overrideWithValue(engine),
       backgroundServiceProvider.overrideWithValue(service),
       ttsServiceProvider.overrideWithValue(tts),
@@ -311,6 +330,7 @@ class _Harness {
   late final focus = _Focus(engine);
   late final mediaButton = _MediaButton(engine);
   final actions = _Actions();
+  final glasses = _Glasses();
   final service = _Service();
   final tts = _Tts();
   late final ProviderContainer container;
@@ -1101,6 +1121,66 @@ void main() {
       h.actions.press(NotificationAction.stop);
       await _settle();
       expect(h.mode, MicMode.off);
+    });
+
+    test('the glasses start, pause, resume and stop (ADR-AUDIO-016)',
+        () async {
+      final h = _Harness();
+      h.ctrl; // the controller listens from its creation
+
+      h.glasses.send(GlassesCommand.listening);
+      await _settle();
+      await _settle();
+      expect(h.mode, MicMode.listening);
+      expect(h.engine.running, isTrue);
+
+      h.glasses.send(GlassesCommand.standby);
+      await _settle();
+      expect(h.mode, MicMode.standby);
+      expect(h.engine.running, isFalse);
+
+      h.glasses.send(GlassesCommand.listening);
+      await _settle();
+      await _settle();
+      expect(h.mode, MicMode.listening);
+
+      h.glasses.send(GlassesCommand.off);
+      await _settle();
+      expect(h.mode, MicMode.off);
+      expect(h.glasses.reported, [
+        MicMode.listening,
+        MicMode.standby,
+        MicMode.listening,
+        MicMode.off,
+      ]);
+    });
+
+    test('Off from the glasses also ends a standby', () async {
+      final h = _Harness();
+      await h.standby();
+
+      h.glasses.send(GlassesCommand.off);
+      await _settle();
+      expect(h.mode, MicMode.off);
+      expect(h.sessionActive, isFalse);
+    });
+
+    test('a glasses command that already holds changes nothing', () async {
+      final h = _Harness();
+      await h.listening();
+      final starts = h.engine.starts;
+      final reported = h.glasses.reported.length;
+
+      h.glasses.send(GlassesCommand.listening);
+      await _settle();
+      expect(h.mode, MicMode.listening);
+      expect(h.engine.starts, starts);
+
+      await h.ctrl.stopSession();
+      h.glasses.send(GlassesCommand.standby);
+      await _settle();
+      expect(h.mode, MicMode.off);
+      expect(h.glasses.reported.length, reported + 1); // only the stop
     });
 
     test('a press that no longer fits the mode is ignored', () async {
