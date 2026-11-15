@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voice_agent/core/providers/agent_reply_provider.dart';
+import 'package:voice_agent/core/providers/agent_turns_provider.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/features/today/data/api_today_repository.dart';
 import 'package:voice_agent/features/today/domain/today_repository.dart';
@@ -12,9 +12,8 @@ final todayRepositoryProvider = Provider<TodayRepository>(
 final todayNotifierProvider =
     StateNotifierProvider<TodayNotifier, TodayState>((ref) {
   final notifier = TodayNotifier(ref.watch(todayRepositoryProvider), ref);
-  // A reply may have logged a meal or ticked a task: read the day again.
-  ref.listen<String?>(latestAgentReplyProvider, (prev, next) {
-    if (next != null && next != prev) notifier.refresh();
-  });
+  // A turn answered, spoken or typed, may have logged a meal or ticked a
+  // task: read the day again.
+  ref.listen<int>(agentTurnsProvider, (_, _) => notifier.refresh());
   return notifier;
 });

@@ -262,18 +262,16 @@ void main() {
       expect(body, {'name': 'Zadzwonić', 'due_on': '2026-11-17', 'matter_id': 'm1', 'source': 'phone'});
     });
 
-    test('ticks, undoes, archives and restores through the routines\' routes', () async {
+    test('ticks, undoes and archives through the routines\' routes', () async {
       final api = _StubApiClient()..next = const ApiSuccess(body: '{}');
       final repo = ApiMattersRepository(api);
       await repo.resolveTask('r1', scheduledFor: '2026-11-15');
       await repo.unresolveTask('r1', scheduledFor: '2026-11-15');
       await repo.archiveTask('r1');
-      await repo.restoreTask('r1');
       expect(api.requests.map((r) => '${r.$1} ${r.$2}'), [
         'POST /routines/r1/resolve',
         'DELETE /routines/r1/resolve?scheduled_for=2026-11-15',
         'POST /routines/r1/archive',
-        'POST /routines/r1/activate',
       ]);
       expect(api.requests.first.$3, {'scheduled_for': '2026-11-15', 'status': 'done'});
     });

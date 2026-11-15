@@ -166,9 +166,11 @@ class FakeMattersRepository implements MattersRepository {
   /// The agenda per matter id; a task's tick or archive moves it out.
   Map<String, List<Routine>> tasks = {};
   Object? tasksError;
+  int taskFetches = 0;
 
   @override
   Future<List<Routine>> fetchTasks(String matterId) async {
+    taskFetches++;
     if (tasksError != null) throw tasksError!;
     return tasks[matterId] ?? const [];
   }
@@ -197,6 +199,4 @@ class FakeMattersRepository implements MattersRepository {
   @override
   Future<void> archiveTask(String routineId) async => _check('archive $routineId');
 
-  @override
-  Future<void> restoreTask(String routineId) async => _check('restore $routineId');
 }

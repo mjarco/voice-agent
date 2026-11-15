@@ -4,6 +4,7 @@ import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/local_commands/local_command_provider.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
+import 'package:voice_agent/core/providers/agent_turns_provider.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
@@ -49,6 +50,7 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     hapticService: ref.watch(hapticServiceProvider),
     onAgentReply: (reply) {
       ref.read(latestAgentReplyProvider.notifier).state = reply;
+      ref.read(agentTurnsProvider.notifier).state++;
     },
   );
 

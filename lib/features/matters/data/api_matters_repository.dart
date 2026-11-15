@@ -153,9 +153,6 @@ class ApiMattersRepository implements MattersRepository {
   Future<void> archiveTask(String routineId) async =>
       _done(await _apiClient.postJson('/routines/$routineId/archive'));
 
-  @override
-  Future<void> restoreTask(String routineId) async =>
-      _done(await _apiClient.postJson('/routines/$routineId/activate'));
 
   MatterDetail _detail(ApiResult result) {
     final data = _data(result);

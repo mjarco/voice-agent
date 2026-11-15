@@ -20,6 +20,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     required PinWriter pinWriter,
     required ShoppingProposalsPort proposals,
     void Function()? onShoppingChanged,
+    void Function()? onAnswered,
     String? matterId,
   })  : _conversationId = conversationId,
         _matterId = matterId,
@@ -27,6 +28,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
         _pinWriter = pinWriter,
         _proposals = proposals,
         _onShoppingChanged = onShoppingChanged,
+        _onAnswered = onAnswered,
         super(const ThreadLoading()) {
     load();
   }
@@ -43,6 +45,10 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
   /// The Shopping tab stays alive without polling, so it is told when a turn or
   /// an answer here may have changed what it shows.
   final void Function()? _onShoppingChanged;
+
+  /// Told when personal-agent has answered a turn here, which may have
+  /// written into a matter or the day (`agentTurnsProvider`).
+  final void Function()? _onAnswered;
 
   // Session-local pin view state (proposal 046). Held as notifier fields, not on
   // the immutable Thread* states, so they survive a streaming->loaded transition
@@ -254,6 +260,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
         final result = ChatResult.fromMap(json);
         _currentConversationId = result.conversationId;
         if (result.shoppingProposals.isNotEmpty) _onShoppingChanged?.call();
+        _onAnswered?.call();
         _fetchAfterResult(currentStreaming, result.shoppingProposals);
 
       case 'error':

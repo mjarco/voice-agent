@@ -1,7 +1,7 @@
 # Manual test: a matter to act from (V3 of the redesign)
 
 **Design:** ADR-NET-008; personal-agent ADR-API-126; workspace `docs/requirements/off-roadmap/2026-11-15-va-matter-subject/` (design note `drafts/01-subject-contract.md`).
-**Overall status:** pending
+**Overall status:** passed (2026-11-15; T2 and T8 after the fixes of D9 and D10 of the task, on 2.2.0+63)
 **Why now:** what is said on a matter's screen reaches personal-agent with the matter as its subject, and personal-agent then answers with another prompt and other tools. Unit, widget and HTTP tests cover the rule of the subject, the split of the voice session and the screens; only the phone shows a real utterance on a matter, a lock in the middle of a session and the model's answer.
 **Time budget:** ~30 min, Pixel, dev flavor of the `nov26-redesign` branch (2.2.0+62), against the dev personal-agent on `:8898` (a copy of production), restarted on the V3 code.
 **What we are testing:** that an entry, a task and what the matter waits for, said on a matter, land in it and are only confirmed; that what is not about the matter is handed over; that the matter's agenda adds, ticks off and removes tasks; that Back from a conversation returns to the matter; that a session paused on the matter and resumed with the phone locked talks as Dzień; that the matter's activity moves.
@@ -14,15 +14,15 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 | # | Case | Status |
 |---|---|---|
-| S1 | Dev PA on the V3 code, the dev app 2.2.0+62, a matter to test on | pending |
-| T1 | The matter's screen tells the matter | pending |
-| T2 | The matter's agenda: add, tick off, remove, each undone | pending |
-| T3 | Said on the matter: an entry, a task, what it waits for, only confirmed | pending |
-| T4 | Not about the matter: handed over to Dzień | pending |
-| T5 | Napisz on the matter, and Back to it | pending |
-| T6 | Paused on the matter, resumed with the phone locked: Dzień | pending |
-| T7 | Rozmowy: the matter and the channel; the header opens the matter | pending |
-| T8 | The matter's activity moves with its conversation | pending |
+| S1 | Dev PA on the V3 code, the dev app 2.2.0+62, a matter to test on | passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA) |
+| T1 | The matter's screen tells the matter | passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA) |
+| T2 | The matter's agenda: add, tick off, remove, each undone | passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+63, test PA); failed on 2.2.0+62: Cofnij after Usuń (F2) |
+| T3 | Said on the matter: an entry, a task, what it waits for, only confirmed | passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA, owner's voice) |
+| T4 | Not about the matter: handed over to Dzień | passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA, owner's voice) |
+| T5 | Napisz on the matter, and Back to it | passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA; Otwórz rozmowę by the owner) |
+| T6 | Paused on the matter, resumed with the phone locked: Dzień | passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA, owner's voice; the matter sentence before the lock skipped) |
+| T7 | Rozmowy: the matter and the channel; the header opens the matter | passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA; the list needed a pull to show the new rows) |
+| T8 | The matter's activity moves with its conversation | passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+63, test PA; on 2.2.0+62 the screen stayed stale until reopened (F1)) |
 
 ---
 
@@ -30,7 +30,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### S1 — Dev PA on the V3 code, the dev app, a matter to test on
 
-**Status:** pending
+**Status:** passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA): `dumpsys` versionCode 62, Settings `http://192.168.0.139:8898/…`, Test Connection "Connection successful"
 
 **Do:**
 1. Restart the dev PA on `:8898` from the `nov26-redesign` worktree (`make pa-dev NAME=nov26-redesign`); its log shows the migration of `conversations.subject` once.
@@ -45,7 +45,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T1 — The matter's screen
 
-**Status:** pending
+**Status:** passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA): "W toku · ostatnio dziś", Następny krok, Czeka na, the agenda, the history as a story, the field "Powiedz albo napisz w tej sprawie…"; Back from the matter opened over Dziś lands on Dziś
 **Do:** open the matter from Sprawy, then from Dziś's matters.
 **Why:** 04 §2 of the discussion; the owner's M6.
 **Expected:** the state is a sentence ("W toku · ostatnio …"), then Następny krok and Czeka na, the agenda of the matter's tasks, one history of entries, ticks and conversations, the pins, and the field. Back from the matter opened over Dziś lands on Dziś.
@@ -53,7 +53,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T2 — The matter's agenda
 
-**Status:** pending
+**Status:** passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+63, test PA). On 2.2.0+62 add (PA routine joined to the matter, "jutro"), done and its Cofnij, the tap and Back passed, but Cofnij after Usuń failed: personal-agent refuses `archived → active` (F2). On 2.2.0+63 Usuń then Cofnij kept the routine active in PA; Usuń alone archived it only after the undo ran out
 **Do:** Dodaj zadanie "Kupić silikon", Jutro; swipe it right (Zrobione), Cofnij; swipe it left (Usuń), Cofnij; tap it.
 **Why:** the owner's M6 ("móc dodać nowe zadanie lub usunąć stare"); ADR-API-126 §8.
 **Expected:** the task shows with "jutro"; the dev PA holds a routine joined to the matter (`GET /api/v1/routines?matter_id=`); done and removed each leave the list with a Cofnij that brings it back; the tap opens the task and Back returns to the matter.
@@ -61,7 +61,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T3 — Said on the matter (owner)
 
-**Status:** pending
+**Status:** passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA, owner's voice): `add_matter_entry`, `add_task` (2026-11-18, matter_id), `update_matter` (waiting_for); each reply one sentence, no question; 10 tools offered. A first round had no tools: the dev PA's MCP socket was taken by another dev PA (D11 of the task), repeated
 **Do:** on the matter, by the field's mic: "Kasia przysłała wycenę, dwanaście tysięcy"; "w poniedziałek zadzwonić do hydraulika"; "czekam na odpowiedź od hydraulika".
 **Why:** ADR-API-126 §4: in Sprawa the agent acts at once and only confirms.
 **Expected:** each reply is one sentence saying what was written, with no question; the history shows the entry and "Czeka na: …", the agenda shows the task on Monday; the dev PA's trace of each turn offers ten tools, not every tool.
@@ -69,7 +69,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T4 — Not about the matter (owner)
 
-**Status:** pending
+**Status:** passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA, owner's voice): "handed over to day" in the log, `hand_over` then `add_shopping_item`; no entry on the matter. A garbled first try ("mnękotu") was handed over and Dzień asked again
 **Do:** on the matter, by the mic: "dopisz mleko do zakupów".
 **Why:** ADR-API-126 §5: the hand-over.
 **Expected:** the reply says it was added to the shopping list; Zakupy shows "mleko"; the dev PA's log has "handed over to day" for that turn; the matter has no new entry.
@@ -77,7 +77,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T5 — Napisz, and Back
 
-**Status:** pending
+**Status:** passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA): "Nowa rozmowa w tej sprawie", the answer from the matter's tasks, the header "Sprawa: …" after the send, Back on the matter (also after Otwórz rozmowę, by the owner)
 **Do:** on the matter tap the field's keyboard, write "co jeszcze zostało do zrobienia?", send; Back. Then after a spoken reply tap "Otwórz rozmowę ›", Back.
 **Why:** 04 §3 and §5; ADR-NET-008 §3.
 **Expected:** the thread reads "Nowa rozmowa w tej sprawie", the answer comes from the matter's state (its tasks); after the send the header reads "Sprawa: …"; Back lands on the matter both times.
@@ -85,7 +85,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T6 — Paused on the matter, the phone locked (owner)
 
-**Status:** pending
+**Status:** passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA, owner's voice): with the phone locked "Co mamy tu w kalendarzu?" opened a new conversation without a subject ("new session on a change of subject", `get_agenda`); Rozmowy shows it as "Bez sprawy"
 **Do:** on the matter start listening, say one sentence about the matter; tap off (standby); lock the phone; resume from the notification (or the headset) and say "co mam jutro w kalendarzu?".
 **Why:** the owner's M8 and M13 (10, item 2 (a)): with the phone locked an utterance is Dzień.
 **Expected:** the answer is about tomorrow; Rozmowy shows two conversations: the matter's and a "Bez sprawy" one with the second sentence.
@@ -93,7 +93,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T7 — Rozmowy and the header
 
-**Status:** pending
+**Status:** passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+62, test PA): rows "głosem"/"pisana" with the matter or "Bez sprawy"; the header "Sprawa: …" opens the matter. Seen: the list showed old rows until pulled down
 **Do:** open Rozmowy; open the matter's conversation; tap its header.
 **Why:** 07 §2; ADR-API-126 §7.
 **Expected:** rows show the matter (or "Bez sprawy") and a mic or keyboard; the thread's header "Sprawa: …" opens the matter.
@@ -101,7 +101,7 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 
 ### T8 — The matter's activity
 
-**Status:** pending
+**Status:** passed (2026-11-15, Pixel 11 Pro, dev 2.2.0+63, test PA). No active matter older than 7 days in the copy: "Pierścień KiWear" (6 days) read "ostatnio 6 dni temu", a typed question moved it to "dziś" in PA, Sprawy and Dziś; on 2.2.0+62 the open screen stayed stale until reopened (F1), on 2.2.0+63 a typed turn refreshed the screen on Back and a reopened screen read its agenda again
 **Do:** with a matter whose last entry is older than 7 days, open it and say a question about it ("na czym stoimy?"), which writes nothing; go back to Sprawy and Dziś.
 **Why:** ADR-API-126 §6 (C3).
 **Expected:** the matter reads "W toku · ostatnio dziś" and counts among Dziś's matters in progress.

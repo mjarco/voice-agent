@@ -765,6 +765,7 @@ void main() {
     late _StubRepository repo;
     late FakeShoppingProposals proposals;
     late int changes;
+    late int answered;
 
     ThreadNotifier create({String id = 'conv-1'}) => ThreadNotifier(
           conversationId: id,
@@ -772,6 +773,7 @@ void main() {
           pinWriter: _pinWriter,
           proposals: proposals,
           onShoppingChanged: () => changes++,
+          onAnswered: () => answered++,
         );
 
     List<ShoppingProposalRow> rows(ThreadNotifier notifier) =>
@@ -783,6 +785,21 @@ void main() {
         ..eventsResult = [_event(id: 'ue-1')];
       proposals = FakeShoppingProposals()..rows = [sampleProposal()];
       changes = 0;
+      answered = 0;
+    });
+
+    // agentTurnsProvider (F1 of V3's device check): a typed turn tells the
+    // screens that stay alive under the thread.
+    test('an answered turn is told', () async {
+      final notifier = create();
+      await pumpEventQueue();
+      notifier.send('co zostało?');
+      expect(answered, 0);
+
+      repo.streamController!.add(_resultEvent());
+      await pumpEventQueue();
+
+      expect(answered, 1);
     });
 
     test('a thread reads its proposals by conversation', () async {

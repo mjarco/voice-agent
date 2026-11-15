@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/matter.dart';
 import 'package:voice_agent/core/models/routine.dart';
-import 'package:voice_agent/core/providers/agent_reply_provider.dart';
+import 'package:voice_agent/core/providers/agent_turns_provider.dart';
 import 'package:voice_agent/features/matters/domain/matters_repository.dart';
 import 'package:voice_agent/features/matters/presentation/matter_detail_screen.dart';
 import 'package:voice_agent/features/matters/presentation/matters_providers.dart';
@@ -390,17 +390,51 @@ void main() {
         expect(repo.calls, ['resolve r1 -', 'unresolve r1 -']);
       });
 
-      testWidgets('a swipe left removes it from the agenda (archived)', (tester) async {
+      // personal-agent never takes an archived routine back (F2 of V3's
+      // device check): the archive is asked for only when Cofnij runs out.
+      testWidgets('a swipe left removes it, archived only when Cofnij runs out', (tester) async {
         final repo = await _pump(tester, tasks: [task('r1', 'Stare zadanie', kind: RoutineKind.someday)]);
-        repo.tasks['m1'] = [];
 
         await tester.drag(find.text('Stare zadanie'), const Offset(-500, 0));
         await tester.pumpAndSettle();
-        expect(repo.calls, ['archive r1']);
+        expect(find.text('Stare zadanie'), findsNothing);
+        expect(repo.calls, isEmpty);
 
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+        expect(repo.calls, ['archive r1']);
+      });
+
+      testWidgets('Cofnij after a removal brings the task back and archives nothing', (tester) async {
+        final repo = await _pump(tester, tasks: [task('r1', 'Stare zadanie', kind: RoutineKind.someday)]);
+
+        await tester.drag(find.text('Stare zadanie'), const Offset(-500, 0));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const Key('matter-task-undo')));
         await tester.pumpAndSettle();
-        expect(repo.calls, ['archive r1', 'restore r1']);
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+
+        expect(repo.calls, isEmpty);
+        expect(find.text('Stare zadanie'), findsOneWidget);
+      });
+
+      testWidgets('a task waiting for its archive stays off when the agenda is read again', (tester) async {
+        final repo = await _pump(tester, tasks: [
+          task('r1', 'Stare zadanie', kind: RoutineKind.someday),
+          task('r2', 'Zadzwonić', due: '2026-11-09'),
+        ]);
+
+        await tester.drag(find.text('Stare zadanie'), const Offset(-500, 0));
+        await tester.pumpAndSettle();
+        repo.tasks['m1'] = [task('r1', 'Stare zadanie', kind: RoutineKind.someday)];
+        await tester.drag(find.text('Zadzwonić'), const Offset(500, 0));
+        await tester.pumpAndSettle();
+
+        // The tick's snackbar replaces the removal's: its undo is over, so
+        // the archive follows the tick.
+        expect(repo.calls, ['resolve r2 -', 'archive r1']);
+        expect(find.text('Stare zadanie'), findsNothing);
       });
 
       testWidgets('a recurring routine not due yet cannot be ticked, only removed', (tester) async {
@@ -411,15 +445,20 @@ void main() {
       });
     });
 
-    testWidgets('a reply to what was said reads the matter again', (tester) async {
+    // F1 of V3's device check: a typed turn on the matter left its screen
+    // as it was. Every answered turn counts, also two equal replies.
+    testWidgets('each answered turn reads the matter and its agenda again', (tester) async {
       final repo = await _pump(tester);
       final before = repo.fetches;
       final container = ProviderScope.containerOf(tester.element(find.byType(MatterDetailScreen)));
 
-      container.read(latestAgentReplyProvider.notifier).state = 'Zapisane.';
+      container.read(agentTurnsProvider.notifier).state++;
+      await tester.pumpAndSettle();
+      container.read(agentTurnsProvider.notifier).state++;
       await tester.pumpAndSettle();
 
-      expect(repo.fetches, before + 1);
+      expect(repo.fetches, before + 2);
+      expect(repo.taskFetches, greaterThanOrEqualTo(3));
     });
 
     testWidgets('a missing matter shows the error', (tester) async {

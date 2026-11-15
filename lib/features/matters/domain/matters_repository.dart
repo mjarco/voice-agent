@@ -91,7 +91,7 @@ abstract class MattersRepository {
   Future<void> unresolveTask(String routineId, {String? scheduledFor});
 
   /// Off the agenda: archived, which the history keeps (04 §4 of the
-  /// discussion); [restoreTask] takes it back.
+  /// discussion). personal-agent never takes an archived routine back, so
+  /// the screen asks for this only when its undo has run out.
   Future<void> archiveTask(String routineId);
-  Future<void> restoreTask(String routineId);
 }

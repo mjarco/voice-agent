@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/matter.dart';
-import 'package:voice_agent/core/providers/agent_reply_provider.dart';
+import 'package:voice_agent/core/providers/agent_turns_provider.dart';
 import 'package:voice_agent/features/matters/domain/matters_state.dart';
 import 'package:voice_agent/features/matters/presentation/matter_detail_notifier.dart';
 import 'package:voice_agent/features/matters/presentation/matter_dialogs.dart';
@@ -50,10 +50,16 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // Built for the first time, the notifier reads the matter itself.
-    if (!ref.exists(matterDetailNotifierProvider(widget.matterId))) return;
+    // Built for the first time, a notifier reads itself; one kept alive (the
+    // same matter open under another tab, F1 of V3's device check) is read
+    // again.
+    final detail = ref.exists(matterDetailNotifierProvider(widget.matterId));
+    final tasks = ref.exists(matterTasksNotifierProvider(widget.matterId));
+    if (!detail && !tasks) return;
     Future.microtask(() {
-      if (mounted) _notifier.refresh();
+      if (!mounted) return;
+      if (detail) unawaited(_notifier.refresh());
+      if (tasks) unawaited(_tasks.load());
     });
   }
 
@@ -62,10 +68,9 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(matterDetailNotifierProvider(widget.matterId));
-    // A reply to what was said here may have written into the matter.
-    ref.listen<String?>(latestAgentReplyProvider, (prev, next) {
-      if (next != null && next != prev) unawaited(_refresh());
-    });
+    // A turn answered, said here or written in a thread opened from here,
+    // may have written into the matter.
+    ref.listen<int>(agentTurnsProvider, (_, _) => unawaited(_refresh()));
 
     return Scaffold(
       appBar: AppBar(
@@ -251,7 +256,7 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
         if (direction == DismissDirection.startToEnd) {
           unawaited(_taskWrite(t, 'Zrobione', () => tasks.done(t), () => tasks.undoDone(t)));
         } else {
-          unawaited(_taskWrite(t, 'Usunięte z agendy', () => tasks.remove(t), () => tasks.restore(t)));
+          unawaited(_removeTask(t));
         }
       },
       child: ListTile(
@@ -293,6 +298,34 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
         onPressed: () => unawaited(undo()),
       ),
     ));
+  }
+
+  /// Off the agenda with an undo: personal-agent never takes an archived
+  /// routine back, so the archive is asked for only when the undo runs out
+  /// (device check of V3, F2); Cofnij reads the agenda again.
+  Future<void> _removeTask(MatterTask t) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final tasks = _tasks;
+    messenger.hideCurrentSnackBar();
+    final reason = await messenger
+        .showSnackBar(SnackBar(
+          key: const Key('matter-task-snackbar'),
+          content: Text('Usunięte z agendy: ${t.routine.name}'),
+          persist: false,
+          action: SnackBarAction(
+            key: const Key('matter-task-undo'),
+            label: 'Cofnij',
+            onPressed: () {},
+          ),
+        ))
+        .closed;
+    if (reason == SnackBarClosedReason.action) {
+      await tasks.unhide(t.id);
+      return;
+    }
+    if (!await tasks.remove(t) && mounted) {
+      showMatterError(context, 'usunąć zadania', tasks.lastActionError);
+    }
   }
 
   Future<void> _addTask() async {

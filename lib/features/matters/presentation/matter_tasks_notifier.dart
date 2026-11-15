@@ -107,13 +107,18 @@ class MatterTasksNotifier extends StateNotifier<MatterTasksState> {
   final DateTime Function() _now;
   String? lastActionError;
 
+  /// Tasks taken off the screen whose write has not been asked for yet (a
+  /// removal waits for its undo to run out); a read in between keeps them off.
+  final Set<String> _hidden = {};
+
   Future<void> load() async {
     try {
       final routines = await _repository.fetchTasks(_matterId);
       final today = _now();
       final tasks = [
         for (final r in routines)
-          if (!r.ended && r.status == RoutineStatus.active) MatterTask.of(r, today),
+          if (!r.ended && r.status == RoutineStatus.active && !_hidden.contains(r.id))
+            MatterTask.of(r, today),
       ]..sort(MatterTask.compare);
       if (mounted) state = MatterTasksLoaded(tasks);
     } catch (e) {
@@ -123,6 +128,7 @@ class MatterTasksNotifier extends StateNotifier<MatterTasksState> {
 
   /// Takes a task off the screen at once (a swipe), before its write returns.
   void hide(String id) {
+    _hidden.add(id);
     final s = state;
     if (s is MatterTasksLoaded) {
       state = MatterTasksLoaded([for (final t in s.tasks) if (t.id != id) t]);
@@ -132,15 +138,29 @@ class MatterTasksNotifier extends StateNotifier<MatterTasksState> {
   Future<bool> add(String name, {String? dueOn}) =>
       _write(() => _repository.addTask(_matterId, name, dueOn: dueOn));
 
-  Future<bool> done(MatterTask t) =>
-      _write(() => _repository.resolveTask(t.id, scheduledFor: t.scheduledFor));
+  /// Puts back a task taken off with [hide] whose write was not asked for.
+  Future<void> unhide(String id) {
+    _hidden.remove(id);
+    return load();
+  }
+
+  /// A recurring routine comes back with its next day once ticked.
+  Future<bool> done(MatterTask t) {
+    _hidden.remove(t.id);
+    return _write(() => _repository.resolveTask(t.id, scheduledFor: t.scheduledFor));
+  }
 
   Future<bool> undoDone(MatterTask t) =>
       _write(() => _repository.unresolveTask(t.id, scheduledFor: t.scheduledFor));
 
-  Future<bool> remove(MatterTask t) => _write(() => _repository.archiveTask(t.id));
-
-  Future<bool> restore(MatterTask t) => _write(() => _repository.restoreTask(t.id));
+  /// Archives it; the screen asks only when the undo has run out, as
+  /// personal-agent never takes an archived routine back.
+  Future<bool> remove(MatterTask t) async {
+    final ok = await _write(() => _repository.archiveTask(t.id));
+    _hidden.remove(t.id);
+    if (!ok && mounted) await load();
+    return ok;
+  }
 
   Future<bool> _write(Future<Object?> Function() call) async {
     lastActionError = null;
