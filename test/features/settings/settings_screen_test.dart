@@ -98,6 +98,17 @@ List<Override> _baseOverrides() => [
   ...sessionControlTestOverrides,
 ];
 
+/// The settings grew with Wygląd's glass groups (off-roadmap S4): the Groq
+/// field is below the first screen, so it is scrolled in first.
+Future<void> _scrollToGroq(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.widgetWithText(TextField, 'Groq API Key'),
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+}
+
 Future<void> _navigateToSettings(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('app-settings')));
   await tester.pumpAndSettle();
@@ -118,6 +129,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _navigateToSettings(tester);
+      await _scrollToGroq(tester);
 
       expect(find.widgetWithText(TextField, 'Groq API Key'), findsOneWidget);
     });
@@ -139,6 +151,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _navigateToSettings(tester);
+      await _scrollToGroq(tester);
 
       final groqField = tester.widget<TextField>(
         find.widgetWithText(TextField, 'Groq API Key'),
@@ -334,6 +347,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _navigateToSettings(tester);
+      await _scrollToGroq(tester);
 
       await tester.tap(find.widgetWithText(TextField, 'Groq API Key'));
       await tester.pump();
@@ -342,7 +356,15 @@ void main() {
         'gsk_new_key',
       );
 
-      // Move focus away to trigger focus-lost save
+      // Move focus away to trigger focus-lost save; the token field is
+      // above, scrolled out with the Groq field in (off-roadmap S4).
+      await tester.scrollUntilVisible(
+        find.widgetWithText(TextField, 'API Token'),
+        -200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(find.widgetWithText(TextField, 'API Token'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(TextField, 'API Token'));
       await tester.pump();
 

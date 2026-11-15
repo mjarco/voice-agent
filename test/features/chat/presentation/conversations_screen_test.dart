@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
@@ -231,7 +232,8 @@ void main() {
 
       for (final text in ['Hello there', 'Second chat']) {
         expect(
-          find.ancestor(of: find.textContaining(text), matching: find.byType(Card)),
+          // A glass card since off-roadmap S4.
+          find.ancestor(of: find.textContaining(text), matching: find.byType(GlassCard)),
           findsOneWidget,
         );
       }

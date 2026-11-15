@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/matter.dart';
 import 'package:voice_agent/features/matters/domain/matters_repository.dart';
@@ -132,9 +133,10 @@ void main() {
 
       for (final id in ['a', 'b']) {
         expect(
+          // The tile is a glass card since off-roadmap S3.
           find.descendant(
             of: find.byKey(Key('matter-tile-$id')),
-            matching: find.byType(Card),
+            matching: find.byType(GlassCard),
           ),
           findsOneWidget,
         );
