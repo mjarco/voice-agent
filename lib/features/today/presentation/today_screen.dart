@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/today.dart';
 import 'package:voice_agent/core/widgets/app_bar_actions.dart';
+import 'package:voice_agent/features/today/presentation/day_story_view.dart';
 import 'package:voice_agent/features/today/presentation/today_notifier.dart';
 import 'package:voice_agent/features/today/presentation/today_providers.dart';
 
@@ -15,9 +16,12 @@ import 'package:voice_agent/features/today/presentation/today_providers.dart';
 /// [field] is the conversation field; the app puts it here, as features do
 /// not import each other.
 class TodayScreen extends ConsumerWidget {
-  const TodayScreen({super.key, this.field});
+  const TodayScreen({super.key, this.field, this.clock = DateTime.now});
 
   final Widget? field;
+
+  /// Now, for the story's block (in tests, a fixed hour).
+  final DateTime Function() clock;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -32,7 +36,11 @@ class TodayScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(view?.title ?? 'Dziś', key: const Key('today-title')),
+        // The day's title opens the day's story and, from there, any other day.
+        title: GestureDetector(
+          onTap: () => unawaited(open('/day/${dayOf(clock())}')),
+          child: Text(view?.title ?? 'Dziś', key: const Key('today-title')),
+        ),
         actions: [AppBarActions(onReturn: () => unawaited(notifier.refresh()))],
       ),
       body: Column(
@@ -47,6 +55,7 @@ class TodayScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(bottom: 16),
                       children: [
                         if (state.error != null) _ErrorLine(state.error!),
+                        DayStoryBlock(now: clock()),
                         _FoodBlock(food: view.food, open: open),
                         _AgendaBlock(agenda: view.agenda, open: open),
                         _MattersBlock(matters: view.matters, open: open),

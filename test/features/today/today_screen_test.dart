@@ -7,6 +7,8 @@ import 'package:voice_agent/features/today/domain/today_repository.dart';
 import 'package:voice_agent/features/today/presentation/today_providers.dart';
 import 'package:voice_agent/features/today/presentation/today_screen.dart';
 
+import 'fake_day_story_repository.dart';
+
 class _FakeRepo implements TodayRepository {
   _FakeRepo(this.view);
 
@@ -52,7 +54,10 @@ Future<_FakeRepo> _pump(WidgetTester tester, TodayView view) async {
     GoRoute(path: '/diet', builder: (_, _) => const Text('DIET')),
   ]);
   await tester.pumpWidget(ProviderScope(
-    overrides: [todayRepositoryProvider.overrideWithValue(repo)],
+    overrides: [
+      todayRepositoryProvider.overrideWithValue(repo),
+      dayStoryRepositoryProvider.overrideWithValue(FakeDayStoryRepository()),
+    ],
     child: MaterialApp.router(routerConfig: router),
   ));
   await tester.pumpAndSettle();

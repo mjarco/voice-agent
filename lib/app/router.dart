@@ -25,6 +25,7 @@ import 'package:voice_agent/features/diet/presentation/menu_screen.dart';
 import 'package:voice_agent/features/diet/presentation/own_meals_screen.dart';
 import 'package:voice_agent/features/diet/presentation/target_screen.dart';
 import 'package:voice_agent/features/recording/presentation/conversation_field.dart';
+import 'package:voice_agent/features/today/presentation/day_story_view.dart';
 import 'package:voice_agent/features/today/presentation/today_screen.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_screen.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
@@ -277,6 +278,11 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
           actionCard: (a) => MealActionCard(action: a),
         );
       },
+    ),
+    // A day's story (ADR-NET-010), from Dziś's title or its evening block.
+    GoRoute(
+      path: '/day/:date',
+      builder: (_, state) => DayStoryScreen(day: state.pathParameters['date']!),
     ),
     // Settings — outside shell (full-screen, no bottom nav)
     GoRoute(
