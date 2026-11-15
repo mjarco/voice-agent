@@ -13,6 +13,7 @@ import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_version_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
 import 'package:voice_agent/core/theme/app_colors.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -122,9 +123,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
+      // Grouped glass lists, Wygląd first (off-roadmap S4).
       body: ListView(
+        padding: const EdgeInsets.only(bottom: 32),
         children: [
           _buildSectionHeader('Wygląd'),
+          GlassList(children: [
           _AppearanceTile(
             mode: config.appearance,
             onChanged: (m) =>
@@ -138,7 +142,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (v) =>
                 ref.read(appConfigProvider.notifier).updateBackgroundMotion(v),
           ),
+          ]),
           _buildSectionHeader('API Configuration'),
+          GlassList(children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Text(
@@ -155,7 +161,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 hintText: 'http://192.168.x.x:8888/api/v1/voice/transcript',
                 helperText: 'Personal agent: http://<host>:8888/api/v1/voice/transcript',
                 helperMaxLines: 2,
-                border: const OutlineInputBorder(),
                 errorText: _urlError,
               ),
               keyboardType: TextInputType.url,
@@ -172,7 +177,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 controller: _tokenController,
                 decoration: const InputDecoration(
                   labelText: 'API Token',
-                  border: OutlineInputBorder(),
                 ),
                 obscureText: true,
               ),
@@ -216,7 +220,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
+          ]),
           _buildSectionHeader('Transcription'),
+          GlassList(children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Focus(
@@ -228,7 +234,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Groq API Key',
                   hintText: 'gsk_...',
-                  border: OutlineInputBorder(),
                 ),
                 obscureText: true,
               ),
@@ -250,7 +255,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
+          ]),
           _buildSectionHeader('General'),
+          GlassList(children: [
           SwitchListTile(
             title: const Text('Auto-send'),
             subtitle: const Text('Send transcripts automatically'),
@@ -285,7 +292,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ref.read(appConfigProvider.notifier).updateAudioFeedbackEnabled(v);
             },
           ),
+          ]),
           _buildSectionHeader('Voice Activity Detection'),
+          GlassList(children: [
           ListTile(
             key: const Key('advanced-vad-tile'),
             title: const Text('Advanced (VAD)'),
@@ -319,8 +328,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 }
               },
             ),
+          ]),
           if (Platform.isAndroid) ...[
             _buildSectionHeader('Location'),
+            GlassList(children: [
             ListTile(
               key: const Key('location-log-tile'),
               title: const Text('Dziennik lokalizacji'),
@@ -328,21 +339,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/settings/location'),
             ),
+            ]),
           ],
           // P040 test-infra: debug entry for inspecting pending OS
           // notifications + firing one in 2 s. Debug-mode only — the
           // tile is invisible on release builds.
           if (kDebugMode) _buildSectionHeader('Debug'),
           if (kDebugMode)
-            ListTile(
+            GlassList(children: [ListTile(
               key: const Key('notifications-debug-tile'),
               title: const Text('Notifications (debug)'),
               subtitle: const Text('Inspect pending notifications + fire-now'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () =>
                   context.push('/settings/notifications-debug'),
-            ),
+            )]),
           _buildSectionHeader('About'),
+          GlassList(children: [
           ListTile(
             title: const Text('Version'),
             trailing: Text(
@@ -368,6 +381,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               );
             },
           ),
+          ]),
         ],
       ),
     );
@@ -375,11 +389,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
       child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
+        title.toUpperCase(),
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.4,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
       ),
     );

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/providers/flavor_provider.dart';
@@ -61,7 +62,10 @@ class _AdvancedSettingsScreenState
     return Scaffold(
       appBar: AppBar(title: const Text('Advanced (VAD)')),
       body: ListView(
+        padding: const EdgeInsets.only(top: 8, bottom: 32),
         children: [
+          // The sliders on one glass card (off-roadmap S4).
+          GlassList(children: [
           _VadSlider(
             label: 'Speech threshold (positive)',
             value: _draft.positiveSpeechThreshold,
@@ -117,6 +121,7 @@ class _AdvancedSettingsScreenState
               _draft.copyWith(preRollMs: v.round()),
             ),
           ),
+          ]),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -133,10 +138,7 @@ class _AdvancedSettingsScreenState
           // entrypoints, see ADR-OBS-001 §2); this conditional is just
           // for UI cleanliness. Test-overridable via [isDevFlavorProvider].
           if (ref.watch(isDevFlavorProvider))
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: _TelemetrySection(),
-            ),
+            const GlassCard(child: _TelemetrySection()),
         ],
       ),
     );
@@ -239,7 +241,6 @@ class _TelemetrySectionState extends ConsumerState<_TelemetrySection> {
             helperText:
                 _urlError == null ? 'e.g. http://laptop.lan:4318' : null,
             errorText: _urlError,
-            border: const OutlineInputBorder(),
           ),
           keyboardType: TextInputType.url,
           textInputAction: TextInputAction.done,
