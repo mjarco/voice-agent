@@ -1,7 +1,7 @@
 # Manual test: Dziś, the diet and the tabs (V1 of the redesign)
 
 **Design:** ADR-ARCH-013; personal-agent ADR-API-124; workspace `docs/requirements/off-roadmap/2026-11-15-va-today/`.
-**Overall status:** **in progress** (agent's run 2026-11-15; T6, T7 with the owner)
+**Overall status:** **passed in one sitting** (2026-11-15, agent and owner, dev 2.0.0+60); field checks FC-26 (T1 evening and morning) and FC-27 (T5 notification) in the workspace register
 **Why now:** the start screen, the tabs and the mic's place changed together, and the voice inputs moved from Record to the shell. Widget tests cover the screens; only the phone shows the headset, the lock screen and a notification's tap.
 **Time budget:** ~30 min, Pixel, dev flavor of the `nov26-redesign` branch, against the dev personal-agent on `:8898` (a copy of production).
 **What we are testing:** that Dziś tells the day through the day, that a task is done and skipped by a swipe and undone, that Back lands on Dziś, that the field's mic follows the owner's rule, and that the diet's screens correct and plan.
@@ -15,11 +15,11 @@ See the canonical legend in [`p040-agenda-notifications.md`](p040-agenda-notific
 | # | Case | Status |
 |---|---|---|
 | S1 | Dev PA and the dev app | passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA) |
-| T1 | Dziś at noon, in the evening, in the morning | partly: before 18:00 passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA); after 18:00 pending |
+| T1 | Dziś at noon, in the evening, in the morning | before 18:00 passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA); evening and morning: field check FC-26 |
 | T2 | The warning under the reserve, on Dziś and on the glasses | passed (2026-11-15, Pixel, dev 2.0.0+60 with D10, dev PA); glasses: the dev PA's view only |
 | T3 | A task swiped done, one skipped, Cofnij | passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA) |
 | T4 | A tap opens the task and the matter; Back to Dziś | passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA) |
-| T5 | Back on another tab, and a notification's tap | partly: Back passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA); a notification's tap pending |
+| T5 | Back on another tab, and a notification's tap | Back passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA); a notification's tap: field check FC-27 |
 | T6 | The field's mic: tap on and off, long press, the reply in place | passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA, owner); the finger hides the button while held |
 | T7 | The headset and the volume keys with Record gone | passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA, owner) |
 | T8 | A meal corrected, a planned meal eaten, a menu set | passed (2026-11-15, Pixel, dev 2.0.0+60, dev PA) |
