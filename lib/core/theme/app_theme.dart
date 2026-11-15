@@ -153,7 +153,13 @@ abstract final class AppTheme {
         checkmarkColor: scheme.surface,
         side: BorderSide(color: colors.glassLine),
         shape: const StadiumBorder(),
-        labelStyle: base.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w500),
+        // The label turns light on the ink of a selected chip.
+        labelStyle: base.textTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w500,
+          color: WidgetStateColor.resolveWith(
+            (s) => s.contains(WidgetState.selected) ? scheme.surface : scheme.onSurface,
+          ),
+        ),
         showCheckmark: false,
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(

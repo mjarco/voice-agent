@@ -56,7 +56,12 @@ class GlassSurface extends StatelessWidget {
         borderRadius: shape,
         border: Border.all(color: colors.glassLine),
       ),
-      child: Padding(padding: padding, child: child),
+      // Ink of rows (ListTile, InkWell) paints on this Material, over the
+      // fill; a Material under the fill would hide it.
+      child: Material(
+        type: MaterialType.transparency,
+        child: Padding(padding: padding, child: child),
+      ),
     );
     if (blur) {
       body = BackdropFilter(
@@ -83,7 +88,7 @@ class GlassSurface extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: shape,
-          child: Material(type: MaterialType.transparency, child: body),
+          child: body,
         ),
       ),
     );

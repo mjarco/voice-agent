@@ -35,16 +35,20 @@ class MattersScreen extends ConsumerWidget {
         title: const Text('Sprawy'),
         actions: const [AppBarActions()],
       ),
-      floatingActionButton: FloatingActionButton(
-        // Own tag: several tabs keep a "+" mounted at once.
-        heroTag: 'matters-new',
-        key: const Key('matters-add'),
-        tooltip: 'Nowa sprawa',
-        onPressed: () async {
-          await context.push('/matters/new');
-          notifier.refresh();
-        },
-        child: const Icon(Icons.add),
+      // Above the floating tab bar, not under it (off-roadmap S3).
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 84),
+        child: FloatingActionButton(
+          // Own tag: several tabs keep a "+" mounted at once.
+          heroTag: 'matters-new',
+          key: const Key('matters-add'),
+          tooltip: 'Nowa sprawa',
+          onPressed: () async {
+            await context.push('/matters/new');
+            notifier.refresh();
+          },
+          child: const Icon(Icons.add),
+        ),
       ),
       body: switch (state) {
         MattersListLoading() => const Center(
