@@ -239,7 +239,7 @@ class _FoodBlock extends StatelessWidget {
                 if (max != null && max > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 14),
-                    child: _KcalBar(eaten: ((max - left) / max).clamp(0.0, 1.0), warned: warned),
+                    child: GlassBar(fraction: ((max - left) / max).clamp(0.0, 1.0), warned: warned),
                   ),
               ],
               // The sentence of personal-agent: the number in words, or the
@@ -288,42 +288,6 @@ class _FoodBlock extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// How much of the day's top is eaten, in the accent's gradient.
-class _KcalBar extends StatelessWidget {
-  const _KcalBar({required this.eaten, required this.warned});
-
-  final double eaten;
-  final bool warned;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
-      child: SizedBox(
-        height: 8,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: colors.chip),
-            FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: eaten,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: warned ? [colors.warning, colors.warning] : colors.accentGradient,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

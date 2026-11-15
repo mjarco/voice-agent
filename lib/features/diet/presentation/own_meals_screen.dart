@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/features/diet/domain/diet_models.dart';
 import 'package:voice_agent/features/diet/presentation/diet_providers.dart';
 
@@ -72,7 +73,10 @@ class _OwnMealsScreenState extends ConsumerState<OwnMealsScreen> {
                 )
               : ListView(
                   key: const Key('own-meals-list'),
+                  padding: const EdgeInsets.only(top: 8, bottom: 24),
                   children: [
+                    // The meals on one glass card (off-roadmap S3).
+                    GlassList(children: [
                     for (final m in meals)
                       ExpansionTile(
                         key: Key('own-meal-${m.id}'),
@@ -89,6 +93,7 @@ class _OwnMealsScreenState extends ConsumerState<OwnMealsScreen> {
                           ),
                         ],
                       ),
+                    ]),
                   ],
                 ),
     );

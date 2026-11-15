@@ -389,3 +389,41 @@ class GlassTabBar extends StatelessWidget {
     );
   }
 }
+
+/// A bar of how much of something is used, in the accent's gradient; the
+/// warning's colour when [warned] (the calories of Dziś and Jedzenie).
+class GlassBar extends StatelessWidget {
+  const GlassBar({super.key, required this.fraction, this.warned = false});
+
+  /// From 0 to 1.
+  final double fraction;
+  final bool warned;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: SizedBox(
+        height: 8,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: colors.chip),
+            FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: fraction,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: warned ? [colors.warning, colors.warning] : colors.accentGradient,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

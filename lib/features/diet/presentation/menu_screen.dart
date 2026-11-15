@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/features/diet/domain/diet_models.dart';
 import 'package:voice_agent/features/diet/presentation/diet_days.dart';
 import 'package:voice_agent/features/diet/presentation/diet_providers.dart';
@@ -91,11 +92,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       appBar: AppBar(
         title: const Text('Jadłospis'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.restaurant_menu),
+          GlassIconButton(
+            icon: Icons.restaurant_menu,
             tooltip: 'Własne posiłki',
             onPressed: () => context.push('/diet/own-meals'),
           ),
+          const SizedBox(width: 14),
         ],
       ),
       body: entries == null
@@ -119,13 +121,17 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       ..sort((a, b) => slotOrder(a.slot).compareTo(slotOrder(b.slot)));
     return [
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 8, 4),
+        padding: const EdgeInsets.fromLTRB(24, 18, 12, 4),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 dayLabel(d, today: _today).toUpperCase(),
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(letterSpacing: 1.2),
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.4,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               ),
             ),
             TextButton.icon(
@@ -139,9 +145,12 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       ),
       if (entries.isEmpty)
         const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 4),
           child: Text('nic nie zaplanowane'),
         ),
+      // A day's meals on one glass card (off-roadmap S3).
+      if (entries.isNotEmpty)
+        GlassList(children: [
       for (final e in entries)
         ListTile(
           key: Key('menu-entry-${e.id}'),
@@ -168,6 +177,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                   }
                 },
         ),
+        ]),
     ];
   }
 }
