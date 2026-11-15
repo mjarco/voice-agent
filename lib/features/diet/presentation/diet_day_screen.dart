@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/core/providers/agent_turns_provider.dart';
 import 'package:voice_agent/features/diet/domain/diet_models.dart';
 import 'package:voice_agent/features/diet/presentation/diet_days.dart';
 import 'package:voice_agent/features/diet/presentation/diet_providers.dart';
@@ -67,6 +68,10 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // A turn of the agent (a meal said) and a card's correction or undo
+    // change the day: read it again (ADR-NET-009).
+    ref.listen<int>(agentTurnsProvider, (_, _) => unawaited(_load()));
+    ref.listen<int>(dietChangedProvider, (_, _) => unawaited(_load()));
     final now = DateTime.now();
     final isToday = dayKey(_day) == dayKey(now);
     final isPast = _day.isBefore(DateTime(now.year, now.month, now.day));

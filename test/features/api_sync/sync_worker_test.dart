@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/models/agent_action.dart';
 import 'package:voice_agent/core/models/sync_queue_item.dart';
 import 'package:voice_agent/core/models/sync_status.dart';
 import 'package:voice_agent/core/models/transcript.dart';
@@ -598,6 +599,82 @@ void main() {
 
         expect(tts.log, isEmpty);
       });
+    });
+  });
+
+  group('onAgentActions callback (ADR-NET-009)', () {
+    test('carries the meals the reply logged, before the reply', () async {
+      final order = <String>[];
+      List<AgentAction>? received;
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+        connectivityService: connectivity,
+        ttsService: tts,
+        getTtsEnabled: () => ttsEnabled,
+        audioFeedbackService: _StubAudioFeedbackService(),
+        shouldProcessQueue: () => true,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
+        localCommandMatcher: localCommandMatcher,
+        ttsReplyBuffer: ttsReplyBuffer,
+        toaster: toaster,
+        hapticService: hapticService,
+        onAgentActions: (a) {
+          order.add('actions');
+          received = a;
+        },
+        onAgentReply: (_) => order.add('reply'),
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"data": {"message": "Zapisałem piwo.", "actions": ['
+          '{"kind": "meal_logged", "meal": {"id": "m-1", "name": "piwo", "day": "2026-11-15", "time": "22:11", '
+          '"kcal": 270, "kcal_low": 250, "kcal_high": 290}, "day": {"left_kcal": 410, "warning": "low"}}, '
+          '{"kind": "matter_entry", "entry": {}}]}}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(order, ['actions', 'reply']);
+      expect(received, hasLength(1));
+      final m = received!.single;
+      expect([m.mealId, m.name, m.time, m.kcal, m.kcalLow, m.kcalHigh, m.leftKcal, m.warning],
+          ['m-1', 'piwo', '22:11', 270, 250, 290, 410, 'low']);
+    });
+
+    test('is [] when the reply did nothing with a card', () async {
+      List<AgentAction>? received;
+      worker = SyncWorker(
+        storageService: storage,
+        apiClient: apiClient,
+        apiConfig: const ApiConfig(url: 'https://example.com/api', token: 'tok'),
+        connectivityService: connectivity,
+        ttsService: tts,
+        getTtsEnabled: () => ttsEnabled,
+        audioFeedbackService: _StubAudioFeedbackService(),
+        shouldProcessQueue: () => true,
+        sessionControlDispatcher: dispatcher,
+        sessionIdCoordinator: sessionIdCoordinator,
+        localCommandMatcher: localCommandMatcher,
+        ttsReplyBuffer: ttsReplyBuffer,
+        toaster: toaster,
+        hapticService: hapticService,
+        onAgentActions: (a) => received = a,
+      );
+
+      await storage.saveTranscript(transcript);
+      await storage.enqueue('tx-1');
+      apiClient.nextBody = '{"message": "hello"}';
+
+      worker.start();
+      await Future.delayed(const Duration(milliseconds: 100));
+      worker.stop();
+
+      expect(received, isEmpty);
     });
   });
 

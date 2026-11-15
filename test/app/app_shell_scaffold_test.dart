@@ -13,6 +13,8 @@ import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/agenda.dart';
+import 'package:voice_agent/core/models/agent_action.dart';
+import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/models/matter.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/subject/utterance_subject.dart';
@@ -236,6 +238,16 @@ class _CountingTodayRepo implements TodayRepository {
 /// The diet's day fails to read: its screen still opens, which is all the
 /// widget's tap needs.
 class _OfflineDiet implements DietRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      Future<Never>.error(Exception('offline'));
+}
+
+/// The diet's day fails to read; a meal removed is recorded.
+class _UndoDiet implements DietRepository {
+  final removed = <String>[];
+  @override
+  Future<void> removeMeal(String id) async => removed.add(id);
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       Future<Never>.error(Exception('offline'));
@@ -537,6 +549,68 @@ void main() {
       router.pop();
       await tester.pumpAndSettle();
       expect(subjectNow(c), const UtteranceSubject.matter('m1'));
+    });
+  });
+
+  group('the diet: Jedzenie and the card of a meal (ADR-NET-009)', () {
+    testWidgets('on the diet the subject is Jedzenie; the meal a reply logged '
+        'stands under it, and Cofnij removes it', (tester) async {
+      final diet = _UndoDiet();
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          todayRepositoryProvider.overrideWithValue(_CountingTodayRepo()),
+          mattersRepositoryProvider.overrideWithValue(FakeMattersRepository()),
+          dietRepositoryProvider.overrideWithValue(diet),
+        ],
+        child: const App(),
+      ));
+      await tester.pumpAndSettle();
+      final c = ProviderScope.containerOf(tester.element(find.byType(App)));
+      final router = GoRouter.of(tester.element(find.byType(NavigationBar)));
+
+      unawaited(router.push('/diet'));
+      await tester.pumpAndSettle();
+      expect(c.read(utteranceSubjectReaderProvider)(), UtteranceSubject.diet);
+
+      c.read(latestAgentActionsProvider.notifier).state = const [
+        AgentAction.mealLogged(mealId: 'm-1', name: 'piwo', day: '2026-11-15', time: '22:11',
+            kcal: 270, kcalLow: 250, kcalHigh: 290, leftKcal: 410, warning: 'low'),
+      ];
+      c.read(latestAgentReplyProvider.notifier).state = 'Zapisałem piwo, 270 kcal.';
+      await tester.pumpAndSettle();
+      expect(find.text('✓ piwo · 22:11'), findsOneWidget);
+      expect(find.text('270 (250–290) kcal · zostało 410'), findsOneWidget);
+
+      final changes = c.read(dietChangedProvider);
+      await tester.tap(find.byKey(const Key('meal-action-undo-m-1')));
+      await tester.pumpAndSettle();
+      expect(diet.removed, ['m-1']);
+      expect(find.byKey(const Key('meal-action-m-1')), findsNothing);
+      expect(find.text('Cofnięto: piwo'), findsOneWidget);
+      expect(c.read(dietChangedProvider), changes + 1);
+      expect(c.read(latestAgentActionsProvider), isEmpty);
+    });
+
+    testWidgets('on Dziś the reply stands without a card', (tester) async {
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          todayRepositoryProvider.overrideWithValue(_CountingTodayRepo()),
+          mattersRepositoryProvider.overrideWithValue(FakeMattersRepository()),
+        ],
+        child: const App(),
+      ));
+      await tester.pumpAndSettle();
+      final c = ProviderScope.containerOf(tester.element(find.byType(App)));
+      c.read(latestAgentActionsProvider.notifier).state = const [
+        AgentAction.mealLogged(mealId: 'm-1', name: 'piwo', day: '2026-11-15', time: '22:11',
+            kcal: 270, kcalLow: 250, kcalHigh: 290),
+      ];
+      c.read(latestAgentReplyProvider.notifier).state = 'Zapisałem piwo, 270 kcal.';
+      await tester.pumpAndSettle();
+      expect(find.text('Zapisałem piwo, 270 kcal.'), findsOneWidget);
+      expect(find.byKey(const Key('meal-action-m-1')), findsNothing);
     });
   });
 }

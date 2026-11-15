@@ -48,6 +48,8 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     ttsReplyBuffer: ref.watch(ttsReplyBufferProvider),
     toaster: ref.watch(toasterProvider),
     hapticService: ref.watch(hapticServiceProvider),
+    onAgentActions: (actions) =>
+        ref.read(latestAgentActionsProvider.notifier).state = actions,
     onAgentReply: (reply) {
       ref.read(latestAgentReplyProvider.notifier).state = reply;
       ref.read(agentTurnsProvider.notifier).state++;

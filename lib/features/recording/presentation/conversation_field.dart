@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/core/models/agent_action.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
@@ -22,15 +23,23 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 ///
 /// Typing opens the conversation, where typed turns already go into a voice
 /// session (ADR-CORE-119 of personal-agent).
+///
+/// Under the reply stand the cards of what it did ([actionCard], ADR-NET-009),
+/// on a screen that knows them.
 class ConversationField extends ConsumerWidget {
-  const ConversationField({super.key, this.matterId});
+  const ConversationField({super.key, this.matterId, this.actionCard});
 
   /// The matter whose screen the field sits on; null on Dziś and the diet.
   final String? matterId;
 
+  /// The card of one thing the reply did; null shows none (the reply's text
+  /// says what was done).
+  final Widget Function(AgentAction action)? actionCard;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reply = ref.watch(latestAgentReplyProvider);
+    final actions = actionCard == null ? const <AgentAction>[] : ref.watch(latestAgentActionsProvider);
     final line = _stateLine(
       ref.watch(recordingControllerProvider),
       ref.watch(handsFreeControllerProvider),
@@ -77,6 +86,7 @@ class ConversationField extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(reply, maxLines: 4, overflow: TextOverflow.ellipsis),
+                          for (final a in actions) actionCard!(a),
                           TextButton(
                             key: const Key('field-open-conversation'),
                             style: TextButton.styleFrom(padding: EdgeInsets.zero),
@@ -93,6 +103,7 @@ class ConversationField extends ConsumerWidget {
                       onPressed: () {
                         unawaited(ref.read(ttsServiceProvider).stop());
                         ref.read(latestAgentReplyProvider.notifier).state = null;
+                        ref.read(latestAgentActionsProvider.notifier).state = const [];
                       },
                     ),
                   ],

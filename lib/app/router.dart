@@ -19,6 +19,7 @@ import 'package:voice_agent/features/history/transcript_detail_screen.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
 import 'package:voice_agent/features/debug/notifications_debug_screen.dart';
 import 'package:voice_agent/features/diet/presentation/diet_day_screen.dart';
+import 'package:voice_agent/features/diet/presentation/meal_action_card.dart';
 import 'package:voice_agent/features/diet/presentation/menu_screen.dart';
 import 'package:voice_agent/features/diet/presentation/own_meals_screen.dart';
 import 'package:voice_agent/features/diet/presentation/target_screen.dart';
@@ -185,7 +186,8 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
       path: '/diet',
       builder: (context, state) => DietDayScreen(
         day: state.uri.queryParameters['day'],
-        field: const ConversationField(),
+        // ADR-NET-009: the meal a reply logged, with Popraw and Cofnij.
+        field: ConversationField(actionCard: (a) => MealActionCard(action: a)),
       ),
       routes: [
         GoRoute(path: 'menu', builder: (context, state) => const MenuScreen()),
