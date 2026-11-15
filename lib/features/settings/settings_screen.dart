@@ -124,6 +124,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          _buildSectionHeader('Wygląd'),
+          _AppearanceTile(
+            mode: config.appearance,
+            onChanged: (m) =>
+                ref.read(appConfigProvider.notifier).updateAppearance(m),
+          ),
           _buildSectionHeader('API Configuration'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -373,3 +379,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 }
 
 enum _TestStatus { idle, testing, success, error }
+
+/// Jasny / Ciemny (off-roadmap S1). Until the owner picks one the app follows
+/// the phone, and the switch shows the mode the phone has now.
+class _AppearanceTile extends StatelessWidget {
+  const _AppearanceTile({required this.mode, required this.onChanged});
+
+  final AppearanceMode mode;
+  final ValueChanged<AppearanceMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = switch (mode) {
+      AppearanceMode.system =>
+        MediaQuery.platformBrightnessOf(context) == Brightness.dark
+            ? AppearanceMode.dark
+            : AppearanceMode.light,
+      _ => mode,
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SegmentedButton<AppearanceMode>(
+        key: const Key('settings-appearance'),
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(
+            value: AppearanceMode.light,
+            icon: Icon(Icons.light_mode_outlined),
+            label: Text('Jasny'),
+          ),
+          ButtonSegment(
+            value: AppearanceMode.dark,
+            icon: Icon(Icons.dark_mode_outlined),
+            label: Text('Ciemny'),
+          ),
+        ],
+        selected: {shown},
+        onSelectionChanged: (s) => onChanged(s.single),
+      ),
+    );
+  }
+}
