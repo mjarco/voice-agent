@@ -9,6 +9,7 @@ import 'package:voice_agent/core/home_widget/home_widget_provider.dart';
 import 'package:voice_agent/core/home_widget/widget_tap_channel.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/core/subject/utterance_subject.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/theme/app_theme.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
@@ -177,7 +178,18 @@ class _AppState extends ConsumerState<App> {
       // remark of 2026-11-15): a strip at the top edge, under the status bar.
       builder: (context, child) => Stack(
         children: [
-          ?child,
+          // The dev build's sign, now that the theme no longer turns it
+          // orange (off-roadmap S1): a corner band, as the debug banner.
+          if (isDev && child != null)
+            Banner(
+              key: const Key('dev-banner'),
+              message: 'DEV',
+              location: BannerLocation.topStart,
+              color: AppColors.of(context).warning,
+              child: child,
+            )
+          else
+            ?child,
           Positioned(
             top: MediaQuery.paddingOf(context).top,
             left: 0,
