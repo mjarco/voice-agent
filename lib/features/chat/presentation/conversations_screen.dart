@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/conversation.dart';
@@ -20,17 +21,21 @@ class ConversationsScreen extends ConsumerWidget {
         actions: const [AppBarActions()],
       ),
       // A new conversation from a floating "+", as in Sprawy.
-      floatingActionButton: FloatingActionButton(
-        // Own tag: several tabs keep a "+" mounted at once.
-        heroTag: 'conversations-new',
-        key: const Key('conversations-new'),
-        tooltip: 'New conversation',
-        onPressed: () async {
-          ref.invalidate(threadNotifierProvider('new'));
-          await context.push('/chat/new');
-          notifier.refresh();
-        },
-        child: const Icon(Icons.add),
+      // Above the floating tab bar, as in Sprawy (off-roadmap S4).
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 84),
+        child: FloatingActionButton(
+          // Own tag: several tabs keep a "+" mounted at once.
+          heroTag: 'conversations-new',
+          key: const Key('conversations-new'),
+          tooltip: 'New conversation',
+          onPressed: () async {
+            ref.invalidate(threadNotifierProvider('new'));
+            await context.push('/chat/new');
+            notifier.refresh();
+          },
+          child: const Icon(Icons.add),
+        ),
       ),
       body: switch (state) {
         ChatListLoading() =>
@@ -41,7 +46,7 @@ class ConversationsScreen extends ConsumerWidget {
               : RefreshIndicator(
                   onRefresh: notifier.refresh,
                   child: ListView.builder(
-                    padding: const EdgeInsets.only(top: 4, bottom: 88),
+                    padding: const EdgeInsets.only(top: 4, bottom: 168),
                     itemCount: conversations.length,
                     itemBuilder: (context, index) {
                       return _ConversationTile(
@@ -85,9 +90,9 @@ class _ConversationTile extends StatelessWidget {
     // A card per conversation, as in Sprawy, so the rows read apart. The
     // subject first, the first sentence second (07 §2 of the discussion
     // 2026-11-va-meals-dashboard); the icon says how it was held.
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      clipBehavior: Clip.antiAlias,
+    return GlassCard(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
         key: Key('conversation-${conversation.conversationId}'),
         leading: Icon(
