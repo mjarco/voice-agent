@@ -9,6 +9,8 @@ import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
+import 'package:voice_agent/features/recording/presentation/mic_activity.dart';
+import 'package:voice_agent/features/recording/presentation/mic_orb.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 // ── Mic button ────────────────────────────────────────────────────────────────
@@ -196,7 +198,12 @@ class _MicButtonState extends ConsumerState<MicButton> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AnimatedContainer(
+          // The living mic (off-roadmap S5): its state shows by how it
+          // moves around the orb; the colour stays the button's.
+          MicOrb(
+            activity: ref.watch(micActivityProvider),
+            color: color,
+            child: AnimatedContainer(
             key: const Key('record-button'),
             duration: const Duration(milliseconds: 150),
             width: size,
@@ -218,6 +225,7 @@ class _MicButtonState extends ConsumerState<MicButton> {
                 : (isPaused || (isStandby && !isRecording))
                     ? Icon(Icons.pause, color: colors.onMic, size: iconSize)
                     : Icon(Icons.mic, color: colors.onMic, size: iconSize),
+          ),
           ),
           if (!widget.compact) ...[
             const SizedBox(height: 16),

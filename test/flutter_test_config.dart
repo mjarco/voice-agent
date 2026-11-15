@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:voice_agent/core/widgets/aurora_background.dart';
+import 'package:voice_agent/features/recording/presentation/mic_orb.dart';
 
-/// Runs before every test file. The sky of Aurora stands still in widget
-/// tests (off-roadmap S2); test/core/widgets/aurora_background_test.dart
-/// turns the drift on for its own cases.
+/// Runs before every test file. The sky of Aurora (off-roadmap S2) and the
+/// living mic (S5) stand still in widget tests, as a loop never lets
+/// pumpAndSettle settle; their own tests turn them on for their cases.
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   AuroraDrift.debugEnabled = false;
+  MicOrb.debugAnimate = false;
   await testMain();
 }
