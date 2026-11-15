@@ -171,6 +171,9 @@ class _Glasses implements GlassesControlPort {
 
   @override
   Future<void> reportMode(MicMode mode) async => reported.add(mode);
+
+  @override
+  Future<void> show(Map<String, Object?> doc) async {}
 }
 
 class _Tts implements TtsService {

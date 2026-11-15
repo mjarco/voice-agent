@@ -9,6 +9,7 @@ import android.util.Log
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import com.voiceagent.voice_agent.location.GlassesWake
 
 /**
  * The microphone mode driven from the G2 glasses through glass-native (ADR-AUDIO-016;
@@ -69,6 +70,12 @@ class GlassesControlBridge(context: Context) : MethodChannel.MethodCallHandler, 
                 val mode = call.argument<String>("mode")
                 if (mode == null) return result.error("bad_args", "mode missing", null)
                 GlassesControl.report(appContext, mode)
+                result.success(null)
+            }
+            // A document for the glasses (G4): Dart writes it, glass-native checks and shows it.
+            "show" -> {
+                val doc = call.argument<String>("doc") ?: return result.error("bad_args", "doc missing", null)
+                GlassesWake.sendDoc(appContext, doc)
                 result.success(null)
             }
             else -> result.notImplemented()

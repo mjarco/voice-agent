@@ -43,7 +43,13 @@ class ConversationField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reply = ref.watch(latestAgentReplyProvider);
-    final actions = actionCard == null ? const <AgentAction>[] : ref.watch(latestAgentActionsProvider);
+    // A card stands under a reply for a meal; a queued utterance waits for the evening's story.
+    final actions = actionCard == null
+        ? const <AgentAction>[]
+        : [
+            for (final a in ref.watch(latestAgentActionsProvider))
+              if (a.kind == AgentActionKind.mealLogged) a,
+          ];
     final line = _stateLine(
       ref.watch(recordingControllerProvider),
       ref.watch(handsFreeControllerProvider),

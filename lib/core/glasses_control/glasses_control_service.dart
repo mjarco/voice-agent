@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/services.dart';
@@ -43,6 +44,17 @@ class GlassesControlService implements GlassesControlPort {
       developer.log('reportMode failed: $e', name: 'GlassesControlService');
     } on MissingPluginException {
       // No bridge (a test, an engine without the activity): nothing to tell.
+    }
+  }
+
+  @override
+  Future<void> show(Map<String, Object?> doc) async {
+    try {
+      await _methodChannel.invokeMethod<void>('show', {'doc': jsonEncode(doc)});
+    } on PlatformException catch (e) {
+      developer.log('show failed: $e', name: 'GlassesControlService');
+    } on MissingPluginException {
+      // No bridge: nothing to show.
     }
   }
 }

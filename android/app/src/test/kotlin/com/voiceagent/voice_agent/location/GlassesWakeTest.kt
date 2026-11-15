@@ -20,4 +20,18 @@ class GlassesWakeTest {
         assertNull(GlassesWake.paramsOf("/shopping?store="))
         assertNull(GlassesWake.paramsOf("/shopping?store=Fuel%20x"))
     }
+
+    /** G4: the wake as a document, the trigger's card leading to the store's checklist. */
+    @Test
+    fun theWakeIsADocument() {
+        val t = Trigger("arrival-list:p1", "v1", "p1", 0.0, 0.0, 100, 60, "Biedronka: 2 rzeczy", 0L, "mleko, chleb", "/shopping?store=grocery")
+        val d = GlassesWake.docOf(t)!!
+        assertEquals(2, d.getInt("version"))
+        assertEquals("va:arrival:arrival-list:p1", d.getJSONObject("card").getString("id"))
+        assertEquals("Biedronka: 2 rzeczy", d.getJSONObject("card").getString("title"))
+        assertEquals("mleko, chleb", d.getJSONObject("card").getString("body"))
+        assertEquals("zakupy/grocery", d.getString("open"))
+        assertEquals("zakupy", GlassesWake.docOf(t.copy(open = "/shopping?store=fuel,grocery"))!!.getString("open"))
+        assertNull(GlassesWake.docOf(t.copy(open = "/agenda")))
+    }
 }

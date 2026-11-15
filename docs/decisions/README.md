@@ -90,6 +90,8 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-NET-007](ADR-NET-007-armed-triggers-pulled-in-background.md) | Armed triggers are pulled in the background, and geofences come from them | Accepted; item 6 superseded by NOTIF-003 |
 | [ADR-NET-008](ADR-NET-008-utterance-subject.md) | An utterance carries the subject of the screen it was said on, read when it ends and kept with the transcript | Accepted |
 | [ADR-NET-009](ADR-NET-009-diet-subject-and-meal-card.md) | The diet's screens are Jedzenie; a meal a reply logged stands as a card with Popraw and Cofnij | Accepted |
+| [ADR-NET-010](ADR-NET-010-day-story-and-evening-queue.md) | The day's story and the evening queue | Accepted |
+| [ADR-NET-011](ADR-NET-011-glasses-documents.md) | voice-agent writes documents for the glasses: a shop's arrival, a meal with its Cofnij, an utterance queued | Accepted |
 
 ### NOTIF — Local Notifications
 
