@@ -32,6 +32,8 @@ import 'package:voice_agent/core/media_button/media_button_provider.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
+import 'package:voice_agent/core/session_control/haptic_service.dart';
+import 'package:voice_agent/core/session_control/session_control_provider.dart';
 
 import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
@@ -226,6 +228,69 @@ Future<_SpyTtsService> _pumpAppWithSpyTts(WidgetTester tester) async {
   return spy;
 }
 
+/// Goes through Transcribing on the way back, as the real controller does
+/// when something was said.
+class _SendingRecordingController extends RecordingController {
+  _SendingRecordingController(super.svc, super.stt, super.ref);
+
+  @override
+  Future<void> startRecording() async {
+    state = const RecordingState.recording();
+  }
+
+  @override
+  Future<void> stopAndTranscribe({bool silentOnEmpty = false}) async {
+    state = const RecordingState.transcribing();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    state = const RecordingState.idle();
+  }
+}
+
+class _SpyHaptic extends HapticService {
+  final calls = <String>[];
+  @override
+  Future<void> lightImpact() async => calls.add('light');
+  @override
+  Future<void> mediumImpact() async => calls.add('medium');
+  @override
+  Future<void> doubleTap() async => calls.add('double');
+}
+
+/// The app on Dziś, whose conversation field holds the compact mic.
+Future<_SpyHaptic> _pumpToday(WidgetTester tester) async {
+  final haptic = _SpyHaptic();
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        storageServiceProvider.overrideWithValue(_StubStorage()),
+        connectivityServiceProvider.overrideWith((_) => _NoOpConnectivity()),
+        apiUrlConfiguredProvider.overrideWithValue(true),
+        appConfigServiceProvider.overrideWithValue(
+          _FixedConfigService(const AppConfig(groqApiKey: 'gsk_test_key', apiUrl: 'https://test.example.com/api')),
+        ),
+        handsFreeEngineProvider.overrideWithValue(_IdleHfEngine()),
+        recordingServiceProvider.overrideWithValue(_NoOpRecordingService()),
+        sttServiceProvider.overrideWithValue(_NoOpSttService()),
+        recordingControllerProvider.overrideWith((ref) => _SendingRecordingController(
+          ref.read(recordingServiceProvider),
+          ref.read(sttServiceProvider),
+          ref,
+        )),
+        ttsServiceProvider.overrideWithValue(_StubTtsService()),
+        audioFeedbackServiceProvider.overrideWithValue(_StubAudioFeedbackService()),
+        backgroundServiceProvider.overrideWithValue(StubBackgroundService()),
+        mediaButtonProvider.overrideWithValue(StubMediaButtonPort()),
+        hapticServiceProvider.overrideWithValue(haptic),
+        ...notificationStubOverrides(),
+        ...sessionControlTestOverrides,
+      ],
+      child: const App(),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return haptic;
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
@@ -409,6 +474,41 @@ void main() {
 
       await gesture.up();
       await tester.pumpAndSettle();
+    });
+  });
+
+  group('the held mic shows where the finger is not (V1, owner 2026-11-15)', () {
+    testWidgets('the field turns red with a clock, the top strip shows, and it is felt',
+        (tester) async {
+      final haptic = await _pumpToday(tester);
+      final strip = find.byKey(const Key('mic-activity-strip'));
+      expect(tester.getSize(strip).height, 0);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const Key('field-mic'))),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final line = tester.widget<Text>(find.byKey(const Key('field-state')));
+      expect(line.data, 'Nagrywam 0:00 — puść, by wysłać');
+      final bar = tester.widget<AnimatedContainer>(find.byKey(const Key('field-bar')));
+      expect((bar.decoration as BoxDecoration?)?.color, Colors.red.shade600);
+      expect(tester.getSize(strip).height, 4);
+      expect(haptic.calls, ['medium']);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.widget<Text>(find.byKey(const Key('field-state'))).data,
+          startsWith('Nagrywam 0:02'));
+
+      await gesture.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+      expect(haptic.calls, ['medium', 'double']);
+      expect(tester.getSize(strip).height, 0);
+      expect(tester.widget<Text>(find.byKey(const Key('field-state'))).data,
+          isNot(startsWith('Nagrywam')));
     });
   });
 }

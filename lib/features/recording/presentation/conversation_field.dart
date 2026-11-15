@@ -9,6 +9,7 @@ import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
+import 'package:voice_agent/features/recording/presentation/mic_activity.dart';
 import 'package:voice_agent/features/recording/presentation/mic_button.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
@@ -33,6 +34,14 @@ class ConversationField extends ConsumerWidget {
     final micModes = ref.watch(micModesEnabledProvider);
     final mode = ref.watch(micModeProvider);
     final scheme = Theme.of(context).colorScheme;
+    // The whole bar shows the mic's state: a held button is under the finger.
+    final activity = ref.watch(micActivityProvider);
+    final barColor = activity.capturing
+        ? micActivityColor(activity)
+        : activity == MicActivity.listening
+            ? Colors.orange.withValues(alpha: 0.18)
+            : null;
+    final onBar = activity.capturing ? Colors.white : null;
 
     void openConversation() {
       final id = ref.read(sessionIdCoordinatorProvider).currentConversationId;
@@ -83,18 +92,33 @@ class ConversationField extends ConsumerWidget {
                   ],
                 ),
               ),
-            Padding(
+            AnimatedContainer(
+              key: const Key('field-bar'),
+              duration: const Duration(milliseconds: 150),
+              color: barColor ?? Colors.transparent,
               padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
               child: Row(
                 children: [
                   const MicButton(key: Key('field-mic'), compact: true),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      line,
-                      key: const Key('field-state'),
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
+                    child: activity.capturing
+                        ? _CaptureLine(
+                            // A new capture starts the clock from zero.
+                            key: ValueKey(activity),
+                            text: activity == MicActivity.recording
+                                ? 'Nagrywam'
+                                : 'Słyszę',
+                            hint: activity == MicActivity.recording
+                                ? ' — puść, by wysłać'
+                                : '',
+                            color: onBar,
+                          )
+                        : Text(
+                            line,
+                            key: const Key('field-state'),
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
                   ),
                   if (micModes && mode != MicMode.off)
                     TextButton(
@@ -102,10 +126,12 @@ class ConversationField extends ConsumerWidget {
                       onPressed: () => unawaited(
                         ref.read(handsFreeControllerProvider.notifier).stopSession(),
                       ),
+                      style: TextButton.styleFrom(foregroundColor: onBar),
                       child: const Text('Zakończ'),
                     ),
                   IconButton(
                     key: const Key('field-write'),
+                    color: onBar,
                     icon: const Icon(Icons.keyboard_outlined),
                     tooltip: 'Napisz',
                     onPressed: openConversation,
@@ -116,6 +142,51 @@ class ConversationField extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "Nagrywam 0:04 — puść, by wysłać": the state with the seconds since the
+/// capture began, ticking once a second.
+class _CaptureLine extends StatefulWidget {
+  const _CaptureLine({super.key, required this.text, required this.hint, this.color});
+
+  final String text;
+  final String hint;
+  final Color? color;
+
+  @override
+  State<_CaptureLine> createState() => _CaptureLineState();
+}
+
+class _CaptureLineState extends State<_CaptureLine> {
+  /// Whole seconds since the capture began, one per tick of the timer.
+  int _seconds = 0;
+  late final Timer _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) => setState(() => _seconds++));
+  }
+
+  @override
+  void dispose() {
+    _tick.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _seconds;
+    final clock = '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+    return Text(
+      '${widget.text} $clock${widget.hint}',
+      key: const Key('field-state'),
+      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            color: widget.color,
+            fontWeight: FontWeight.w600,
+          ),
     );
   }
 }

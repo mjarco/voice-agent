@@ -65,6 +65,12 @@ class _FakeHapticService implements HapticService {
   Future<void> lightImpact() async {
     callCount++;
   }
+
+  @override
+  Future<void> mediumImpact() async {}
+
+  @override
+  Future<void> doubleTap() async {}
 }
 
 /// Tracks all side-effect calls in invocation order for ordering assertions.

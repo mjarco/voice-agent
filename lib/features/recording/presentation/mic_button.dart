@@ -134,7 +134,18 @@ class _MicButtonState extends ConsumerState<MicButton> {
     final isModeListening = micModes && micMode == MicMode.listening;
 
     // Clear press-and-hold flag when recording returns to idle or errors out.
-    ref.listen<RecordingState>(recordingControllerProvider, (_, next) {
+    // A held recording is felt (the finger hides the button, the owner's
+    // remark of 2026-11-15): a firm tap when it has really started, two light
+    // ones when it is sent. Only the button held fires them.
+    ref.listen<RecordingState>(recordingControllerProvider, (prev, next) {
+      if (_isPressAndHold) {
+        final haptic = ref.read(hapticServiceProvider);
+        if (next is RecordingActive && prev is! RecordingActive) {
+          unawaited(haptic.mediumImpact());
+        } else if (prev is RecordingActive && next is RecordingTranscribing) {
+          unawaited(haptic.doubleTap());
+        }
+      }
       if ((next is RecordingIdle || next is RecordingError) && _isPressAndHold) {
         setState(() => _isPressAndHold = false);
       }

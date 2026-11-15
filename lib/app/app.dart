@@ -7,6 +7,7 @@ import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/features/places/presentation/places_sync.dart';
+import 'package:voice_agent/features/recording/presentation/mic_activity.dart';
 
 class App extends ConsumerStatefulWidget {
   const App({super.key, this.scaffoldMessengerKey});
@@ -95,6 +96,19 @@ class _AppState extends ConsumerState<App> {
         useMaterial3: true,
       ),
       routerConfig: _router,
+      // The mic's state over every screen (V1 device check, the owner's
+      // remark of 2026-11-15): a strip at the top edge, under the status bar.
+      builder: (context, child) => Stack(
+        children: [
+          ?child,
+          Positioned(
+            top: MediaQuery.paddingOf(context).top,
+            left: 0,
+            right: 0,
+            child: const MicActivityStrip(),
+          ),
+        ],
+      ),
     );
   }
 }
