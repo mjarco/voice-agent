@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
 import 'package:voice_agent/features/chat/presentation/conversations_screen.dart';
@@ -134,7 +135,7 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
                   path: ':id',
                   builder: (_, state) {
                     final id = state.pathParameters['id']!;
-                    return ThreadScreen(conversationId: id);
+                    return ThreadScreen(conversationId: id, actionCard: (a) => MealActionCard(action: a));
                   },
                 ),
               ],
@@ -187,7 +188,7 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
       builder: (context, state) => DietDayScreen(
         day: state.uri.queryParameters['day'],
         // ADR-NET-009: the meal a reply logged, with Popraw and Cofnij.
-        field: ConversationField(actionCard: (a) => MealActionCard(action: a)),
+        field: ConversationField(diet: true, actionCard: (a) => MealActionCard(action: a)),
       ),
       routes: [
         GoRoute(path: 'menu', builder: (context, state) => const MenuScreen()),
@@ -264,10 +265,18 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
     // the same full-screen ThreadScreen with a back button to the caller.
     GoRoute(
       path: '/conversation/:id',
-      builder: (_, state) => ThreadScreen(
-        conversationId: state.pathParameters['id']!,
-        matterId: state.uri.queryParameters['matter'],
-      ),
+      builder: (_, state) {
+        final q = state.uri.queryParameters;
+        return ThreadScreen(
+          conversationId: state.pathParameters['id']!,
+          subject: q['matter'] != null
+              ? UtteranceSubject.matter(q['matter']!)
+              : q['subject'] == 'diet'
+                  ? UtteranceSubject.diet
+                  : UtteranceSubject.day,
+          actionCard: (a) => MealActionCard(action: a),
+        );
+      },
     ),
     // Settings — outside shell (full-screen, no bottom nav)
     GoRoute(

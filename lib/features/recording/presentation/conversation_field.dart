@@ -27,10 +27,14 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 /// Under the reply stand the cards of what it did ([actionCard], ADR-NET-009),
 /// on a screen that knows them.
 class ConversationField extends ConsumerWidget {
-  const ConversationField({super.key, this.matterId, this.actionCard});
+  const ConversationField({super.key, this.matterId, this.diet = false, this.actionCard});
 
   /// The matter whose screen the field sits on; null on Dziś and the diet.
   final String? matterId;
+
+  /// On the diet's screens: Napisz opens a new thread in Jedzenie, as a
+  /// matter's opens one on the matter (ADR-NET-009).
+  final bool diet;
 
   /// The card of one thing the reply did; null shows none (the reply's text
   /// says what was done).
@@ -151,9 +155,11 @@ class ConversationField extends ConsumerWidget {
                     color: onBar,
                     icon: const Icon(Icons.keyboard_outlined),
                     tooltip: 'Napisz',
-                    onPressed: matterId == null
-                        ? openConversation
-                        : () => unawaited(context.push('/conversation/new?matter=$matterId')),
+                    onPressed: matterId != null
+                        ? () => unawaited(context.push('/conversation/new?matter=$matterId'))
+                        : diet
+                            ? () => unawaited(context.push('/conversation/new?subject=diet'))
+                            : openConversation,
                   ),
                 ],
               ),

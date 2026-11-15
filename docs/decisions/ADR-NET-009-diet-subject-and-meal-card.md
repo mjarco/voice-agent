@@ -37,9 +37,16 @@ the workspace's off-roadmap task `2026-11-15-diet-action-first`,
 ## Consequences
 
 - A meal said on the diet is logged and undone without typing.
-- Napisz on the diet opens the current conversation, as on Dziś: its turns
-  keep that conversation's subject, and a new typed thread is Dzień. A new
-  thread held in Jedzenie, and cards in a thread, are later work.
+- Napisz on the diet's screens opens a new thread in Jedzenie
+  (`/conversation/new?subject=diet`), as a matter's opens one on the matter,
+  and a typed turn in a conversation held in Jedzenie carries the subject
+  `diet` (V5 of the redesign; in V4 Napisz opened the current conversation
+  and its typed turns carried no subject, so they went as Dzień).
+- The cards stand under a reply in a typed thread too: the stream's `result`
+  frame carries `actions` (personal-agent ADR-API-127), the thread keeps them
+  by the reply's event id for the session, and the app hands the thread the
+  same card builder as the field. A reloaded thread shows no card; the day
+  shows the meal.
 - An older personal-agent answers the subject `diet` with 400: the
   transcript fails at once with the error spoken (a permanent failure), as a
   matter's does. personal-agent and the app go out together, at the

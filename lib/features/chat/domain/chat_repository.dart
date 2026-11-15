@@ -1,3 +1,4 @@
+import 'package:voice_agent/core/models/agent_action.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
@@ -57,6 +58,7 @@ class ChatResult {
     required this.reply,
     this.backend,
     this.shoppingProposals = const [],
+    this.actions = const [],
   });
 
   final String conversationId;
@@ -67,6 +69,10 @@ class ChatResult {
 
   /// What this turn proposed; absent from the frame when it proposed nothing.
   final List<ShoppingProposal> shoppingProposals;
+
+  /// What the turn did, for the cards under the reply (personal-agent
+  /// ADR-API-127, C10); absent from the frame when it did nothing with a card.
+  final List<AgentAction> actions;
 
   factory ChatResult.fromMap(Map<String, dynamic> map) {
     final proposals = map['shopping_proposals'] as List<dynamic>? ?? const [];
@@ -79,6 +85,7 @@ class ChatResult {
       shoppingProposals: proposals
           .map((e) => ShoppingProposal.fromMap(e as Map<String, dynamic>))
           .toList(),
+      actions: AgentAction.listFrom(map['actions']),
     );
     // warnings intentionally ignored in V1
   }

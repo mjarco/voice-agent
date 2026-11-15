@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/core/models/agent_action.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/widgets/agent_markdown_style.dart';
 import 'package:voice_agent/core/widgets/shopping_proposal_card.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
@@ -12,14 +14,23 @@ import 'package:voice_agent/features/chat/domain/chat_state.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
 
 class ThreadScreen extends ConsumerStatefulWidget {
-  const ThreadScreen({super.key, required this.conversationId, this.matterId});
+  const ThreadScreen({
+    super.key,
+    required this.conversationId,
+    this.subject = UtteranceSubject.day,
+    this.actionCard,
+  });
 
   final String conversationId;
 
-  /// The matter a new thread is opened on (Napisz on its screen,
-  /// `/conversation/new?matter=<id>`); its turns carry the matter's subject
-  /// (ADR-NET-008).
-  final String? matterId;
+  /// The subject a new thread is opened in (Napisz on a matter's screen,
+  /// `/conversation/new?matter=<id>`, or the diet's, `?subject=diet`); its
+  /// turns carry it (ADR-NET-008, ADR-NET-009).
+  final UtteranceSubject subject;
+
+  /// The card of one thing a reply did, under the reply (ADR-NET-009); the
+  /// app hands it in, as to the conversation field. Null: no cards.
+  final Widget Function(AgentAction action)? actionCard;
 
   @override
   ConsumerState<ThreadScreen> createState() => _ThreadScreenState();
@@ -28,9 +39,9 @@ class ThreadScreen extends ConsumerStatefulWidget {
 class _ThreadScreenState extends ConsumerState<ThreadScreen> {
   final _textController = TextEditingController();
 
-  /// The thread's provider key: a new thread on a matter is its own.
-  String get _key => widget.conversationId == 'new' && widget.matterId != null
-      ? newThreadOnMatter(widget.matterId!)
+  /// The thread's provider key: a new thread in a subject is its own.
+  String get _key => widget.conversationId == 'new' && !widget.subject.isDay
+      ? newThreadIn(widget.subject)
       : widget.conversationId;
 
   bool _started = false;
@@ -238,14 +249,21 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/matter/$matterId'),
           )
-        : widget.matterId != null
+        : widget.subject.matterId != null
             ? const ListTile(
                 key: Key('thread-matter-new'),
                 dense: true,
                 leading: Icon(Icons.folder_outlined),
                 title: Text('Nowa rozmowa w tej sprawie'),
               )
-            : null;
+            : widget.subject.isDiet || conversation?.subject == 'diet'
+                ? const ListTile(
+                    key: Key('thread-diet'),
+                    dense: true,
+                    leading: Icon(Icons.restaurant_outlined),
+                    title: Text('Jedzenie'),
+                  )
+                : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -307,6 +325,12 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
                           accept: false,
                         ),
                       ));
+                    }
+                    // What the reply did stands under it (ADR-NET-009).
+                    if (widget.actionCard != null && event.role == EventRole.agent) {
+                      for (final a in notifier.actionsOf(event.eventId).reversed) {
+                        widgets.add(widget.actionCard!(a));
+                      }
                     }
                     final canPin = event.role == EventRole.agent &&
                         event.conversationId.isNotEmpty;
