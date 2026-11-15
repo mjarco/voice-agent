@@ -10,6 +10,10 @@ abstract class HomeWidgetPort {
   /// Whether the owner has the widget on a home screen. The background job
   /// reads nothing when not.
   Future<bool> isPlaced();
+
+  /// Asks the launcher to place the widget (Android 8+, a system dialog);
+  /// false where the launcher cannot.
+  Future<bool> requestPlace();
 }
 
 /// Where there is no widget (iOS, tests): nothing is shown.
@@ -21,4 +25,7 @@ class NoHomeWidget implements HomeWidgetPort {
 
   @override
   Future<bool> isPlaced() async => false;
+
+  @override
+  Future<bool> requestPlace() async => false;
 }

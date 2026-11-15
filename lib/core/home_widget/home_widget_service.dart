@@ -41,4 +41,17 @@ class HomeWidgetService implements HomeWidgetPort {
       return false;
     }
   }
+
+  @override
+  Future<bool> requestPlace() async {
+    try {
+      if (await HomeWidget.isRequestPinWidgetSupported() != true) return false;
+      await HomeWidget.requestPinWidget(qualifiedAndroidName: androidProvider);
+      return true;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
 }

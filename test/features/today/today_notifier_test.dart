@@ -15,6 +15,9 @@ class _Widget implements HomeWidgetPort {
 
   @override
   Future<void> show(HomeWidgetNumbers numbers) async => shown.add(numbers);
+
+  @override
+  Future<bool> requestPlace() async => false;
 }
 
 class _Repo implements TodayRepository {
