@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/pin.dart';
@@ -51,8 +52,11 @@ class PinsScreen extends ConsumerWidget {
       onRefresh: notifier.refresh,
       child: ListView(
         // Room for the "+" button, so it covers no row's menu.
-        padding: const EdgeInsets.only(bottom: 88),
-        children: [for (final p in pins) _tile(context, ref, notifier, p)],
+        padding: const EdgeInsets.only(top: 8, bottom: 88),
+        // The pins on one glass card (off-roadmap S4).
+        children: [
+          GlassList(children: [for (final p in pins) _tile(context, ref, notifier, p)]),
+        ],
       ),
     );
   }

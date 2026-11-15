@@ -418,7 +418,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                       setState(() => _touched(RoutineFormField.name)),
                   decoration: InputDecoration(
                     labelText: 'Name',
-                    border: const OutlineInputBorder(),
                     error: _mark(marked == RoutineFormField.name),
                   ),
                 ),
@@ -544,7 +543,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
         initialValue: _kind,
         decoration: InputDecoration(
           labelText: 'Schedule',
-          border: const OutlineInputBorder(),
           error: _mark(marked == RoutineFormField.schedule),
         ),
         items: const [
@@ -572,7 +570,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
               setState(() => _touched(RoutineFormField.interval)),
           decoration: InputDecoration(
             labelText: 'Every how many weeks',
-            border: const OutlineInputBorder(),
             error: _mark(marked == RoutineFormField.interval),
           ),
         ),
@@ -611,7 +608,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
               setState(() => _touched(RoutineFormField.monthday)),
           decoration: InputDecoration(
             labelText: 'Day of the month (1–31)',
-            border: const OutlineInputBorder(),
             error: _mark(marked == RoutineFormField.monthday),
           ),
         ),
@@ -636,7 +632,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
         initialValue: _dueWindow,
         decoration: const InputDecoration(
           labelText: 'Due',
-          border: OutlineInputBorder(),
         ),
         items: const [
           DropdownMenuItem(value: TimeWindow.day, child: Text('That day')),
@@ -669,7 +664,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                   controller: _steps[i],
                   decoration: InputDecoration(
                     labelText: 'Step ${i + 1}',
-                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                 ),

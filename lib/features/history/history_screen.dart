@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/sync_status.dart';
@@ -63,9 +64,14 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   );
                 }
                 final item = state.items[index];
-                return _HistoryListTile(
-                  item: item,
-                  onTap: () => context.push('/record/history/${item.id}'),
+                // A glass card per transcript (off-roadmap S4).
+                return GlassCard(
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  padding: EdgeInsets.zero,
+                  child: _HistoryListTile(
+                    item: item,
+                    onTap: () => context.push('/record/history/${item.id}'),
+                  ),
                 );
               },
             ),

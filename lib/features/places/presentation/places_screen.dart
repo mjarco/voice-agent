@@ -140,7 +140,6 @@ class _PlacesScreenState extends ConsumerState<PlacesScreen> {
               maxLength: 120,
               decoration: const InputDecoration(
                 labelText: 'Nazwa tego miejsca',
-                border: OutlineInputBorder(),
                 counterText: '',
               ),
             ),
@@ -156,7 +155,6 @@ class _PlacesScreenState extends ConsumerState<PlacesScreen> {
                   controller: _otherTags,
                   decoration: const InputDecoration(
                     labelText: 'Inne tagi, po przecinku',
-                    border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -420,7 +418,6 @@ class _AddTagDialogState extends State<_AddTagDialog> {
             autofocus: true,
             decoration: const InputDecoration(
               labelText: 'Tag',
-              border: OutlineInputBorder(),
             ),
             onSubmitted: (_) {
               if (tag.isNotEmpty) Navigator.of(context).pop(tag);
@@ -669,7 +666,6 @@ class _PlaceEditorState extends ConsumerState<_PlaceEditor> {
               maxLength: 120,
               decoration: const InputDecoration(
                 labelText: 'Nazwa',
-                border: OutlineInputBorder(),
                 counterText: '',
               ),
             ),
@@ -679,7 +675,6 @@ class _PlaceEditorState extends ConsumerState<_PlaceEditor> {
               controller: _tags,
               decoration: const InputDecoration(
                 labelText: 'Tagi, po przecinku',
-                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),

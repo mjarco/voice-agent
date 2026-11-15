@@ -560,7 +560,6 @@ class _ItemSheetState extends State<_ItemSheet> {
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(
                 labelText: 'Item',
-                border: OutlineInputBorder(),
                 counterText: '',
               ),
             ),

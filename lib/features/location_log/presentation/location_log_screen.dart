@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/features/location_log/domain/location_log_port.dart';
 import 'package:voice_agent/features/location_log/domain/location_log_state.dart';
@@ -100,8 +101,12 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
   }
 
   Widget _buildBody(LocationLogState state) {
+    // One glass card of settings and readings (off-roadmap S4); the
+    // list's hairlines part the groups.
     return ListView(
+      padding: const EdgeInsets.only(top: 8, bottom: 24),
       children: [
+        GlassList(children: [
         SwitchListTile(
           key: const Key('location-log-switch'),
           title: const Text('Zbieraj lokalizację'),
@@ -180,7 +185,6 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
               },
             ),
           ),
-        const Divider(),
         SwitchListTile(
           key: const Key('arrival-alerts-switch'),
           title: const Text('Alerty w sklepach'),
@@ -194,7 +198,6 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
           value: state.alertsEnabled,
           onChanged: _setAlertsEnabled,
         ),
-        const Divider(),
         ListTile(
           key: const Key('location-log-status'),
           title: Text(_permissionLine(state.permission)),
@@ -226,6 +229,7 @@ class _LocationLogScreenState extends ConsumerState<LocationLogScreen>
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
+        ]),
       ],
     );
   }
