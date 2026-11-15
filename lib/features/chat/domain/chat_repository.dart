@@ -93,6 +93,7 @@ abstract class ChatRepository {
     required String idempotencyKey,
     String? model,
     String? backend,
+    Map<String, dynamic>? subject,
   });
   Future<void> cancelChat({
     required String sessionId,

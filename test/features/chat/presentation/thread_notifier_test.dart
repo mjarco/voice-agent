@@ -36,6 +36,9 @@ class _StubRepository implements ChatRepository {
   @override
   Future<List<Conversation>> listConversations() async => [];
 
+  /// The subject the last streamChat carried (ADR-NET-008).
+  Map<String, dynamic>? lastSubject;
+
   @override
   Future<Conversation?> getConversation(String conversationId) async {
     getConversationCallCount++;
@@ -62,7 +65,9 @@ class _StubRepository implements ChatRepository {
     required String idempotencyKey,
     String? model,
     String? backend,
+    Map<String, dynamic>? subject,
   }) {
+    lastSubject = subject;
     streamController = StreamController<SseEvent>();
     return streamController!.stream;
   }
@@ -272,6 +277,41 @@ void main() {
   });
 
   group('ThreadNotifier — send', () {
+    group('the subject of a thread (ADR-NET-008)', () {
+      Future<_StubRepository> sendOn(String id, {Conversation? conv, String? matterId}) async {
+        final repo = _StubRepository()..conversationResult = conv;
+        final notifier = ThreadNotifier(conversationId: id, repository: repo, pinWriter: _pinWriter,
+            proposals: _proposals, matterId: matterId);
+        await Future.microtask(() {});
+        await Future.microtask(() {});
+        await notifier.send('Kasia przysłała wycenę');
+        return repo;
+      }
+
+      test('a new thread opened on a matter carries it', () async {
+        final repo = await sendOn('new', matterId: 'm-1');
+        expect(repo.lastSubject, {'kind': 'matter', 'matter_id': 'm-1'});
+      });
+
+      test('a conversation held on a matter carries it', () async {
+        final onMatter = Conversation(
+          conversationId: 'conv-1', sessionId: 'sess-1', status: ConversationStatus.open,
+          createdAt: DateTime(2026), eventCount: 2, subject: 'matter', matterId: 'm-1', matterTitle: 'Remont',
+        );
+        final repo = await sendOn('conv-1', conv: onMatter);
+        expect(repo.lastSubject, {'kind': 'matter', 'matter_id': 'm-1'});
+      });
+
+      test('a conversation of Dzień carries none, even when linked to a matter', () async {
+        final linked = Conversation(
+          conversationId: 'conv-1', sessionId: 'sess-1', status: ConversationStatus.open,
+          createdAt: DateTime(2026), eventCount: 2, matterId: 'm-1', matterTitle: 'Remont',
+        );
+        final repo = await sendOn('conv-1', conv: linked);
+        expect(repo.lastSubject, isNull);
+      });
+    });
+
     test('is no-op when state is streaming', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =

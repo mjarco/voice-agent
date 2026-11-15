@@ -20,7 +20,9 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     required PinWriter pinWriter,
     required ShoppingProposalsPort proposals,
     void Function()? onShoppingChanged,
+    String? matterId,
   })  : _conversationId = conversationId,
+        _matterId = matterId,
         _repository = repository,
         _pinWriter = pinWriter,
         _proposals = proposals,
@@ -30,6 +32,10 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
   }
 
   final String _conversationId;
+
+  /// The matter a new thread is opened on (Napisz on its screen); its turns
+  /// carry the matter's subject (ADR-NET-008).
+  final String? _matterId;
   final ChatRepository _repository;
   final PinWriter _pinWriter;
   final ShoppingProposalsPort _proposals;
@@ -161,6 +167,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           idempotencyKey: idempotencyKey,
           model: selectedModel,
           backend: selectedBackend,
+          matterId: conv.onMatter ? conv.matterId : null,
         );
 
       case ThreadEmpty(
@@ -190,6 +197,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           idempotencyKey: idempotencyKey,
           model: selectedModel,
           backend: selectedBackend,
+          matterId: _matterId,
         );
 
       default:
@@ -203,6 +211,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     required String idempotencyKey,
     String? model,
     String? backend,
+    String? matterId,
   }) {
     _subscription = _repository
         .streamChat(
@@ -211,6 +220,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           idempotencyKey: idempotencyKey,
           model: model,
           backend: backend,
+          subject: matterId == null ? null : {'kind': 'matter', 'matter_id': matterId},
         )
         .listen(
           _onSseEvent,

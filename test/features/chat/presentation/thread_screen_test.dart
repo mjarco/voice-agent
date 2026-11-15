@@ -52,6 +52,7 @@ class _StubRepository implements ChatRepository {
     required String idempotencyKey,
     String? model,
     String? backend,
+    Map<String, dynamic>? subject,
   }) {
     streamController = StreamController<SseEvent>();
     return streamController!.stream;
@@ -163,6 +164,10 @@ Future<void> _pumpScreen(
         builder: (_, _) => const Scaffold(body: Text('Settings')),
       ),
       GoRoute(
+        path: '/matter/:id',
+        builder: (_, state) => Scaffold(body: Text('Matter ${state.pathParameters['id']}')),
+      ),
+      GoRoute(
         path: '/pins',
         builder: (_, _) => const Scaffold(body: Text('Pins screen')),
       ),
@@ -189,6 +194,28 @@ Future<void> _pumpScreen(
 
 void main() {
   group('ThreadScreen', () {
+    testWidgets('a conversation of a matter names it in the header, which '
+        'opens it (04 §5)', (tester) async {
+      final repo = _StubRepository()
+        ..conversationResult = Conversation.fromMap({
+          'conversation_id': 'conv-1', 'session_id': 's', 'status': 'open',
+          'created_at': '2026-11-15T10:00:00Z', 'event_count': 2,
+          'subject': 'matter', 'matter': {'id': 'm-1', 'title': 'Remont łazienki'}, 'channel': 'voice',
+        });
+      await _pumpScreen(tester, repository: repo);
+
+      expect(find.text('Sprawa: Remont łazienki'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('thread-matter')));
+      await tester.pumpAndSettle();
+      expect(find.text('Matter m-1'), findsOneWidget);
+    });
+
+    testWidgets('a conversation of no matter has no matter line', (tester) async {
+      await _pumpScreen(tester, repository: _StubRepository()..conversationResult = _conv());
+      expect(find.byKey(const Key('thread-matter')), findsNothing);
+      expect(find.byKey(const Key('thread-matter-new')), findsNothing);
+    });
+
     testWidgets('shows loading indicator before data resolves', (tester) async {
       final repo = _StubRepository()..conversationResult = _conv();
       final router = GoRouter(

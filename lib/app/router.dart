@@ -262,8 +262,10 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
     // the same full-screen ThreadScreen with a back button to the caller.
     GoRoute(
       path: '/conversation/:id',
-      builder: (_, state) =>
-          ThreadScreen(conversationId: state.pathParameters['id']!),
+      builder: (_, state) => ThreadScreen(
+        conversationId: state.pathParameters['id']!,
+        matterId: state.uri.queryParameters['matter'],
+      ),
     ),
     // Settings — outside shell (full-screen, no bottom nav)
     GoRoute(

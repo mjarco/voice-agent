@@ -21,12 +21,19 @@ final conversationsNotifierProvider =
   return ConversationsNotifier(ref.watch(chatRepositoryProvider));
 });
 
+/// The key of a new thread opened on a matter (Napisz on its screen).
+String newThreadOnMatter(String matterId) => 'new@$matterId';
+
+/// A thread by its conversation id; `new` is a new thread, `new@<matter id>`
+/// a new thread on a matter ([newThreadOnMatter]).
 final threadNotifierProvider =
     StateNotifierProvider.family<ThreadNotifier, ThreadState, String>(
-  (ref, conversationId) {
+  (ref, key) {
     final shoppingChanges = ref.read(shoppingListChangesProvider.notifier);
+    final onMatter = key.startsWith('new@');
     return ThreadNotifier(
-      conversationId: conversationId,
+      conversationId: onMatter ? 'new' : key,
+      matterId: onMatter ? key.substring(4) : null,
       repository: ref.watch(chatRepositoryProvider),
       pinWriter: ref.watch(pinWriterProvider),
       proposals: ref.watch(shoppingProposalsPortProvider),

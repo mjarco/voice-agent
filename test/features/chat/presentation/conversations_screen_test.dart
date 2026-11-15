@@ -30,6 +30,7 @@ class _StubRepository implements ChatRepository {
     required String idempotencyKey,
     String? model,
     String? backend,
+    Map<String, dynamic>? subject,
   }) =>
       const Stream.empty();
 
@@ -202,8 +203,8 @@ void main() {
 
       await _pumpScreen(tester, repository: repo);
 
-      expect(find.text('Hello there'), findsOneWidget);
-      expect(find.text('Second chat'), findsOneWidget);
+      expect(find.textContaining('Hello there'), findsOneWidget);
+      expect(find.textContaining('Second chat'), findsOneWidget);
     });
 
     testWidgets('conversation tile shows event count as subtitle',
@@ -214,7 +215,7 @@ void main() {
 
       await _pumpScreen(tester, repository: repo);
 
-      expect(find.text('7 messages'), findsOneWidget);
+      expect(find.textContaining('7 messages'), findsOneWidget);
     });
 
     testWidgets('each conversation is its own card (va-polish)',
@@ -230,7 +231,7 @@ void main() {
 
       for (final text in ['Hello there', 'Second chat']) {
         expect(
-          find.ancestor(of: find.text(text), matching: find.byType(Card)),
+          find.ancestor(of: find.textContaining(text), matching: find.byType(Card)),
           findsOneWidget,
         );
       }
@@ -246,6 +247,30 @@ void main() {
       );
     });
 
+    testWidgets('a row shows its matter first and how it was held (07 §2)',
+        (tester) async {
+      await _pumpScreen(tester, repository: _StubRepository(conversations: [
+        Conversation.fromMap({
+          'conversation_id': 'c-1', 'session_id': 's-1', 'status': 'open',
+          'created_at': '2026-11-15T10:00:00Z', 'event_count': 3,
+          'first_message_preview': 'wycena płytek',
+          'subject': 'matter', 'matter': {'id': 'm-1', 'title': 'Remont łazienki'}, 'channel': 'voice',
+        }),
+        Conversation.fromMap({
+          'conversation_id': 'c-2', 'session_id': 's-2', 'status': 'open',
+          'created_at': '2026-11-15T09:00:00Z', 'event_count': 2,
+          'first_message_preview': 'co mam jutro', 'channel': 'typed',
+        }),
+      ]));
+
+      final matter = find.byKey(const Key('conversation-c-1'));
+      expect(find.descendant(of: matter, matching: find.text('Remont łazienki')), findsOneWidget);
+      expect(find.descendant(of: matter, matching: find.byIcon(Icons.mic_none)), findsOneWidget);
+      final day = find.byKey(const Key('conversation-c-2'));
+      expect(find.descendant(of: day, matching: find.text('Bez sprawy')), findsOneWidget);
+      expect(find.descendant(of: day, matching: find.byIcon(Icons.keyboard_outlined)), findsOneWidget);
+    });
+
     testWidgets('conversation tile shows fallback preview when null',
         (tester) async {
       final repo = _StubRepository(
@@ -254,7 +279,7 @@ void main() {
 
       await _pumpScreen(tester, repository: repo);
 
-      expect(find.text('New conversation'), findsOneWidget);
+      expect(find.textContaining('New conversation'), findsOneWidget);
     });
 
     testWidgets('tapping a conversation navigates to thread', (tester) async {
@@ -264,7 +289,7 @@ void main() {
 
       await _pumpScreen(tester, repository: repo);
 
-      await tester.tap(find.text('Go to thread'));
+      await tester.tap(find.textContaining('Go to thread'));
       await tester.pumpAndSettle();
 
       expect(find.text('Thread conv-42'), findsOneWidget);

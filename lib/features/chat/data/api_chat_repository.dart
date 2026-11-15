@@ -51,11 +51,14 @@ class ApiChatRepository implements ChatRepository {
     required String idempotencyKey,
     String? model,
     String? backend,
+    Map<String, dynamic>? subject,
   }) {
     final body = <String, dynamic>{
       'session_id': sessionId,
       'content': content,
       'idempotency_key': idempotencyKey,
+      // The subject of a thread held on a matter (ADR-NET-008).
+      'subject': ?subject,
     };
     if (model != null) body['model'] = model;
     if (backend != null) body['backend'] = backend;
