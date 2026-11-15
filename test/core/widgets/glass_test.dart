@@ -83,4 +83,30 @@ void main() {
     expect(tapped, isTrue);
     expect(find.byTooltip('Ustawienia'), findsOneWidget);
   });
+
+  testWidgets('a number counts to its new value and ends there', (tester) async {
+    Widget at(int v) => MaterialApp(home: Scaffold(body: CountingNumber(v, textKey: const Key('n'))));
+    String shown() => tester.widget<Text>(find.byKey(const Key('n'))).data!;
+    await tester.pumpWidget(at(2200));
+    expect(shown(), '2200', reason: 'the first value shows as it is');
+    await tester.pumpWidget(at(1780));
+    await tester.pump(const Duration(milliseconds: 150));
+    final mid = int.parse(shown());
+    expect(mid, inExclusiveRange(1780, 2200));
+    await tester.pumpAndSettle();
+    expect(shown(), '1780');
+  });
+
+  testWidgets('with "Remove animations" a number changes at once', (tester) async {
+    Widget at(int v) => MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: Scaffold(body: CountingNumber(v, textKey: const Key('n'))),
+          ),
+        );
+    await tester.pumpWidget(at(2200));
+    await tester.pumpWidget(at(1780));
+    await tester.pump();
+    expect(tester.widget<Text>(find.byKey(const Key('n'))).data, '1780');
+  });
 }
