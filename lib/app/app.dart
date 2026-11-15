@@ -68,8 +68,10 @@ class _AppState extends ConsumerState<App> {
   /// screen is on top while the app is in front, otherwise Dzień (the app
   /// hidden or the phone locked).
   UtteranceSubject _readSubject() {
-    if (!mounted ||
-        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+    // Null before the first lifecycle event: the app has just been drawn,
+    // in front.
+    final life = WidgetsBinding.instance.lifecycleState;
+    if (!mounted || (life != null && life != AppLifecycleState.resumed)) {
       return UtteranceSubject.day;
     }
     return UtteranceSubject.ofLocation(_router.state.matchedLocation);

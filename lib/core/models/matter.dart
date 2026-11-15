@@ -213,6 +213,7 @@ class MatterLink {
     this.turns = 0,
     this.missing = false,
     this.createdAt,
+    this.lastAt,
   });
 
   final String id;
@@ -228,6 +229,10 @@ class MatterLink {
   final bool missing;
   final DateTime? createdAt;
 
+  /// A joined conversation's last turn (personal-agent's ADR-API-126); null
+  /// for a routine or a pin, or from an older server.
+  final DateTime? lastAt;
+
   factory MatterLink.fromMap(Map<String, dynamic> map) => MatterLink(
         id: map['id'] as String,
         kind: MatterLinkKind.fromJson(map['kind']),
@@ -239,6 +244,7 @@ class MatterLink {
         turns: map['turns'] is int ? map['turns'] as int : 0,
         missing: map['missing'] == true,
         createdAt: _time(map['created_at']),
+        lastAt: _time(map['last_at']),
       );
 }
 

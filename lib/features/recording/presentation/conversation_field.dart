@@ -16,12 +16,17 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 /// The conversation field at the bottom of Dziś (workspace discussion
 /// 2026-11-va-meals-dashboard, 03 §5): the mic with the owner's rule, one line
 /// of state, and the reply in place with the way to the whole conversation.
-/// Its subject is Dzień, today's behaviour; subjects come with V3.
+/// On a matter's screen ([matterId]) what is said there is about the matter
+/// (the subject is read from the screen on top when an utterance ends,
+/// ADR-NET-008), and Napisz opens a new thread on the matter.
 ///
 /// Typing opens the conversation, where typed turns already go into a voice
 /// session (ADR-CORE-119 of personal-agent).
 class ConversationField extends ConsumerWidget {
-  const ConversationField({super.key});
+  const ConversationField({super.key, this.matterId});
+
+  /// The matter whose screen the field sits on; null on Dziś and the diet.
+  final String? matterId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,6 +35,7 @@ class ConversationField extends ConsumerWidget {
       ref.watch(recordingControllerProvider),
       ref.watch(handsFreeControllerProvider),
       ref.watch(micModesEnabledProvider) ? ref.watch(micModeProvider) : null,
+      onMatter: matterId != null,
     );
     final micModes = ref.watch(micModesEnabledProvider);
     final mode = ref.watch(micModeProvider);
@@ -134,7 +140,9 @@ class ConversationField extends ConsumerWidget {
                     color: onBar,
                     icon: const Icon(Icons.keyboard_outlined),
                     tooltip: 'Napisz',
-                    onPressed: openConversation,
+                    onPressed: matterId == null
+                        ? openConversation
+                        : () => unawaited(context.push('/conversation/new?matter=$matterId')),
                   ),
                 ],
               ),
@@ -195,8 +203,9 @@ class _CaptureLineState extends State<_CaptureLine> {
 String _stateLine(
   RecordingState rec,
   HandsFreeSessionState hf,
-  MicMode? mode,
-) {
+  MicMode? mode, {
+  bool onMatter = false,
+}) {
   if (rec is RecordingActive) return 'Nagrywam…';
   if (rec is RecordingTranscribing) return 'Przetwarzam…';
   if (rec is RecordingPaused) return 'Nagrywanie wstrzymane';
@@ -209,5 +218,5 @@ String _stateLine(
     };
   }
   if (mode == MicMode.standby) return 'Wstrzymane — stuknij, by słuchać';
-  return 'Powiedz albo napisz…';
+  return onMatter ? 'Powiedz albo napisz w tej sprawie…' : 'Powiedz albo napisz…';
 }

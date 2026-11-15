@@ -166,3 +166,115 @@ class _TextDialogState extends State<_TextDialog> {
     );
   }
 }
+
+/// A new task of a matter: its name and its day, `YYYY-MM-DD`, or null for
+/// someday.
+typedef NewMatterTask = ({String name, String? dueOn});
+
+/// Asks for a task to add to a matter's agenda: the name and when (someday,
+/// today, tomorrow, or a day picked).
+Future<NewMatterTask?> askMatterTask(BuildContext context, DateTime today) {
+  return showDialog<NewMatterTask>(
+    context: context,
+    builder: (ctx) => _TaskDialog(today: DateTime(today.year, today.month, today.day)),
+  );
+}
+
+class _TaskDialog extends StatefulWidget {
+  const _TaskDialog({required this.today});
+  final DateTime today;
+
+  @override
+  State<_TaskDialog> createState() => _TaskDialogState();
+}
+
+class _TaskDialogState extends State<_TaskDialog> {
+  late final _controller = TextEditingController();
+  DateTime? _day;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  static String _iso(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _pick() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _day ?? widget.today,
+      firstDate: widget.today,
+      lastDate: widget.today.add(const Duration(days: 730)),
+    );
+    if (picked != null && mounted) setState(() => _day = picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tomorrow = widget.today.add(const Duration(days: 1));
+    final picked = _day != null && _day != widget.today && _day != tomorrow;
+    return AlertDialog(
+      title: const Text('Dodaj zadanie'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            key: const Key('matter-task-name'),
+            controller: _controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(hintText: 'Co trzeba zrobić'),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                key: const Key('matter-task-someday'),
+                label: const Text('Kiedyś'),
+                selected: _day == null,
+                onSelected: (_) => setState(() => _day = null),
+              ),
+              ChoiceChip(
+                key: const Key('matter-task-today'),
+                label: const Text('Dziś'),
+                selected: _day == widget.today,
+                onSelected: (_) => setState(() => _day = widget.today),
+              ),
+              ChoiceChip(
+                key: const Key('matter-task-tomorrow'),
+                label: const Text('Jutro'),
+                selected: _day == tomorrow,
+                onSelected: (_) => setState(() => _day = tomorrow),
+              ),
+              ChoiceChip(
+                key: const Key('matter-task-pick'),
+                label: Text(picked ? '${_day!.day}.${_day!.month}' : 'Dzień…'),
+                selected: picked,
+                onSelected: (_) => _pick(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Anuluj'),
+        ),
+        TextButton(
+          key: const Key('matter-task-save'),
+          onPressed: () {
+            final name = _controller.text.trim();
+            if (name.isEmpty) return;
+            Navigator.pop<NewMatterTask>(context, (name: name, dueOn: _day == null ? null : _iso(_day!)));
+          },
+          child: const Text('Dodaj'),
+        ),
+      ],
+    );
+  }
+}

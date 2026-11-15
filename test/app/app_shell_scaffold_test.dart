@@ -13,7 +13,13 @@ import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/agenda.dart';
+import 'package:voice_agent/core/models/matter.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
+import 'package:voice_agent/core/network/pin_writer.dart';
+import 'package:voice_agent/features/chat/domain/chat_repository.dart';
+import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
+import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
 import 'package:voice_agent/core/notifications/notification_providers.dart';
@@ -233,6 +239,21 @@ class _OfflineDiet implements DietRepository {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       Future<Never>.error(Exception('offline'));
+}
+
+/// A chat with no models or backends: a new thread opens empty.
+class _EmptyChat implements ChatRepository {
+  @override
+  Future<List<ModelInfo>> getModels({String? backend}) async => const [];
+  @override
+  Future<BackendOptions> getBackends() async => const BackendOptions(backends: []);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _NoPins implements PinWriter {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -464,6 +485,58 @@ void main() {
       final container =
           ProviderScope.containerOf(tester.element(find.byType(App)));
       expect(container.read(pendingWidgetTapProvider), isNull);
+    });
+  });
+
+  group('the subject of an utterance (ADR-NET-008)', () {
+    Future<ProviderContainer> pump(WidgetTester tester) async {
+      final matters = FakeMattersRepository(details: {
+        'm1': const MatterDetail(matter: MatterSummary(id: 'm1', title: 'Remont łazienki', status: MatterStatus.active)),
+      });
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          todayRepositoryProvider.overrideWithValue(_CountingTodayRepo()),
+          mattersRepositoryProvider.overrideWithValue(matters),
+          chatRepositoryProvider.overrideWithValue(_EmptyChat()),
+          pinWriterProvider.overrideWithValue(_NoPins()),
+          shoppingProposalsPortProvider.overrideWithValue(FakeShoppingProposals()),
+        ],
+        child: const App(),
+      ));
+      await tester.pumpAndSettle();
+      return ProviderScope.containerOf(tester.element(find.byType(App)));
+    }
+
+    UtteranceSubject subjectNow(ProviderContainer c) => c.read(utteranceSubjectReaderProvider)();
+
+    testWidgets('a matter on top is the subject; Dzień elsewhere, and with the app hidden',
+        (tester) async {
+      final c = await pump(tester);
+      final router = GoRouter.of(tester.element(find.byType(NavigationBar)));
+      expect(subjectNow(c), UtteranceSubject.day);
+
+      unawaited(router.push('/matter/m1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Powiedz albo napisz w tej sprawie…'), findsOneWidget);
+      expect(subjectNow(c), const UtteranceSubject.matter('m1'));
+
+      // The phone locked, or the app hidden, while on the matter.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      expect(subjectNow(c), UtteranceSubject.day);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(subjectNow(c), const UtteranceSubject.matter('m1'));
+
+      // Napisz on the matter opens a new thread on it; under it the subject
+      // is Dzień again, as the thread sends its own.
+      await tester.tap(find.byKey(const Key('field-write')));
+      await tester.pumpAndSettle();
+      expect(router.state.uri.toString(), '/conversation/new?matter=m1');
+      expect(subjectNow(c), UtteranceSubject.day);
+
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(subjectNow(c), const UtteranceSubject.matter('m1'));
     });
   });
 }

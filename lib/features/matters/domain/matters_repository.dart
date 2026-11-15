@@ -1,4 +1,5 @@
 import 'package:voice_agent/core/models/matter.dart';
+import 'package:voice_agent/core/models/routine.dart';
 
 sealed class MattersException implements Exception {
   String get message;
@@ -74,4 +75,23 @@ abstract class MattersRepository {
   Future<void> deleteEntry(String id, String entryId);
 
   Future<void> unlink(String id, String linkId);
+
+  // The matter's agenda (personal-agent's ADR-API-126): its routines, read and
+  // changed through the routines' routes.
+
+  /// The matter's active routines, ended ones included (the caller drops
+  /// them).
+  Future<List<Routine>> fetchTasks(String matterId);
+
+  /// A task joined to the matter: on [dueOn] (`YYYY-MM-DD`), or someday.
+  Future<Routine> addTask(String matterId, String name, {String? dueOn});
+
+  /// Done; a recurring routine needs the day, [scheduledFor].
+  Future<void> resolveTask(String routineId, {String? scheduledFor});
+  Future<void> unresolveTask(String routineId, {String? scheduledFor});
+
+  /// Off the agenda: archived, which the history keeps (04 §4 of the
+  /// discussion); [restoreTask] takes it back.
+  Future<void> archiveTask(String routineId);
+  Future<void> restoreTask(String routineId);
 }

@@ -95,8 +95,10 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
                 ),
                 GoRoute(
                   path: ':id',
-                  builder: (context, state) =>
-                      MatterDetailScreen(matterId: state.pathParameters['id']!),
+                  builder: (context, state) => MatterDetailScreen(
+                    matterId: state.pathParameters['id']!,
+                    field: ConversationField(matterId: state.pathParameters['id']),
+                  ),
                 ),
               ],
             ),
@@ -172,8 +174,10 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
     ),
     GoRoute(
       path: '/matter/:id',
-      builder: (context, state) =>
-          MatterDetailScreen(matterId: state.pathParameters['id']!),
+      builder: (context, state) => MatterDetailScreen(
+        matterId: state.pathParameters['id']!,
+        field: ConversationField(matterId: state.pathParameters['id']),
+      ),
     ),
     // The diet (05 of the discussion): no tab of its own; reached from Dziś,
     // the top bar and, later, the widget.
