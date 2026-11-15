@@ -34,7 +34,7 @@ void main() {
       ]) {
         expect(arrivalRoute(open), arrivalStartRoute, reason: open);
       }
-      expect(arrivalStartRoute, '/record');
+      expect(arrivalStartRoute, '/today');
     });
 
     test('no tap is null', () {
@@ -98,7 +98,7 @@ void main() {
       await fromNative('tapped', '/agenda');
       await fromNative('tapped', null);
 
-      expect(await routes, ['/shopping?store=grocery', '/record', '/record']);
+      expect(await routes, ['/shopping?store=grocery', '/today', '/today']);
     });
 
     test('no handler on the platform gives nothing', () async {

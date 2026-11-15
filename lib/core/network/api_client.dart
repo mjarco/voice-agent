@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:voice_agent/core/models/transcript.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 
 sealed class ApiResult {
   const ApiResult();
@@ -82,6 +83,7 @@ class ApiClient {
               transcript.createdAt ~/ 1000, // ms to epoch seconds
           'language': transcript.language,
           'deviceId': transcript.deviceId,
+          'subject': ?UtteranceSubject.ofKey(transcript.subject).toJson(),
         },
         options: Options(headers: _headers(token: token)),
       );

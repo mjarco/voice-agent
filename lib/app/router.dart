@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/app_shell_scaffold.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_screen.dart';
 import 'package:voice_agent/features/chat/presentation/conversations_screen.dart';
@@ -18,12 +19,20 @@ import 'package:voice_agent/features/history/history_screen.dart';
 import 'package:voice_agent/features/history/transcript_detail_screen.dart';
 import 'package:voice_agent/features/recording/presentation/recording_screen.dart';
 import 'package:voice_agent/features/debug/notifications_debug_screen.dart';
+import 'package:voice_agent/features/diet/presentation/diet_day_screen.dart';
+import 'package:voice_agent/features/diet/presentation/meal_action_card.dart';
+import 'package:voice_agent/features/diet/presentation/menu_screen.dart';
+import 'package:voice_agent/features/diet/presentation/own_meals_screen.dart';
+import 'package:voice_agent/features/diet/presentation/target_screen.dart';
+import 'package:voice_agent/features/recording/presentation/conversation_field.dart';
+import 'package:voice_agent/features/today/presentation/day_story_view.dart';
+import 'package:voice_agent/features/today/presentation/today_screen.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_screen.dart';
 import 'package:voice_agent/features/settings/advanced_settings_screen.dart';
 import 'package:voice_agent/features/settings/settings_screen.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_screen.dart';
 
-GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
+GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
   initialLocation: initialLocation,
   routes: [
     StatefulShellRoute.indexedStack(
@@ -31,7 +40,19 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
         return AppShellScaffold(navigationShell: navigationShell);
       },
       branches: [
-        // Branch 0: Agenda, with every routine to manage in a folded section
+        // Branch 0: Dziś, the start screen (V1 of the redesign, workspace
+        // discussion 2026-11-va-meals-dashboard, 06): the day as
+        // personal-agent tells it, with the conversation field.
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/today',
+              builder: (context, state) =>
+                  const TodayScreen(field: ConversationField()),
+            ),
+          ],
+        ),
+        // Branch 1: Agenda, with every routine to manage in a folded section
         // at its end (ADR-ARCH-012); a routine's pages stay in this branch.
         StatefulShellBranch(
           routes: [
@@ -63,7 +84,30 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
             ),
           ],
         ),
-        // Branch 1: Shopping
+        // Branch 2: Sprawy (Matters) (ADR-CORE-118 of personal-agent), in the place
+        // Routines had until ADR-ARCH-012.
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/matters',
+              builder: (context, state) => const MattersScreen(),
+              routes: [
+                GoRoute(
+                  path: 'new',
+                  builder: (context, state) => const MatterFormScreen(),
+                ),
+                GoRoute(
+                  path: ':id',
+                  builder: (context, state) => MatterDetailScreen(
+                    matterId: state.pathParameters['id']!,
+                    field: ConversationField(matterId: state.pathParameters['id']),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        // Branch 3: Zakupy
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -81,52 +125,7 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
             ),
           ],
         ),
-        // Branch 2: Record (default)
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/record',
-              builder: (context, state) => const RecordingScreen(),
-              routes: [
-                GoRoute(
-                  path: 'history',
-                  builder: (context, state) => const HistoryScreen(),
-                  routes: [
-                    GoRoute(
-                      path: ':id',
-                      builder: (context, state) {
-                        final id = state.pathParameters['id']!;
-                        return TranscriptDetailScreen(transcriptId: id);
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-        // Branch 3: Matters (ADR-CORE-118 of personal-agent), in the place
-        // Routines had until ADR-ARCH-012.
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/matters',
-              builder: (context, state) => const MattersScreen(),
-              routes: [
-                GoRoute(
-                  path: 'new',
-                  builder: (context, state) => const MatterFormScreen(),
-                ),
-                GoRoute(
-                  path: ':id',
-                  builder: (context, state) =>
-                      MatterDetailScreen(matterId: state.pathParameters['id']!),
-                ),
-              ],
-            ),
-          ],
-        ),
-        // Branch 4: Chat
+        // Branch 4: Rozmowy (Chat)
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -137,13 +136,68 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
                   path: ':id',
                   builder: (_, state) {
                     final id = state.pathParameters['id']!;
-                    return ThreadScreen(conversationId: id);
+                    return ThreadScreen(conversationId: id, actionCard: (a) => MealActionCard(action: a));
                   },
                 ),
               ],
             ),
           ],
         ),
+      ],
+    ),
+    // Record — outside the shell since V1 of the redesign: the mic lives in
+    // the conversation field; this screen is the diagnostics of the voice
+    // session (segments, speech settings) and the phone's transcript history,
+    // reached from Settings.
+    GoRoute(
+      path: '/record',
+      builder: (context, state) => const RecordingScreen(),
+      routes: [
+        GoRoute(
+          path: 'history',
+          builder: (context, state) => const HistoryScreen(),
+          routes: [
+            GoRoute(
+              path: ':id',
+              builder: (context, state) {
+                final id = state.pathParameters['id']!;
+                return TranscriptDetailScreen(transcriptId: id);
+              },
+            ),
+          ],
+        ),
+      ],
+    ),
+    // Opened over Dziś from its blocks, outside the shell like
+    // /conversation/:id, so Back returns to Dziś: a task and a matter.
+    GoRoute(
+      path: '/routine/:id',
+      builder: (context, state) =>
+          RoutineDetailScreen(routineId: state.pathParameters['id']!),
+    ),
+    GoRoute(
+      path: '/matter/:id',
+      builder: (context, state) => MatterDetailScreen(
+        matterId: state.pathParameters['id']!,
+        field: ConversationField(matterId: state.pathParameters['id']),
+      ),
+    ),
+    // The diet (05 of the discussion): no tab of its own; reached from Dziś,
+    // the top bar and, later, the widget.
+    GoRoute(
+      path: '/diet',
+      builder: (context, state) => DietDayScreen(
+        day: state.uri.queryParameters['day'],
+        // ADR-NET-009: the meal a reply logged, with Popraw and Cofnij.
+        field: ConversationField(diet: true, actionCard: (a) => MealActionCard(action: a)),
+      ),
+      routes: [
+        GoRoute(path: 'menu', builder: (context, state) => const MenuScreen()),
+        GoRoute(
+          path: 'own-meals',
+          builder: (context, state) => const OwnMealsScreen(),
+        ),
+        GoRoute(path: 'target', builder: (context, state) => const TargetScreen()),
       ],
     ),
     // Places — top-level like Pins, reached from the Shopping and Record app
@@ -212,8 +266,23 @@ GoRouter createRouter({String initialLocation = '/record'}) => GoRouter(
     // the same full-screen ThreadScreen with a back button to the caller.
     GoRoute(
       path: '/conversation/:id',
-      builder: (_, state) =>
-          ThreadScreen(conversationId: state.pathParameters['id']!),
+      builder: (_, state) {
+        final q = state.uri.queryParameters;
+        return ThreadScreen(
+          conversationId: state.pathParameters['id']!,
+          subject: q['matter'] != null
+              ? UtteranceSubject.matter(q['matter']!)
+              : q['subject'] == 'diet'
+                  ? UtteranceSubject.diet
+                  : UtteranceSubject.day,
+          actionCard: (a) => MealActionCard(action: a),
+        );
+      },
+    ),
+    // A day's story (ADR-NET-010), from Dziś's title or its evening block.
+    GoRoute(
+      path: '/day/:date',
+      builder: (_, state) => DayStoryScreen(day: state.pathParameters['date']!),
     ),
     // Settings — outside shell (full-screen, no bottom nav)
     GoRoute(

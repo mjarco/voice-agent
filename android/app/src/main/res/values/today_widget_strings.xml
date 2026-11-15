@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="today_widget_description">Kalorie, zadania i sprawy na dziś, z mikrofonem</string>
+    <string name="today_widget_mic">Mów do agenta</string>
+</resources>

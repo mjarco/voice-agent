@@ -8,17 +8,15 @@ import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/shopping_list_changes_provider.dart';
-import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/features/matters/presentation/matters_providers.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
+import 'package:voice_agent/features/recording/presentation/voice_inputs_host.dart';
+import 'package:voice_agent/features/today/presentation/today_providers.dart';
 
 class AppShellScaffold extends ConsumerStatefulWidget {
-  const AppShellScaffold({
-    super.key,
-    required this.navigationShell,
-  });
+  const AppShellScaffold({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
@@ -28,14 +26,15 @@ class AppShellScaffold extends ConsumerStatefulWidget {
 
 class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
     with WidgetsBindingObserver {
-  // Matches Branch 2 in router.dart's StatefulShellRoute.
-  static const _recordTabIndex = 2;
-  // Matches Branch 1. A proposal made by voice reaches the app in no other way
+  // Matches Branch 0 in router.dart's StatefulShellRoute: Dziś, the start
+  // screen, where Back from every other tab lands (V1 of the redesign).
+  static const _todayTabIndex = 0;
+  // Matches Branch 3. A proposal made by voice reaches the app in no other way
   // than a read of this tab.
-  static const _shoppingTabIndex = 1;
-  // Matches Branch 3. The list stays built in the shell, so a return to the
+  static const _shoppingTabIndex = 3;
+  // Matches Branch 2. The list stays built in the shell, so a return to the
   // tab reads it again, as the push of its page did before ADR-ARCH-012.
-  static const _mattersTabIndex = 3;
+  static const _mattersTabIndex = 2;
 
   /// P040 §Reconciler Triggers #2: kick a refresh on app resume if the last
   /// successful agenda fetch was >1h ago. Compensates for iOS BGAppRefresh
@@ -70,9 +69,10 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
-        Telemetry.instance.event('app.background', attrs: {
-          'state': state.name,
-        });
+        Telemetry.instance.event(
+          'app.background',
+          attrs: {'state': state.name},
+        );
       case AppLifecycleState.detached:
         // Best-effort terminate notification before the engine tears down.
         Telemetry.instance.event('app.terminate');
@@ -81,6 +81,17 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
     // P040 §Reconciler Triggers #2: staleness-driven foreground refresh.
     if (state == AppLifecycleState.resumed) {
       unawaited(_kickRefreshIfStale());
+      // Dziś is the day as it is now: an app left overnight must not open on
+      // yesterday, nor on what another device changed meanwhile.
+      if (ref.exists(todayNotifierProvider)) {
+        unawaited(ref.read(todayNotifierProvider.notifier).refresh());
+      }
+    }
+    // Leaving the app is when the owner next sees the home-screen widget: what
+    // was done in the app (a meal logged on the diet's day) reaches it now,
+    // not at the next background read (ADR-PLATFORM-015).
+    if (state == AppLifecycleState.paused && ref.exists(todayNotifierProvider)) {
+      unawaited(ref.read(todayNotifierProvider.notifier).refresh());
     }
   }
 
@@ -113,92 +124,79 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
     // not been visited.
     ref.watch(agendaNotifierProvider);
 
-    ref.listen<AsyncValue<ConnectivityStatus>>(
-      connectivityStatusProvider,
-      (prev, next) {
-        next.whenData((status) {
-          if (status == ConnectivityStatus.offline) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('No internet connection – sync paused'),
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        });
-      },
-    );
-
-    return Scaffold(
-      body: widget.navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: widget.navigationShell.currentIndex,
-        onDestinationSelected: (index) {
-          final currentIndex = widget.navigationShell.currentIndex;
-          // ADR-AUDIO-013: on Android the tabs never touch the microphone;
-          // only the mic button, the headset, Stop and a farewell do.
-          final tabsDriveMic = !ref.read(micModesEnabledProvider);
-          if (tabsDriveMic &&
-              currentIndex == _recordTabIndex &&
-              index != _recordTabIndex) {
-            final hfCtrl = ref.read(handsFreeControllerProvider.notifier);
-            unawaited(
-              hfCtrl.stopSession().then((_) {
-                // If the user returned to the Record tab while the session was
-                // draining, startSession() called during the tab switch was
-                // blocked by the guard (state wasn't idle yet). Restart now.
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted &&
-                      widget.navigationShell.currentIndex == _recordTabIndex) {
-                    unawaited(hfCtrl.startSession());
-                  }
-                });
-              }),
-            );
-          } else if (tabsDriveMic &&
-              index == _recordTabIndex &&
-              currentIndex != _recordTabIndex) {
-            unawaited(
-              ref.read(handsFreeControllerProvider.notifier).startSession(),
-            );
-          }
-          if (index == _shoppingTabIndex && index != currentIndex) {
-            ref.read(shoppingListChangesProvider.notifier).state++;
-          }
-          // The first visit builds the list, which reads it; only a return
-          // reads it again.
-          if (index == _mattersTabIndex &&
-              index != currentIndex &&
-              ref.exists(mattersNotifierProvider)) {
-            unawaited(ref.read(mattersNotifierProvider.notifier).refresh());
-          }
-          widget.navigationShell.goBranch(
-            index,
-            initialLocation: index == currentIndex,
+    ref.listen<AsyncValue<ConnectivityStatus>>(connectivityStatusProvider, (
+      prev,
+      next,
+    ) {
+      next.whenData((status) {
+        if (status == ConnectivityStatus.offline) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Brak internetu — wysyłanie wstrzymane'),
+              duration: Duration(seconds: 3),
+            ),
           );
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.calendar_today),
-            label: 'Agenda',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.shopping_cart_outlined),
-            label: 'Shopping',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.mic),
-            label: 'Record',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.topic_outlined),
-            label: 'Sprawy',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            label: 'Chat',
-          ),
-        ],
+        }
+      });
+    });
+
+    final onToday = widget.navigationShell.currentIndex == _todayTabIndex;
+    // Back on a tab's own screen goes to Dziś, not out of the app; a
+    // notification's target opened on a tab is thus "over Dziś" (06 §2).
+    return PopScope(
+      canPop: onToday,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) widget.navigationShell.goBranch(_todayTabIndex);
+      },
+      child: Scaffold(
+        body: VoiceInputsHost(child: widget.navigationShell),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: widget.navigationShell.currentIndex,
+          onDestinationSelected: (index) {
+            final currentIndex = widget.navigationShell.currentIndex;
+            // ADR-AUDIO-013: the tabs never touch the microphone; since Record
+            // stopped being a tab (V1 of the redesign) that holds on iOS too.
+            if (index == _todayTabIndex && ref.exists(todayNotifierProvider)) {
+              unawaited(ref.read(todayNotifierProvider.notifier).refresh());
+            }
+            if (index == _shoppingTabIndex && index != currentIndex) {
+              ref.read(shoppingListChangesProvider.notifier).state++;
+            }
+            // The first visit builds the list, which reads it; only a return
+            // reads it again.
+            if (index == _mattersTabIndex &&
+                index != currentIndex &&
+                ref.exists(mattersNotifierProvider)) {
+              unawaited(ref.read(mattersNotifierProvider.notifier).refresh());
+            }
+            widget.navigationShell.goBranch(
+              index,
+              initialLocation: index == currentIndex,
+            );
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.wb_sunny_outlined),
+              label: 'Dziś',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.calendar_today),
+              label: 'Agenda',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.topic_outlined),
+              label: 'Sprawy',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.shopping_cart_outlined),
+              label: 'Zakupy',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline),
+              label: 'Rozmowy',
+            ),
+          ],
+        ),
       ),
     );
   }

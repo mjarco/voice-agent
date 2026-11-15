@@ -78,20 +78,33 @@ class _ConversationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final preview =
         conversation.firstMessagePreview ?? 'New conversation';
-    final subtitle = '${conversation.eventCount} messages';
+    final subtitle = '$preview · ${conversation.eventCount} messages';
     final at = (conversation.lastEventAt ?? conversation.createdAt).toLocal();
+    final voice = conversation.channel == 'voice';
 
-    // A card per conversation, as in Sprawy, so the rows read apart.
+    // A card per conversation, as in Sprawy, so the rows read apart. The
+    // subject first, the first sentence second (07 §2 of the discussion
+    // 2026-11-va-meals-dashboard); the icon says how it was held.
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
-        title: Text(
-          preview,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
+        key: Key('conversation-${conversation.conversationId}'),
+        leading: Icon(
+          voice ? Icons.mic_none : Icons.keyboard_outlined,
+          semanticLabel: voice ? 'głosem' : 'pisana',
         ),
-        subtitle: Text(subtitle),
+        title: Text(
+          // Held on the diet: Jedzenie (ADR-NET-009).
+          conversation.matterTitle ??
+              (conversation.subject == 'diet' ? 'Jedzenie' : 'Bez sprawy'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: conversation.matterTitle == null && conversation.subject != 'diet'
+              ? TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)
+              : null,
+        ),
+        subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
         trailing: Text(
           conversationTimeLabel(at, now),
           style: Theme.of(context).textTheme.bodySmall,

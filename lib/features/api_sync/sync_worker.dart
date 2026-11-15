@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:voice_agent/core/models/agent_action.dart';
 import 'package:voice_agent/core/audio/audio_feedback_service.dart';
 import 'package:voice_agent/core/local_commands/local_command_matcher.dart';
 import 'package:voice_agent/core/network/api_client.dart';
@@ -35,6 +36,7 @@ class SyncWorker {
     required this.toaster,
     required this.hapticService,
     this.onAgentReply,
+    this.onAgentActions,
   });
 
   final StorageService storageService;
@@ -66,6 +68,10 @@ class SyncWorker {
   final HapticService hapticService;
 
   final void Function(String reply)? onAgentReply;
+
+  /// What the reply did (personal-agent ADR-API-127): called before
+  /// [onAgentReply] with each spoken reply, [] when it did nothing with a card.
+  final void Function(List<AgentAction> actions)? onAgentActions;
 
   SyncWorkerState _state = SyncWorkerState.idle;
   SyncWorkerState get state => _state;
@@ -337,6 +343,7 @@ class SyncWorker {
         // and any other future speak callsite must NOT.
         ttsReplyBuffer.record(message, languageCode: language);
       }
+      onAgentActions?.call(AgentAction.listFrom(json['actions']));
       onAgentReply?.call(message);
 
       // P029: adopt conversation_id for client-side correlation.

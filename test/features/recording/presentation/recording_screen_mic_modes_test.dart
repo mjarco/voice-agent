@@ -40,6 +40,7 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 
 import '../../../helpers/stub_notifications.dart';
 import '../../../helpers/stub_session_control.dart';
+import '../../../helpers/open_record.dart';
 
 // ── Stubs ────────────────────────────────────────────────────────────────────
 
@@ -205,6 +206,7 @@ Future<(ProviderContainer, StubMediaButtonPort)> _pumpApp(
       child: const App(),
     ),
   );
+  await openRecord(tester);
   await tester.pumpAndSettle();
   final container = ProviderScope.containerOf(
       tester.element(find.byKey(const Key('record-button'))));
@@ -236,7 +238,7 @@ void main() {
       final (c, _) = await _pumpApp(tester);
 
       expect(c.read(micModeProvider), MicMode.off);
-      expect(find.text('Tap to start listening'), findsOneWidget);
+      expect(find.text('Stuknij, by słuchać'), findsOneWidget);
       expect(_buttonColor(tester), Colors.green);
       expect(_stop, findsNothing);
     });
@@ -247,7 +249,7 @@ void main() {
       await _tapMic(tester);
 
       expect(c.read(micModeProvider), MicMode.listening);
-      expect(find.text('Listening — tap to pause'), findsOneWidget);
+      expect(find.text('Słucham — stuknij, by wstrzymać'), findsOneWidget);
       expect(_buttonColor(tester), Colors.orange);
       expect(_stop, findsOneWidget);
     });
@@ -259,7 +261,7 @@ void main() {
       await _tapMic(tester);
 
       expect(c.read(micModeProvider), MicMode.standby);
-      expect(find.text('Standby — tap to resume'), findsOneWidget);
+      expect(find.text('Wstrzymane — stuknij, by słuchać'), findsOneWidget);
       expect(_buttonColor(tester), Colors.blueGrey);
       expect(_stop, findsOneWidget);
     });
@@ -271,7 +273,7 @@ void main() {
       await _tapMic(tester);
 
       expect(c.read(micModeProvider), MicMode.listening);
-      expect(find.text('Listening — tap to pause'), findsOneWidget);
+      expect(find.text('Słucham — stuknij, by wstrzymać'), findsOneWidget);
     });
 
     testWidgets('Stop from Listening ends in Off and hides Stop',
@@ -283,7 +285,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(c.read(micModeProvider), MicMode.off);
-      expect(find.text('Tap to start listening'), findsOneWidget);
+      expect(find.text('Stuknij, by słuchać'), findsOneWidget);
       expect(_stop, findsNothing);
     });
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import 'package:voice_agent/core/models/agent_action.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
@@ -10,6 +11,7 @@ import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/core/network/shopping_proposals_port.dart';
 import 'package:voice_agent/core/network/sse_client.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
 import 'package:voice_agent/features/chat/domain/chat_state.dart';
 
@@ -20,16 +22,28 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     required PinWriter pinWriter,
     required ShoppingProposalsPort proposals,
     void Function()? onShoppingChanged,
+    void Function()? onAnswered,
+    UtteranceSubject subject = UtteranceSubject.day,
   })  : _conversationId = conversationId,
+        _subject = subject,
         _repository = repository,
         _pinWriter = pinWriter,
         _proposals = proposals,
         _onShoppingChanged = onShoppingChanged,
+        _onAnswered = onAnswered,
         super(const ThreadLoading()) {
     load();
   }
 
   final String _conversationId;
+
+  /// The subject a new thread is opened in (Napisz on a matter's screen or
+  /// the diet's); its turns carry it (ADR-NET-008, ADR-NET-009).
+  final UtteranceSubject _subject;
+
+  /// What each reply did, by the reply's event id (C10, ADR-NET-009): the
+  /// cards under it. Session-local like the pins: a reloaded thread has none.
+  final Map<String, List<AgentAction>> _actionsByEvent = {};
   final ChatRepository _repository;
   final PinWriter _pinWriter;
   final ShoppingProposalsPort _proposals;
@@ -37,6 +51,10 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
   /// The Shopping tab stays alive without polling, so it is told when a turn or
   /// an answer here may have changed what it shows.
   final void Function()? _onShoppingChanged;
+
+  /// Told when personal-agent has answered a turn here, which may have
+  /// written into a matter or the day (`agentTurnsProvider`).
+  final void Function()? _onAnswered;
 
   // Session-local pin view state (proposal 046). Held as notifier fields, not on
   // the immutable Thread* states, so they survive a streaming->loaded transition
@@ -161,6 +179,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           idempotencyKey: idempotencyKey,
           model: selectedModel,
           backend: selectedBackend,
+          subject: _subjectOf(conv),
         );
 
       case ThreadEmpty(
@@ -190,6 +209,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           idempotencyKey: idempotencyKey,
           model: selectedModel,
           backend: selectedBackend,
+          subject: _subject,
         );
 
       default:
@@ -203,6 +223,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
     required String idempotencyKey,
     String? model,
     String? backend,
+    UtteranceSubject subject = UtteranceSubject.day,
   }) {
     _subscription = _repository
         .streamChat(
@@ -211,6 +232,7 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
           idempotencyKey: idempotencyKey,
           model: model,
           backend: backend,
+          subject: subject.toJson(),
         )
         .listen(
           _onSseEvent,
@@ -243,7 +265,11 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
         final json = jsonDecode(event.data) as Map<String, dynamic>;
         final result = ChatResult.fromMap(json);
         _currentConversationId = result.conversationId;
+        if (result.actions.isNotEmpty) {
+          _actionsByEvent[result.agentEventId ?? result.userEventId] = result.actions;
+        }
         if (result.shoppingProposals.isNotEmpty) _onShoppingChanged?.call();
+        _onAnswered?.call();
         _fetchAfterResult(currentStreaming, result.shoppingProposals);
 
       case 'error':
@@ -490,6 +516,16 @@ class ThreadNotifier extends StateNotifier<ThreadState> {
 
   /// Whether [eventId] has been pinned this session (filled icon).
   bool isPinned(String eventId) => _pinnedEventIds.contains(eventId);
+
+  /// The cards under the reply [eventId]: what its turn did.
+  List<AgentAction> actionsOf(String eventId) => _actionsByEvent[eventId] ?? const [];
+
+  /// The subject a conversation's typed turns carry: the one it is held in.
+  static UtteranceSubject _subjectOf(Conversation conv) {
+    if (conv.onMatter) return UtteranceSubject.matter(conv.matterId!);
+    if (conv.subject == 'diet') return UtteranceSubject.diet;
+    return UtteranceSubject.day;
+  }
 
   /// Whether a pin flow for [eventId] is in progress (spinner + single-flight).
   bool isPinInFlight(String eventId) => _pinInFlight.contains(eventId);

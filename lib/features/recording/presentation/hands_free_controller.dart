@@ -23,6 +23,7 @@ import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/session_control/hands_free_control_port.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/engagement_controller.dart';
 import 'package:voice_agent/features/recording/domain/engagement_state.dart';
@@ -433,16 +434,24 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     });
     switch (command) {
       case GlassesCommand.listening:
-        if (micMode == MicMode.off) {
-          unawaited(startSession());
-        } else if (micMode == MicMode.standby &&
-            !_suspendedForManualRecording) {
-          unawaited(resumeSession());
-        }
+        listen();
       case GlassesCommand.standby:
         if (micMode == MicMode.listening) unawaited(pauseSession());
       case GlassesCommand.off:
         if (micMode != MicMode.off) unawaited(stopSession());
+    }
+  }
+
+  /// Listening on, asked for from outside the mic button: the glasses'
+  /// Rozmowa page (ADR-AUDIO-016) and the home-screen widget's mic
+  /// (ADR-PLATFORM-015). From Off a session starts, from Standby it resumes;
+  /// already listening, or held by a manual recording, nothing changes.
+  void listen() {
+    if (!mounted) return;
+    if (micMode == MicMode.off) {
+      unawaited(startSession());
+    } else if (micMode == MicMode.standby && !_suspendedForManualRecording) {
+      unawaited(resumeSession());
     }
   }
 
@@ -1047,6 +1056,9 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       label: label,
       state: const QueuedForTranscription(),
       wavPath: wavPath,
+      // ADR-NET-008: the subject is the screen's when the segment ends, not
+      // when it is transcribed or sent.
+      subject: _ref.read(utteranceSubjectReaderProvider)().key,
     );
     _jobs.add(job);
     state = _listeningOrBacklog();
@@ -1123,6 +1135,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         audioDurationMs: audioDurationMs,
         deviceId: deviceId,
         createdAt: DateTime.now().millisecondsSinceEpoch,
+        subject: job.subject,
       );
 
       await storage.saveTranscript(transcript);

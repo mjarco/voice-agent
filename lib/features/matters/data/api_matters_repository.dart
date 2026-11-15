@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:voice_agent/core/models/matter.dart';
+import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/features/matters/domain/matters_repository.dart';
 
@@ -110,6 +111,48 @@ class ApiMattersRepository implements MattersRepository {
   Future<void> unlink(String id, String linkId) async => _done(
         await _apiClient.delete('/matters/$id/links/$linkId?source=$_source'),
       );
+
+  @override
+  Future<List<Routine>> fetchTasks(String matterId) async {
+    final data = _data(await _apiClient.get(
+      '/routines',
+      queryParameters: {'matter_id': matterId, 'status': 'active'},
+    ));
+    if (data is! List) throw MattersGeneralException('Missing data envelope');
+    return data.whereType<Map<String, dynamic>>().map(Routine.fromMap).toList();
+  }
+
+  @override
+  Future<Routine> addTask(String matterId, String name, {String? dueOn}) async {
+    final data = _data(await _apiClient.postJson('/routines', data: {
+      'name': name,
+      'due_on': ?dueOn,
+      'matter_id': matterId,
+      'source': _source,
+    }));
+    if (data is! Map<String, dynamic>) {
+      throw MattersGeneralException('Missing data envelope');
+    }
+    return Routine.fromMap(data);
+  }
+
+  @override
+  Future<void> resolveTask(String routineId, {String? scheduledFor}) async =>
+      _done(await _apiClient.postJson('/routines/$routineId/resolve', data: {
+        'scheduled_for': ?scheduledFor,
+        'status': 'done',
+      }));
+
+  @override
+  Future<void> unresolveTask(String routineId, {String? scheduledFor}) async {
+    final query = scheduledFor == null ? '' : '?scheduled_for=$scheduledFor';
+    _done(await _apiClient.delete('/routines/$routineId/resolve$query'));
+  }
+
+  @override
+  Future<void> archiveTask(String routineId) async =>
+      _done(await _apiClient.postJson('/routines/$routineId/archive'));
+
 
   MatterDetail _detail(ApiResult result) {
     final data = _data(result);

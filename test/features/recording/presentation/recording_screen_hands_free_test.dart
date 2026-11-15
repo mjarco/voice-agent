@@ -37,6 +37,7 @@ import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
 import '../../../helpers/stub_notifications.dart';
 import '../../../helpers/stub_session_control.dart';
+import '../../../helpers/open_record.dart';
 
 // ── Stubs ─────────────────────────────────────────────────────────────────────
 
@@ -170,6 +171,7 @@ Future<void> pumpRecordScreen(
       ),
     ),
   );
+  await openRecord(tester);
   await tester.pumpAndSettle();
 
   // P037 v2: app opens in HandsFreeIdle (no auto-start). Tests that
@@ -277,6 +279,7 @@ void main() {
           }),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
       // v2: explicit engage replaces the legacy auto-start.
       await container

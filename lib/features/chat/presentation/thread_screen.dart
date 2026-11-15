@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/core/models/agent_action.dart';
 import 'package:voice_agent/core/models/conversation.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/widgets/agent_markdown_style.dart';
 import 'package:voice_agent/core/widgets/shopping_proposal_card.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
@@ -12,9 +14,23 @@ import 'package:voice_agent/features/chat/domain/chat_state.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
 
 class ThreadScreen extends ConsumerStatefulWidget {
-  const ThreadScreen({super.key, required this.conversationId});
+  const ThreadScreen({
+    super.key,
+    required this.conversationId,
+    this.subject = UtteranceSubject.day,
+    this.actionCard,
+  });
 
   final String conversationId;
+
+  /// The subject a new thread is opened in (Napisz on a matter's screen,
+  /// `/conversation/new?matter=<id>`, or the diet's, `?subject=diet`); its
+  /// turns carry it (ADR-NET-008, ADR-NET-009).
+  final UtteranceSubject subject;
+
+  /// The card of one thing a reply did, under the reply (ADR-NET-009); the
+  /// app hands it in, as to the conversation field. Null: no cards.
+  final Widget Function(AgentAction action)? actionCard;
 
   @override
   ConsumerState<ThreadScreen> createState() => _ThreadScreenState();
@@ -23,12 +39,21 @@ class ThreadScreen extends ConsumerStatefulWidget {
 class _ThreadScreenState extends ConsumerState<ThreadScreen> {
   final _textController = TextEditingController();
 
+  /// The thread's provider key: a new thread in a subject is its own.
+  String get _key => widget.conversationId == 'new' && !widget.subject.isDay
+      ? newThreadIn(widget.subject)
+      : widget.conversationId;
+
+  bool _started = false;
+
   @override
-  void initState() {
-    super.initState();
-    ref
-        .read(threadNotifierProvider(widget.conversationId).notifier)
-        .refreshProposals();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // Napisz opens a new thread each time, not the last one written there.
+    if (_key != widget.conversationId) ref.invalidate(threadNotifierProvider(_key));
+    ref.read(threadNotifierProvider(_key).notifier).refreshProposals();
   }
 
   @override
@@ -42,7 +67,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
   /// in-flight / pinned sets; this method only drives the dialog and SnackBars.
   Future<void> _startPin(ConversationEvent event) async {
     final notifier =
-        ref.read(threadNotifierProvider(widget.conversationId).notifier);
+        ref.read(threadNotifierProvider(_key).notifier);
     final messenger = ScaffoldMessenger.of(context);
     final router = GoRouter.of(context);
 
@@ -103,11 +128,12 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(threadNotifierProvider(widget.conversationId));
+    final state = ref.watch(threadNotifierProvider(_key));
     final notifier =
-        ref.read(threadNotifierProvider(widget.conversationId).notifier);
+        ref.read(threadNotifierProvider(_key).notifier);
 
     final String title;
+    final Conversation? conversation;
     final List<ConversationEvent> events;
     final List<ShoppingProposalRow> proposals;
     final List<ModelInfo> models;
@@ -153,6 +179,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
           selectedBackend: final sb,
         ):
         title = 'New Chat';
+        conversation = null;
         events = const [];
         proposals = const [];
         models = m;
@@ -174,6 +201,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
           selectedBackend: final sb,
         ):
         title = conv.firstMessagePreview ?? 'New Chat';
+        conversation = conv;
         events = e;
         proposals = p;
         models = m;
@@ -197,6 +225,7 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
           toolProgress: final tp,
         ):
         title = conv?.firstMessagePreview ?? 'New Chat';
+        conversation = conv;
         events = e;
         proposals = p;
         models = m;
@@ -209,9 +238,39 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
         isClosed = false;
     }
 
+    // The matter the conversation belongs to opens from its header (04 §5).
+    final matterId = conversation?.matterId;
+    final Widget? matterLine = matterId != null
+        ? ListTile(
+            key: const Key('thread-matter'),
+            dense: true,
+            leading: const Icon(Icons.folder_outlined),
+            title: Text('Sprawa: ${conversation?.matterTitle ?? ''}'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/matter/$matterId'),
+          )
+        : widget.subject.matterId != null
+            ? const ListTile(
+                key: Key('thread-matter-new'),
+                dense: true,
+                leading: Icon(Icons.folder_outlined),
+                title: Text('Nowa rozmowa w tej sprawie'),
+              )
+            : widget.subject.isDiet || conversation?.subject == 'diet'
+                ? const ListTile(
+                    key: Key('thread-diet'),
+                    dense: true,
+                    leading: Icon(Icons.restaurant_outlined),
+                    title: Text('Jedzenie'),
+                  )
+                : null;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
+        bottom: matterLine == null
+            ? null
+            : PreferredSize(preferredSize: const Size.fromHeight(48), child: matterLine),
         actions: [
           _ModelBackendPicker(
             models: models,
@@ -266,6 +325,12 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
                           accept: false,
                         ),
                       ));
+                    }
+                    // What the reply did stands under it (ADR-NET-009).
+                    if (widget.actionCard != null && event.role == EventRole.agent) {
+                      for (final a in notifier.actionsOf(event.eventId).reversed) {
+                        widgets.add(widget.actionCard!(a));
+                      }
                     }
                     final canPin = event.role == EventRole.agent &&
                         event.conversationId.isNotEmpty;

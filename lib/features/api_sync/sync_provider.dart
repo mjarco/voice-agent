@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/audio/audio_feedback_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/glasses_control/glasses_control_provider.dart';
+import 'package:voice_agent/core/glasses_control/glasses_docs.dart';
 import 'package:voice_agent/core/local_commands/local_command_provider.dart';
 import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
+import 'package:voice_agent/core/providers/agent_turns_provider.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
@@ -47,8 +52,17 @@ final syncWorkerProvider = Provider<SyncWorker>((ref) {
     ttsReplyBuffer: ref.watch(ttsReplyBufferProvider),
     toaster: ref.watch(toasterProvider),
     hapticService: ref.watch(hapticServiceProvider),
+    onAgentActions: (actions) {
+      ref.read(latestAgentActionsProvider.notifier).state = actions;
+      // The glasses confirm what the turn did (G4): a meal with its Cofnij, an utterance queued.
+      final glasses = ref.read(glassesControlProvider);
+      for (final doc in GlassesDocs.ofActions(actions)) {
+        unawaited(glasses.show(doc));
+      }
+    },
     onAgentReply: (reply) {
       ref.read(latestAgentReplyProvider.notifier).state = reply;
+      ref.read(agentTurnsProvider.notifier).state++;
     },
   );
 

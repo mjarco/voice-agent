@@ -239,4 +239,41 @@ void main() {
       );
     });
   });
+
+  group('the agenda of a matter (ADR-API-126 of personal-agent)', () {
+    const routine = {
+      'id': 'r1', 'name': 'Zadzwonić', 'kind': 'one_off', 'due_on': '2026-11-17', 'next_due': '2026-11-17',
+      'status': 'active', 'created_at': '2026-11-09T10:00:00Z', 'updated_at': '2026-11-09T10:00:00Z',
+    };
+
+    test('reads the matter\'s active routines', () async {
+      final api = _StubApiClient()..next = ApiSuccess(body: jsonEncode({'data': [routine]}));
+      final tasks = await ApiMattersRepository(api).fetchTasks('m1');
+      expect(api.requests.single.$2, '/routines');
+      expect(api.lastQuery, {'matter_id': 'm1', 'status': 'active'});
+      expect(tasks.single.name, 'Zadzwonić');
+    });
+
+    test('adds a task joined to the matter, from the phone', () async {
+      final api = _StubApiClient()..next = ApiSuccess(body: jsonEncode({'data': routine}));
+      await ApiMattersRepository(api).addTask('m1', 'Zadzwonić', dueOn: '2026-11-17');
+      final (method, path, body) = api.requests.single;
+      expect('$method $path', 'POST /routines');
+      expect(body, {'name': 'Zadzwonić', 'due_on': '2026-11-17', 'matter_id': 'm1', 'source': 'phone'});
+    });
+
+    test('ticks, undoes and archives through the routines\' routes', () async {
+      final api = _StubApiClient()..next = const ApiSuccess(body: '{}');
+      final repo = ApiMattersRepository(api);
+      await repo.resolveTask('r1', scheduledFor: '2026-11-15');
+      await repo.unresolveTask('r1', scheduledFor: '2026-11-15');
+      await repo.archiveTask('r1');
+      expect(api.requests.map((r) => '${r.$1} ${r.$2}'), [
+        'POST /routines/r1/resolve',
+        'DELETE /routines/r1/resolve?scheduled_for=2026-11-15',
+        'POST /routines/r1/archive',
+      ]);
+      expect(api.requests.first.$3, {'scheduled_for': '2026-11-15', 'status': 'done'});
+    });
+  });
 }

@@ -48,6 +48,7 @@ class SegmentJob {
     required this.label,
     required this.state,
     this.wavPath,
+    this.subject,
   });
 
   final String id;
@@ -61,12 +62,17 @@ class SegmentJob {
   /// SttService or deleted.
   final String? wavPath;
 
+  /// The subject read when the segment ended (ADR-NET-008): null for Dzień,
+  /// `matter:<id>`.
+  final String? subject;
+
   SegmentJob copyWith({SegmentJobState? state, String? wavPath}) {
     return SegmentJob(
       id: id,
       label: label,
       state: state ?? this.state,
       wavPath: wavPath ?? this.wavPath,
+      subject: subject,
     );
   }
 }

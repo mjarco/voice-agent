@@ -39,6 +39,7 @@ import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
 import '../../../helpers/stub_notifications.dart';
 import '../../../helpers/stub_session_control.dart';
+import '../../../helpers/open_record.dart';
 
 class _StubStorage with TelemetryStorageNoop implements StorageService {
   @override Future<String> getDeviceId() async => 'test';
@@ -126,10 +127,11 @@ void main() {
         child: const App(),
       ),
     );
+    await openRecord(tester);
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.mic), findsWidgets);
-    expect(find.text('Tap to start listening'), findsOneWidget);
+    expect(find.text('Stuknij, by słuchać'), findsOneWidget);
   });
 
   testWidgets('Record screen shows error when API URL not configured',
@@ -149,6 +151,7 @@ void main() {
         }),
       ),
     );
+    await openRecord(tester);
     await tester.pumpAndSettle();
 
     // P037 v2: app opens in Idle. Engage explicitly so the missing-API-URL
@@ -173,6 +176,7 @@ void main() {
         child: const App(),
       ),
     );
+    await openRecord(tester);
     await tester.pumpAndSettle();
 
     expect(
@@ -201,6 +205,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(find.text('Go to Settings'), findsOneWidget);
@@ -230,6 +235,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(find.text('Open Settings'), findsOneWidget);
@@ -256,6 +262,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(find.text('Try Again'), findsOneWidget);
@@ -277,6 +284,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('agent-reply-card')), findsOneWidget);
@@ -294,6 +302,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('agent-reply-card')), findsNothing);
@@ -310,6 +319,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('agent-reply-card')), findsOneWidget);

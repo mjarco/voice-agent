@@ -6,6 +6,7 @@ import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
+import 'package:voice_agent/core/providers/agenda_changes_provider.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_repository.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_state.dart';
@@ -54,6 +55,8 @@ class AgendaNotifier extends StateNotifier<AgendaState> {
   ///   false → true: reconcile-only against current cached response
   ///   (cancels per-occurrence reminders without a network round trip).
   void _setupSessionListener() {
+    // A task swiped on Dziś (V1 of the redesign): read the day again.
+    _ref.listen<int>(agendaChangesProvider, (_, _) => unawaited(refresh()));
     _ref.listen<bool>(sessionActiveProvider, (prev, next) {
       if (prev == null) return;
       if (prev == false && next == true) {

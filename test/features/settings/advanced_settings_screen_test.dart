@@ -287,6 +287,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      // Recording opens from Ustawienia since ADR-ARCH-013.
+      unawaited(GoRouter.of(tester.element(find.byType(NavigationBar)))
+          .push('/record'));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('vad-params-strip')), findsOneWidget);
 
@@ -307,6 +311,10 @@ void main() {
           child: const App(),
         ),
       );
+      await tester.pumpAndSettle();
+      // Recording opens from Ustawienia since ADR-ARCH-013.
+      unawaited(GoRouter.of(tester.element(find.byType(NavigationBar)))
+          .push('/record'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('vad-params-strip')));

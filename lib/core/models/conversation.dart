@@ -28,6 +28,10 @@ class Conversation {
     required this.eventCount,
     this.lastEventAt,
     this.firstMessagePreview,
+    this.subject = 'day',
+    this.matterId,
+    this.matterTitle,
+    this.channel = 'typed',
   });
 
   final String conversationId;
@@ -37,6 +41,20 @@ class Conversation {
   final int eventCount;
   final DateTime? lastEventAt;
   final String? firstMessagePreview;
+
+  /// The subject it was held in, `day`, `matter` or `diet` (personal-agent's
+  /// ADR-API-126); `day` from an older server.
+  final String subject;
+
+  /// The matter it belongs to, by its subject or a link; null with none.
+  final String? matterId;
+  final String? matterTitle;
+
+  /// How it started: `voice` or `typed`.
+  final String channel;
+
+  /// Held on a matter: its turns carry the matter's subject.
+  bool get onMatter => subject == 'matter' && matterId != null;
 
   factory Conversation.fromMap(Map<String, dynamic> map) {
     return Conversation(
@@ -49,6 +67,10 @@ class Conversation {
           ? DateTime.parse(map['last_event_at'] as String)
           : null,
       firstMessagePreview: map['first_message_preview'] as String?,
+      subject: map['subject'] is String ? map['subject'] as String : 'day',
+      matterId: map['matter'] is Map ? (map['matter'] as Map)['id'] as String? : null,
+      matterTitle: map['matter'] is Map ? (map['matter'] as Map)['title'] as String? : null,
+      channel: map['channel'] == 'voice' ? 'voice' : 'typed',
     );
   }
 
@@ -61,6 +83,9 @@ class Conversation {
       'event_count': eventCount,
       'last_event_at': lastEventAt?.toIso8601String(),
       'first_message_preview': firstMessagePreview,
+      'subject': subject,
+      if (matterId != null) 'matter': {'id': matterId, 'title': matterTitle},
+      'channel': channel,
     };
   }
 }

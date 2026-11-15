@@ -13,11 +13,28 @@ import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/core/models/agenda.dart';
+import 'package:voice_agent/core/models/agent_action.dart';
+import 'package:voice_agent/core/providers/agent_reply_provider.dart';
+import 'package:voice_agent/core/models/matter.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
+import 'package:voice_agent/core/network/pin_writer.dart';
+import 'package:voice_agent/features/chat/domain/chat_repository.dart';
+import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
+import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
 import 'package:voice_agent/core/notifications/notification_providers.dart';
+import 'package:voice_agent/core/home_widget/home_widget_provider.dart';
+import 'package:voice_agent/core/home_widget/widget_tap_channel.dart';
+import 'package:voice_agent/core/models/today.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
+import 'package:voice_agent/features/diet/domain/diet_repository.dart';
+import 'package:voice_agent/features/diet/presentation/diet_day_screen.dart';
+import 'package:voice_agent/features/diet/presentation/diet_providers.dart';
+import 'package:voice_agent/features/matters/presentation/matters_providers.dart';
+import 'package:voice_agent/features/today/domain/today_repository.dart';
+import 'package:voice_agent/features/today/presentation/today_providers.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/models/sync_queue_item.dart';
@@ -38,6 +55,7 @@ import 'package:voice_agent/features/recording/domain/hands_free_session_state.d
 import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_providers.dart';
+import '../features/matters/fake_matters_repository.dart';
 
 import '../core/network/fake_shopping_proposals.dart';
 import '../features/shopping/fake_shopping_repository.dart';
@@ -194,19 +212,60 @@ class _TrackingHfController extends HandsFreeController {
   }
 }
 
-/// Variant with a controllable drain delay for race-condition tests.
-class _SlowStopHfController extends _TrackingHfController {
-  _SlowStopHfController(super.ref, this._drainCompleter);
+/// Counts the widget mic's asks for listening.
+class _ListenHfController extends _TrackingHfController {
+  _ListenHfController(super.ref);
 
-  final Completer<void> _drainCompleter;
+  int listenCalls = 0;
 
   @override
-  Future<void> stopSession() async {
-    if (state is HandsFreeIdle) return;
-    stopCalls++;
-    await _drainCompleter.future;
-    state = const HandsFreeIdle();
+  void listen() => listenCalls++;
+}
+
+class _CountingTodayRepo implements TodayRepository {
+  int reads = 0;
+
+  @override
+  Future<TodayView> fetchToday() async {
+    reads++;
+    return TodayView.fromMap({'day': '2026-11-15', 'title': 'Dziś'});
   }
+
+  @override
+  Future<void> run(TodayAction action) async {}
+}
+
+/// The diet's day fails to read: its screen still opens, which is all the
+/// widget's tap needs.
+class _OfflineDiet implements DietRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      Future<Never>.error(Exception('offline'));
+}
+
+/// The diet's day fails to read; a meal removed is recorded.
+class _UndoDiet implements DietRepository {
+  final removed = <String>[];
+  @override
+  Future<void> removeMeal(String id) async => removed.add(id);
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      Future<Never>.error(Exception('offline'));
+}
+
+/// A chat with no models or backends: a new thread opens empty.
+class _EmptyChat implements ChatRepository {
+  @override
+  Future<List<ModelInfo>> getModels({String? backend}) async => const [];
+  @override
+  Future<BackendOptions> getBackends() async => const BackendOptions(backends: []);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _NoPins implements PinWriter {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -215,11 +274,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   tz_data.initializeTimeZones();
 
-  // Finder for the Record icon inside the NavigationBar (avoids ambiguity with
-  // the mic icon on the RecordingScreen itself).
-  final recordNavIcon = find.descendant(
+  // Dziś's icon inside the NavigationBar (ADR-ARCH-013).
+  final todayNavIcon = find.descendant(
     of: find.byType(NavigationBar),
-    matching: find.byIcon(Icons.mic),
+    matching: find.byIcon(Icons.wb_sunny_outlined),
   );
 
   testWidgets('opening the Shopping tab reads the proposals again',
@@ -240,7 +298,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('shopping-proposal-p1')), findsNothing);
 
-    await tester.tap(recordNavIcon);
+    await tester.tap(todayNavIcon);
     await tester.pumpAndSettle();
     proposals.rows = [sampleProposal()];
     await tester.tap(shopping);
@@ -249,7 +307,9 @@ void main() {
     expect(find.byKey(const Key('shopping-proposal-p1')), findsOneWidget);
   });
 
-  testWidgets('switching away from Record tab calls stopSession', (tester) async {
+  testWidgets(
+      'switching tabs never touches the microphone, without the Android '
+      'modes too (ADR-ARCH-013)', (tester) async {
     late _TrackingHfController controller;
 
     await tester.pumpWidget(ProviderScope(
@@ -264,87 +324,37 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // P037 v2: app opens in Idle. Engage explicitly to mirror the
-    // production AirPods short-click entry point so the tab-switch
-    // teardown has something to stop.
     await controller.startSession();
     await tester.pumpAndSettle();
-    expect(controller.startCalls, 1);
 
     await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle();
+    await tester.tap(todayNavIcon);
+    await tester.pumpAndSettle();
 
-    expect(controller.stopCalls, 1);
+    expect(controller.stopCalls, 0);
+    expect(controller.startCalls, 1, reason: 'only the explicit start');
   });
 
-  testWidgets('switching back to Record tab calls startSession', (tester) async {
-    late _TrackingHfController controller;
-
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ..._baseOverrides,
-        handsFreeControllerProvider.overrideWith((ref) {
-          controller = _TrackingHfController(ref);
-          return controller;
-        }),
-      ],
-      child: const App(),
-    ));
+  testWidgets('the app opens on Dziś with five Polish tabs', (tester) async {
+    await tester.pumpWidget(ProviderScope(overrides: _baseOverrides, child: const App()));
     await tester.pumpAndSettle();
-
-    // v2: explicit engage first (replaces auto-start in initState).
-    await controller.startSession();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.calendar_today));
-    await tester.pumpAndSettle(); // stopSession called, state → idle
-
-    await tester.tap(recordNavIcon);
-    await tester.pumpAndSettle();
-
-    expect(controller.startCalls, 2); // 1 manual engage + 1 from tab return
+    for (final label in ['Dziś', 'Agenda', 'Sprawy', 'Zakupy', 'Rozmowy']) {
+      expect(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)), findsOneWidget);
+    }
+    expect(find.byKey(const Key('field-mic')), findsOneWidget, reason: 'the conversation field');
   });
 
-  testWidgets('session recovers when user returns to Record during stopSession drain',
-      (tester) async {
-    final drainCompleter = Completer<void>();
-    late _SlowStopHfController controller;
-
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ..._baseOverrides,
-        handsFreeControllerProvider.overrideWith((ref) {
-          controller = _SlowStopHfController(ref, drainCompleter);
-          return controller;
-        }),
-      ],
-      child: const App(),
-    ));
+  testWidgets('Back on another tab goes to Dziś, not out of the app', (tester) async {
+    await tester.pumpWidget(ProviderScope(overrides: _baseOverrides, child: const App()));
     await tester.pumpAndSettle();
-
-    // v2: explicit engage first (replaces auto-start in initState).
-    await controller.startSession();
-    await tester.pumpAndSettle();
-    expect(controller.startCalls, 1);
-
-    // Navigate away — stopSession starts but won't finish until drainCompleter fires.
     await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle();
-
-    expect(controller.stopCalls, 1);
-    expect(controller.startCalls, 1); // unchanged
-
-    // Navigate back — startSession is called but the guard blocks it (not idle yet).
-    await tester.tap(recordNavIcon);
+    expect(find.byKey(const Key('field-mic')), findsNothing);
+    final popped = await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-
-    expect(controller.startCalls, 1); // still blocked
-
-    // Complete the drain — the .then() callback registers addPostFrameCallback.
-    drainCompleter.complete();
-    await tester.pumpAndSettle(); // frame fires → currentIndex == 2 → startSession
-
-    expect(controller.startCalls, 2); // recovery call
+    expect(popped, isTrue, reason: 'handled inside the app');
+    expect(find.byKey(const Key('field-mic')), findsOneWidget);
   });
 
   testWidgets(
@@ -370,11 +380,237 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle();
-    await tester.tap(recordNavIcon);
+    await tester.tap(todayNavIcon);
     await tester.pumpAndSettle();
 
     expect(controller.stopCalls, 0);
     expect(controller.startCalls, 1, reason: 'only the explicit start');
     expect(controller.state, isA<HandsFreeListening>());
+  });
+
+  group('home-screen widget taps (ADR-PLATFORM-015)', () {
+    late _ListenHfController controller;
+    late _CountingTodayRepo today;
+
+    Future<StreamController<WidgetTap>> pump(
+      WidgetTester tester, {
+      WidgetTap? cold,
+    }) async {
+      final warm = StreamController<WidgetTap>();
+      addTearDown(warm.close);
+      today = _CountingTodayRepo();
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          micModesEnabledProvider.overrideWithValue(true),
+          handsFreeControllerProvider.overrideWith((ref) {
+            controller = _ListenHfController(ref);
+            return controller;
+          }),
+          todayRepositoryProvider.overrideWithValue(today),
+          dietRepositoryProvider.overrideWithValue(_OfflineDiet()),
+          mattersRepositoryProvider.overrideWithValue(FakeMattersRepository()),
+          pendingWidgetTapProvider.overrideWith((ref) => cold),
+          widgetTapStreamProvider.overrideWith((ref) => warm.stream),
+        ],
+        child: const App(),
+      ));
+      await tester.pumpAndSettle();
+      return warm;
+    }
+
+    int tab(WidgetTester tester) =>
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
+
+    testWidgets('the calories open the diet\'s day over Dziś; Back lands '
+        'on Dziś, read again', (tester) async {
+      final warm = await pump(tester);
+      await tester.tap(find.byIcon(Icons.calendar_today));
+      await tester.pumpAndSettle();
+
+      warm.add(WidgetTap.food);
+      await tester.pumpAndSettle();
+      expect(find.byType(DietDayScreen), findsOneWidget);
+
+      final reads = today.reads;
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(DietDayScreen), findsNothing);
+      expect(tab(tester), 0);
+      expect(today.reads, greaterThan(reads));
+    });
+
+    testWidgets('the tasks open Dziś, the matters open Sprawy',
+        (tester) async {
+      final warm = await pump(tester);
+      warm.add(WidgetTap.matters);
+      await tester.pumpAndSettle();
+      expect(tab(tester), 2);
+
+      warm.add(WidgetTap.tasks);
+      await tester.pumpAndSettle();
+      expect(tab(tester), 0);
+    });
+
+    testWidgets('the mic opens Dziś and asks to listen, once per tap',
+        (tester) async {
+      final warm = await pump(tester);
+      await tester.tap(find.byIcon(Icons.calendar_today));
+      await tester.pumpAndSettle();
+
+      // A warm tap comes through onNewIntent, before the activity resumes.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      warm.add(WidgetTap.listen);
+      await tester.pumpAndSettle();
+      expect(tab(tester), 0);
+      expect(controller.listenCalls, 0, reason: 'not before it is in front');
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(controller.listenCalls, 1);
+
+      warm.add(WidgetTap.listen);
+      await tester.pumpAndSettle();
+      expect(controller.listenCalls, 2, reason: 'in front, at once');
+    });
+
+    testWidgets('leaving the app reads the day again, for the widget',
+        (tester) async {
+      await pump(tester);
+      final reads = today.reads;
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pumpAndSettle();
+
+      expect(today.reads, reads + 1);
+    });
+
+    testWidgets('a tap that launched the app is taken once', (tester) async {
+      await pump(tester, cold: WidgetTap.listen);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(tab(tester), 0);
+      expect(controller.listenCalls, 1);
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(App)));
+      expect(container.read(pendingWidgetTapProvider), isNull);
+    });
+  });
+
+  group('the subject of an utterance (ADR-NET-008)', () {
+    Future<ProviderContainer> pump(WidgetTester tester) async {
+      final matters = FakeMattersRepository(details: {
+        'm1': const MatterDetail(matter: MatterSummary(id: 'm1', title: 'Remont łazienki', status: MatterStatus.active)),
+      });
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          todayRepositoryProvider.overrideWithValue(_CountingTodayRepo()),
+          mattersRepositoryProvider.overrideWithValue(matters),
+          chatRepositoryProvider.overrideWithValue(_EmptyChat()),
+          pinWriterProvider.overrideWithValue(_NoPins()),
+          shoppingProposalsPortProvider.overrideWithValue(FakeShoppingProposals()),
+        ],
+        child: const App(),
+      ));
+      await tester.pumpAndSettle();
+      return ProviderScope.containerOf(tester.element(find.byType(App)));
+    }
+
+    UtteranceSubject subjectNow(ProviderContainer c) => c.read(utteranceSubjectReaderProvider)();
+
+    testWidgets('a matter on top is the subject; Dzień elsewhere, and with the app hidden',
+        (tester) async {
+      final c = await pump(tester);
+      final router = GoRouter.of(tester.element(find.byType(NavigationBar)));
+      expect(subjectNow(c), UtteranceSubject.day);
+
+      unawaited(router.push('/matter/m1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Powiedz albo napisz w tej sprawie…'), findsOneWidget);
+      expect(subjectNow(c), const UtteranceSubject.matter('m1'));
+
+      // The phone locked, or the app hidden, while on the matter.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      expect(subjectNow(c), UtteranceSubject.day);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(subjectNow(c), const UtteranceSubject.matter('m1'));
+
+      // Napisz on the matter opens a new thread on it; under it the subject
+      // is Dzień again, as the thread sends its own.
+      await tester.tap(find.byKey(const Key('field-write')));
+      await tester.pumpAndSettle();
+      expect(router.state.uri.toString(), '/conversation/new?matter=m1');
+      expect(subjectNow(c), UtteranceSubject.day);
+
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(subjectNow(c), const UtteranceSubject.matter('m1'));
+    });
+  });
+
+  group('the diet: Jedzenie and the card of a meal (ADR-NET-009)', () {
+    testWidgets('on the diet the subject is Jedzenie; the meal a reply logged '
+        'stands under it, and Cofnij removes it', (tester) async {
+      final diet = _UndoDiet();
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          todayRepositoryProvider.overrideWithValue(_CountingTodayRepo()),
+          mattersRepositoryProvider.overrideWithValue(FakeMattersRepository()),
+          dietRepositoryProvider.overrideWithValue(diet),
+        ],
+        child: const App(),
+      ));
+      await tester.pumpAndSettle();
+      final c = ProviderScope.containerOf(tester.element(find.byType(App)));
+      final router = GoRouter.of(tester.element(find.byType(NavigationBar)));
+
+      unawaited(router.push('/diet'));
+      await tester.pumpAndSettle();
+      expect(c.read(utteranceSubjectReaderProvider)(), UtteranceSubject.diet);
+
+      c.read(latestAgentActionsProvider.notifier).state = const [
+        AgentAction.mealLogged(mealId: 'm-1', name: 'piwo', day: '2026-11-15', time: '22:11',
+            kcal: 270, kcalLow: 250, kcalHigh: 290, leftKcal: 410, warning: 'low'),
+      ];
+      c.read(latestAgentReplyProvider.notifier).state = 'Zapisałem piwo, 270 kcal.';
+      await tester.pumpAndSettle();
+      expect(find.text('✓ piwo · 22:11'), findsOneWidget);
+      expect(find.text('270 (250–290) kcal · zostało 410'), findsOneWidget);
+
+      final changes = c.read(dietChangedProvider);
+      await tester.tap(find.byKey(const Key('meal-action-undo-m-1')));
+      await tester.pumpAndSettle();
+      expect(diet.removed, ['m-1']);
+      expect(find.byKey(const Key('meal-action-m-1')), findsNothing);
+      expect(find.text('Cofnięto: piwo'), findsOneWidget);
+      expect(c.read(dietChangedProvider), changes + 1);
+      expect(c.read(latestAgentActionsProvider), isEmpty);
+    });
+
+    testWidgets('on Dziś the reply stands without a card', (tester) async {
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          todayRepositoryProvider.overrideWithValue(_CountingTodayRepo()),
+          mattersRepositoryProvider.overrideWithValue(FakeMattersRepository()),
+        ],
+        child: const App(),
+      ));
+      await tester.pumpAndSettle();
+      final c = ProviderScope.containerOf(tester.element(find.byType(App)));
+      c.read(latestAgentActionsProvider.notifier).state = const [
+        AgentAction.mealLogged(mealId: 'm-1', name: 'piwo', day: '2026-11-15', time: '22:11',
+            kcal: 270, kcalLow: 250, kcalHigh: 290),
+      ];
+      c.read(latestAgentReplyProvider.notifier).state = 'Zapisałem piwo, 270 kcal.';
+      await tester.pumpAndSettle();
+      expect(find.text('Zapisałem piwo, 270 kcal.'), findsOneWidget);
+      expect(find.byKey(const Key('meal-action-m-1')), findsNothing);
+    });
   });
 }

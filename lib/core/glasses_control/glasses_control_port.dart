@@ -11,6 +11,10 @@ abstract class GlassesControlPort {
 
   /// Tells glass-native the mode (and records it for its status query).
   Future<void> reportMode(MicMode mode);
+
+  /// Hands glass-native a document to show (G4, [GlassesDocs]); without
+  /// glass-native it reaches no one.
+  Future<void> show(Map<String, Object?> doc);
 }
 
 /// Where there is no glass-native (iOS): no commands, nothing reported.
@@ -22,4 +26,7 @@ class NoGlassesControl implements GlassesControlPort {
 
   @override
   Future<void> reportMode(MicMode mode) async {}
+
+  @override
+  Future<void> show(Map<String, Object?> doc) async {}
 }

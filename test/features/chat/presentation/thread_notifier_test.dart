@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_agent/core/models/conversation.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/models/pin.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/network/api_client.dart';
@@ -36,6 +37,9 @@ class _StubRepository implements ChatRepository {
   @override
   Future<List<Conversation>> listConversations() async => [];
 
+  /// The subject the last streamChat carried (ADR-NET-008).
+  Map<String, dynamic>? lastSubject;
+
   @override
   Future<Conversation?> getConversation(String conversationId) async {
     getConversationCallCount++;
@@ -62,7 +66,9 @@ class _StubRepository implements ChatRepository {
     required String idempotencyKey,
     String? model,
     String? backend,
+    Map<String, dynamic>? subject,
   }) {
+    lastSubject = subject;
     streamController = StreamController<SseEvent>();
     return streamController!.stream;
   }
@@ -272,6 +278,56 @@ void main() {
   });
 
   group('ThreadNotifier — send', () {
+    group('the subject of a thread (ADR-NET-008)', () {
+      Future<_StubRepository> sendOn(String id,
+          {Conversation? conv, UtteranceSubject subject = UtteranceSubject.day}) async {
+        final repo = _StubRepository()..conversationResult = conv;
+        final notifier = ThreadNotifier(conversationId: id, repository: repo, pinWriter: _pinWriter,
+            proposals: _proposals, subject: subject);
+        await Future.microtask(() {});
+        await Future.microtask(() {});
+        await notifier.send('Kasia przysłała wycenę');
+        return repo;
+      }
+
+      test('a new thread opened on a matter carries it', () async {
+        final repo = await sendOn('new', subject: const UtteranceSubject.matter('m-1'));
+        expect(repo.lastSubject, {'kind': 'matter', 'matter_id': 'm-1'});
+      });
+
+      test('a new thread opened on the diet carries Jedzenie (ADR-NET-009)', () async {
+        final repo = await sendOn('new', subject: UtteranceSubject.diet);
+        expect(repo.lastSubject, {'kind': 'diet'});
+      });
+
+      test('a conversation held in Jedzenie carries it', () async {
+        final inDiet = Conversation(
+          conversationId: 'conv-1', sessionId: 'sess-1', status: ConversationStatus.open,
+          createdAt: DateTime(2026), eventCount: 2, subject: 'diet',
+        );
+        final repo = await sendOn('conv-1', conv: inDiet);
+        expect(repo.lastSubject, {'kind': 'diet'});
+      });
+
+      test('a conversation held on a matter carries it', () async {
+        final onMatter = Conversation(
+          conversationId: 'conv-1', sessionId: 'sess-1', status: ConversationStatus.open,
+          createdAt: DateTime(2026), eventCount: 2, subject: 'matter', matterId: 'm-1', matterTitle: 'Remont',
+        );
+        final repo = await sendOn('conv-1', conv: onMatter);
+        expect(repo.lastSubject, {'kind': 'matter', 'matter_id': 'm-1'});
+      });
+
+      test('a conversation of Dzień carries none, even when linked to a matter', () async {
+        final linked = Conversation(
+          conversationId: 'conv-1', sessionId: 'sess-1', status: ConversationStatus.open,
+          createdAt: DateTime(2026), eventCount: 2, matterId: 'm-1', matterTitle: 'Remont',
+        );
+        final repo = await sendOn('conv-1', conv: linked);
+        expect(repo.lastSubject, isNull);
+      });
+    });
+
     test('is no-op when state is streaming', () async {
       final repo = _StubRepository()..conversationResult = _conv();
       final notifier =
@@ -363,6 +419,34 @@ void main() {
       expect(notifier.state, isA<ThreadLoaded>());
       final loaded = notifier.state as ThreadLoaded;
       expect(loaded.events, hasLength(2));
+    });
+
+    test('a reply that logged a meal keeps its card under the reply (ADR-NET-009)', () async {
+      final repo = _StubRepository()
+        ..conversationResult = _conv()
+        ..eventsResult = [_event(), _event(id: 'ae-1')];
+      final notifier =
+          ThreadNotifier(conversationId: 'conv-1', repository: repo, pinWriter: _pinWriter, proposals: _proposals);
+      await Future.microtask(() {});
+      await Future.microtask(() {});
+
+      await notifier.send('zjadłem banana');
+      repo.streamController!.add(const SseEvent(
+        event: 'result',
+        data: '{"conversation_id":"conv-1","user_event_id":"ue-1","agent_event_id":"ae-1","reply":"Zapisałem banana.",'
+            '"actions":[{"kind":"meal_logged","meal":{"id":"m-1","name":"Banan","day":"2026-11-15","time":"16:40",'
+            '"kcal":105,"kcal_low":90,"kcal_high":125},"day":{"left_kcal":290,"warning":"low"}},{"kind":"unknown"}]}',
+      ));
+      await repo.streamController!.close();
+      await Future.microtask(() {});
+      await Future.microtask(() {});
+      await Future.microtask(() {});
+
+      final cards = notifier.actionsOf('ae-1');
+      expect(cards, hasLength(1));
+      expect(cards.single.name, 'Banan');
+      expect(cards.single.leftKcal, 290);
+      expect(notifier.actionsOf('ue-1'), isEmpty);
     });
 
     test('SSE error event emits error with preSendState', () async {
@@ -725,6 +809,7 @@ void main() {
     late _StubRepository repo;
     late FakeShoppingProposals proposals;
     late int changes;
+    late int answered;
 
     ThreadNotifier create({String id = 'conv-1'}) => ThreadNotifier(
           conversationId: id,
@@ -732,6 +817,7 @@ void main() {
           pinWriter: _pinWriter,
           proposals: proposals,
           onShoppingChanged: () => changes++,
+          onAnswered: () => answered++,
         );
 
     List<ShoppingProposalRow> rows(ThreadNotifier notifier) =>
@@ -743,6 +829,21 @@ void main() {
         ..eventsResult = [_event(id: 'ue-1')];
       proposals = FakeShoppingProposals()..rows = [sampleProposal()];
       changes = 0;
+      answered = 0;
+    });
+
+    // agentTurnsProvider (F1 of V3's device check): a typed turn tells the
+    // screens that stay alive under the thread.
+    test('an answered turn is told', () async {
+      final notifier = create();
+      await pumpEventQueue();
+      notifier.send('co zostało?');
+      expect(answered, 0);
+
+      repo.streamController!.add(_resultEvent());
+      await pumpEventQueue();
+
+      expect(answered, 1);
     });
 
     test('a thread reads its proposals by conversation', () async {

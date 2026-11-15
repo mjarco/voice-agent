@@ -46,6 +46,7 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
 import '../../../helpers/stub_notifications.dart';
+import '../../../helpers/open_record.dart';
 
 // ── Stubs ────────────────────────────────────────────────────────────────────
 
@@ -294,6 +295,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(
@@ -311,6 +313,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       final iconButton = tester.widget<IconButton>(
@@ -328,6 +331,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       engine.emit(const EngineListening());
@@ -352,6 +356,7 @@ void main() {
           }),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       // P037 v2: app opens in Idle. Engage so the controller subscribes
@@ -383,6 +388,7 @@ void main() {
           }),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       await container
@@ -415,6 +421,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('new-conversation-button')));
@@ -447,6 +454,7 @@ void main() {
           }),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       await container
@@ -474,6 +482,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(
@@ -495,6 +504,7 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('app-pins')));
@@ -517,10 +527,14 @@ void main() {
           child: const App(),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('record-matters-button')), findsNothing);
 
+      // Recording sits over the shell since ADR-ARCH-013; Back shows the bar.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(NavigationDestination, 'Sprawy'));
       await tester.pumpAndSettle();
 

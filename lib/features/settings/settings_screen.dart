@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/home_widget/home_widget_provider.dart';
 import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_version_provider.dart';
@@ -277,6 +278,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/advanced'),
           ),
+          // Record's screen since V1 of the redesign: the voice session's
+          // segments and the phone's own transcript queue and history.
+          ListTile(
+            key: const Key('record-diagnostics-tile'),
+            title: const Text('Nagrywanie i historia'),
+            subtitle: const Text('Segmenty sesji, wysłane i nieudane transkrypcje'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/record'),
+          ),
+          if (Platform.isAndroid)
+            // The home-screen widget (ADR-PLATFORM-015): Android's own dialog
+            // places it, without a drag on the launcher.
+            ListTile(
+              key: const Key('home-widget-tile'),
+              title: const Text('Dodaj widżet Dziś'),
+              subtitle: const Text('Kalorie, zadania i sprawy na ekranie głównym'),
+              trailing: const Icon(Icons.add_to_home_screen),
+              onTap: () async {
+                final asked = await ref.read(homeWidgetProvider).requestPlace();
+                if (!asked && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Ten ekran główny nie dodaje widżetów z aplikacji'),
+                  ));
+                }
+              },
+            ),
           if (Platform.isAndroid) ...[
             _buildSectionHeader('Location'),
             ListTile(

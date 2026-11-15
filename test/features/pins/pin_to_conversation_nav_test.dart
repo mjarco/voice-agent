@@ -77,6 +77,7 @@ class _StubChatRepository implements ChatRepository {
     required String idempotencyKey,
     String? model,
     String? backend,
+    Map<String, dynamic>? subject,
   }) =>
       const Stream.empty();
 

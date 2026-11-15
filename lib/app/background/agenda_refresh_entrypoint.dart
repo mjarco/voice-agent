@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:voice_agent/app/background/widget_refresh.dart';
 import 'package:voice_agent/app/background/wire_agenda_for_background.dart';
 import 'package:voice_agent/core/background/workmanager_core_boot.dart';
 import 'package:workmanager/workmanager.dart';
@@ -20,7 +21,9 @@ const Duration _bgSkipIfRecentThan = Duration(minutes: 50);
 @pragma('vm:entry-point')
 void agendaRefreshDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    if (task != agendaRefreshTaskName) {
+    // One dispatcher for every task (workmanager takes one), one core boot
+    // for each (ADR-PLATFORM-007); the widget's read is ADR-PLATFORM-015's.
+    if (task != agendaRefreshTaskName && task != widgetRefreshTaskName) {
       return Future.value(true);
     }
 
@@ -28,6 +31,10 @@ void agendaRefreshDispatcher() {
       WidgetsFlutterBinding.ensureInitialized();
 
       final core = await coreBoot();
+      if (task == widgetRefreshTaskName) {
+        await refreshWidgetInBackground(core);
+        return true;
+      }
       final agenda = wireAgendaForBackground(core);
 
       // Skip if foreground recently refreshed — saves a network round trip
@@ -45,7 +52,7 @@ void agendaRefreshDispatcher() {
       return true;
     } catch (e, st) {
       if (kDebugMode) {
-        debugPrint('[agendaRefreshDispatcher] failed: $e\n$st');
+        debugPrint('[agendaRefreshDispatcher] $task failed: $e\n$st');
       }
       // Returning false signals workmanager to retry with backoff.
       return false;

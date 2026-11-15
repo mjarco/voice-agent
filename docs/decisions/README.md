@@ -42,14 +42,15 @@ and focused on a single decision. See any existing ADR for reference.
 | ADR | Title | Status |
 | --- | ----- | ------ |
 | [ADR-ARCH-001](ADR-ARCH-001-riverpod-manual-providers.md) | Riverpod with manual providers, no codegen | Accepted |
-| [ADR-ARCH-002](ADR-ARCH-002-gorouter-stateful-shell-route.md) | GoRouter with StatefulShellRoute navigation | Accepted (amended by ADR-ARCH-012) |
+| [ADR-ARCH-002](ADR-ARCH-002-gorouter-stateful-shell-route.md) | GoRouter with StatefulShellRoute navigation | Accepted (amended by ADR-ARCH-012, ADR-ARCH-013) |
 | [ADR-ARCH-003](ADR-ARCH-003-layered-feature-isolation.md) | Layered architecture with strict feature isolation | Accepted |
 | [ADR-ARCH-004](ADR-ARCH-004-stub-provider-pattern.md) | Stub provider pattern for incremental delivery | Accepted |
 | [ADR-ARCH-005](ADR-ARCH-005-app-config-in-core.md) | App configuration ownership in core layer | Accepted |
 | [ADR-ARCH-006](ADR-ARCH-006-domain-port-pattern.md) | Domain port pattern for platform services | Accepted |
 | [ADR-ARCH-007](ADR-ARCH-007-async-db-init-before-runapp.md) | Async DB init before runApp | Accepted |
 | [ADR-ARCH-008](ADR-ARCH-008-ephemeral-cross-feature-state.md) | Ephemeral cross-feature state via core StateProvider | Accepted |
-| [ADR-ARCH-012](ADR-ARCH-012-matters-tab-routines-in-agenda.md) | Sprawy take the Routines tab; routines are managed inside the Agenda | Accepted |
+| [ADR-ARCH-012](ADR-ARCH-012-matters-tab-routines-in-agenda.md) | Sprawy take the Routines tab; routines are managed inside the Agenda | Accepted (amended by ADR-ARCH-013) |
+| [ADR-ARCH-013](ADR-ARCH-013-today-tab-record-off-the-shell.md) | The app opens on Dziś; Record leaves the shell and the mic lives in a field | Accepted |
 
 ### AUDIO — Audio, STT & Recording
 
@@ -87,6 +88,10 @@ and focused on a single decision. See any existing ADR for reference.
 | [ADR-NET-005](ADR-NET-005-location-log-background-upload.md) | The location log uploads in the background | Accepted |
 | [ADR-NET-006](ADR-NET-006-places-local-copy-and-queue.md) | Places are written on the phone first and sent while the app is in use | Accepted |
 | [ADR-NET-007](ADR-NET-007-armed-triggers-pulled-in-background.md) | Armed triggers are pulled in the background, and geofences come from them | Accepted; item 6 superseded by NOTIF-003 |
+| [ADR-NET-008](ADR-NET-008-utterance-subject.md) | An utterance carries the subject of the screen it was said on, read when it ends and kept with the transcript | Accepted |
+| [ADR-NET-009](ADR-NET-009-diet-subject-and-meal-card.md) | The diet's screens are Jedzenie; a meal a reply logged stands as a card with Popraw and Cofnij | Accepted |
+| [ADR-NET-010](ADR-NET-010-day-story-and-evening-queue.md) | The day's story and the evening queue | Accepted |
+| [ADR-NET-011](ADR-NET-011-glasses-documents.md) | voice-agent writes documents for the glasses: a shop's arrival, a meal with its Cofnij, an utterance queued | Accepted |
 
 ### NOTIF — Local Notifications
 

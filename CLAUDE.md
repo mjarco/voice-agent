@@ -433,15 +433,15 @@ final recordingControllerProvider =
 All navigation uses GoRouter:
 
 - Routes are defined in `lib/app/router.dart`.
-- The shell uses `StatefulShellRoute.indexedStack` with 5 tabs (Agenda, Shopping, Record, Sprawy, Chat); routines are managed in a folded section of the Agenda (ADR-ARCH-012).
-- Child routes (e.g., `/record/history`) stay within their branch.
+- The shell uses `StatefulShellRoute.indexedStack` with 5 tabs (Dziś, Agenda, Sprawy, Zakupy, Rozmowy; ADR-ARCH-013); the app opens on Dziś and Back on a tab goes there. Record is outside the shell, reached from Settings; the mic lives in the conversation field. Routines are managed in a folded section of the Agenda (ADR-ARCH-012).
+- Child routes (e.g., `/agenda/routines/:id`) stay within their branch.
 - Navigation arguments pass via GoRouter `extra` parameter.
 - P020 established the 5-branch route structure. Feature work (P021–P024)
   **replaced placeholder screens** in existing routes — new features do not
   add new top-level routes.
 - The top bar of a tab: its title, the tab's own actions, then `AppBarActions`
   (`core/widgets/`), the same icons on every tab: Miejsca, Pins, Settings
-  (Settings at the right edge); no overflow menu.
+  (Settings at the right edge); no overflow menu. Since ADR-ARCH-013: Jedzenie, Pinezki, Miejsca, Ustawienia.
 - Infrequently accessed screens (e.g., Settings) are top-level GoRoutes outside
   the shell. Navigate to them with `context.push()` (not `context.go()`) to
   preserve shell state.
@@ -598,9 +598,10 @@ screens within this structure — it does not add routes.
 
 | Route | Owner | Content owner |
 |-------|-------|---------------|
-| `/agenda` | 020 (shell branch 0) | 021 (AgendaScreen), with RoutinesSection at its end (ADR-ARCH-012) |
-| `/shopping` | 020 (shell branch 1) | voice-agent#371 (replaced Plan) |
-| `/record` | 020 (shell branch 2) | 001 (RecordingScreen) |
+| `/today` | ADR-ARCH-013 (shell branch 0) | TodayScreen (Dziś), with the ConversationField |
+| `/agenda` | 020 (shell branch 1) | 021 (AgendaScreen), with RoutinesSection at its end (ADR-ARCH-012) |
+| `/shopping` | 020 (shell branch 3) | voice-agent#371 (replaced Plan) |
+| `/record` | ADR-ARCH-013 (outside shell, from Settings) | 001 (RecordingScreen), diagnostics |
 | `/record/history` | 020 (child of /record) | 007 (HistoryScreen) |
 | `/record/history/:id` | 020 (child of /record/history) | 007 (TranscriptDetailScreen) |
 | `/agenda/routines/new` | ADR-ARCH-012 (child of /agenda) | RoutineFormScreen |
@@ -608,9 +609,11 @@ screens within this structure — it does not add routes.
 | `/routines`, `/routines/:id` | ADR-ARCH-012 (outside shell) | redirects to `/agenda` and `/agenda/routines/:id` |
 | `/chat` | 020 (shell branch 4) | 024 (ChatPlaceholderScreen → real screen) |
 | `/places` | outside shell | places (PlacesScreen) — an icon in the bar of every tab (`AppBarActions`) |
-| `/matters` | ADR-ARCH-012 (shell branch 3, was Routines) | MattersScreen, the "Sprawy" tab |
+| `/matters` | ADR-ARCH-012 (shell branch 2 since ADR-ARCH-013) | MattersScreen, the "Sprawy" tab |
 | `/matters/new` | R3 matters (child of /matters) | MatterFormScreen — pops with the saved MatterDetail |
 | `/matters/:id` | R3 matters (child of /matters) | MatterDetailScreen |
+| `/routine/:id`, `/matter/:id` | ADR-ARCH-013 (outside shell) | RoutineDetailScreen, MatterDetailScreen, opened over Dziś |
+| `/diet`, `/diet/menu`, `/diet/own-meals`, `/diet/target` | ADR-ARCH-013 (outside shell) | the diet's screens (DietDayScreen with the field, MenuScreen, OwnMealsScreen, TargetScreen) |
 | `/pins` | 045 (outside shell) | 045 (PinsScreen) — an icon in the bar of every tab (`AppBarActions`) |
 | `/pins/new` | voice-agent#386 (child of /pins) | voice-agent#386 (PinFormScreen) — `extra`: starting text |
 | `/pins/:id` | 045 (child of /pins) | 045 (PinDetailScreen) |

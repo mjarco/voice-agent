@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 
 void main() {
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {VoidCallback? onReturn}) async {
     final router = GoRouter(
       initialLocation: '/tab',
       routes: [
@@ -13,7 +13,7 @@ void main() {
           builder: (_, _) => Scaffold(
             appBar: AppBar(
               title: const Text('Tab'),
-              actions: const [AppBarActions()],
+              actions: [AppBarActions(onReturn: onReturn)],
             ),
           ),
         ),
@@ -27,12 +27,12 @@ void main() {
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
   }
 
-  testWidgets('Miejsca, Pins, Settings are icons; Settings at the right edge',
+  testWidgets('Jedzenie, Miejsca, Pinezki, Ustawienia are icons; Ustawienia at the right edge',
       (tester) async {
     await pump(tester);
 
     final xs = [
-      for (final key in ['app-places', 'app-pins', 'app-settings'])
+      for (final key in ['app-diet', 'app-places', 'app-pins', 'app-settings'])
         tester.getTopLeft(find.byKey(Key(key))).dx,
     ];
     expect(xs, orderedEquals([...xs]..sort()));
@@ -60,4 +60,17 @@ void main() {
       expect(find.text('Tab'), findsOneWidget);
     });
   }
+
+  testWidgets('closing the opened screen calls onReturn, once', (tester) async {
+    var returned = 0;
+    await pump(tester, onReturn: () => returned++);
+
+    await tester.tap(find.byKey(const Key('app-diet')));
+    await tester.pumpAndSettle();
+    expect(returned, 0);
+
+    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.pumpAndSettle();
+    expect(returned, 1);
+  });
 }

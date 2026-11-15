@@ -1,4 +1,5 @@
 import 'package:voice_agent/core/models/matter.dart';
+import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/features/matters/domain/matters_repository.dart';
 
 /// An in-memory [MattersRepository] for the matters tests: it records each
@@ -161,4 +162,41 @@ class FakeMattersRepository implements MattersRepository {
       links: old.links.where((l) => l.id != linkId).toList(),
     );
   }
+
+  /// The agenda per matter id; a task's tick or archive moves it out.
+  Map<String, List<Routine>> tasks = {};
+  Object? tasksError;
+  int taskFetches = 0;
+
+  @override
+  Future<List<Routine>> fetchTasks(String matterId) async {
+    taskFetches++;
+    if (tasksError != null) throw tasksError!;
+    return tasks[matterId] ?? const [];
+  }
+
+  @override
+  Future<Routine> addTask(String matterId, String name, {String? dueOn}) async {
+    _check('add-task $matterId $name ${dueOn ?? 'someday'}');
+    final r = Routine(
+      id: 'r-new', name: name,
+      kind: dueOn == null ? RoutineKind.someday : RoutineKind.oneOff,
+      dueOn: dueOn, nextDue: dueOn, status: RoutineStatus.active,
+      createdAt: DateTime(2026), updatedAt: DateTime(2026),
+    );
+    tasks[matterId] = [...?tasks[matterId], r];
+    return r;
+  }
+
+  @override
+  Future<void> resolveTask(String routineId, {String? scheduledFor}) async =>
+      _check('resolve $routineId ${scheduledFor ?? '-'}');
+
+  @override
+  Future<void> unresolveTask(String routineId, {String? scheduledFor}) async =>
+      _check('unresolve $routineId ${scheduledFor ?? '-'}');
+
+  @override
+  Future<void> archiveTask(String routineId) async => _check('archive $routineId');
+
 }

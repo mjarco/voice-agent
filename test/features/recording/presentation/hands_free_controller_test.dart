@@ -15,6 +15,7 @@ import 'package:voice_agent/core/models/transcript_result.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
 import 'package:voice_agent/core/providers/session_active_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/storage/storage_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_engine.dart';
@@ -890,6 +891,33 @@ void main() {
       expect(storage.savedTranscripts.first.deviceId, 'test-device-123');
       expect(storage.enqueuedIds, hasLength(1));
       expect(storage.enqueuedIds.first, storage.savedTranscripts.first.id);
+    });
+
+    test('the subject is the screen\'s when the segment ends, not when it is '
+        'transcribed (ADR-NET-008)', () async {
+      final sttDone = Completer<TranscriptResult>();
+      final storage = FakeStorageService();
+      final engine = FakeHandsFreeEngine();
+      final c = makeContainer(
+          engine: engine, sttService: _ControllableSttService(sttDone), storageService: storage);
+      var subject = const UtteranceSubject.matter('m-1');
+      c.read(utteranceSubjectReaderProvider.notifier).state = () => subject;
+      await ctrl(c).startSession();
+
+      engine.emit(const EngineSegmentReady('/tmp/seg1.wav'));
+      await Future.delayed(Duration.zero);
+      // The owner leaves the matter (or locks the phone) while it is transcribed.
+      subject = UtteranceSubject.day;
+      sttDone.complete(const TranscriptResult(
+          text: 'Kasia przysłała wycenę', segments: [], detectedLanguage: 'pl', audioDurationMs: 900));
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(storage.savedTranscripts.single.subject, 'matter:m-1');
+
+      // A segment ending on Dzień carries none.
+      engine.emit(const EngineSegmentReady('/tmp/seg2.wav'));
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(storage.savedTranscripts.last.subject, isNull);
     });
 
     test('STT failure → JobFailed; no transcript saved', () async {
