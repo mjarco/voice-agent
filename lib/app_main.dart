@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/app/background/register_agenda_refresh.dart';
+import 'package:voice_agent/app/background/widget_refresh.dart';
 import 'package:voice_agent/app/background/wire_agenda_for_background.dart';
 import 'package:voice_agent/core/background/flutter_foreground_task_service.dart';
 import 'package:voice_agent/core/background/workmanager_core_boot.dart';
@@ -102,6 +103,10 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
   // must not depend on it.
   try {
     await registerAgendaRefresh();
+    // The home-screen widget's read (ADR-PLATFORM-015), on the same dispatcher.
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await registerWidgetRefresh();
+    }
   } catch (e, st) {
     if (kDebugMode) {
       debugPrint('registerAgendaRefresh failed (continuing): $e\n$st');

@@ -87,6 +87,12 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
         unawaited(ref.read(todayNotifierProvider.notifier).refresh());
       }
     }
+    // Leaving the app is when the owner next sees the home-screen widget: what
+    // was done in the app (a meal logged on the diet's day) reaches it now,
+    // not at the next background read (ADR-PLATFORM-015).
+    if (state == AppLifecycleState.paused && ref.exists(todayNotifierProvider)) {
+      unawaited(ref.read(todayNotifierProvider.notifier).refresh());
+    }
   }
 
   Future<void> _kickRefreshIfStale() async {

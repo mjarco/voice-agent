@@ -441,6 +441,19 @@ void main() {
       expect(controller.listenCalls, 2, reason: 'in front, at once');
     });
 
+    testWidgets('leaving the app reads the day again, for the widget',
+        (tester) async {
+      await pump(tester);
+      final reads = today.reads;
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pumpAndSettle();
+
+      expect(today.reads, reads + 1);
+    });
+
     testWidgets('a tap that launched the app is taken once', (tester) async {
       await pump(tester, cold: WidgetTap.listen);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
