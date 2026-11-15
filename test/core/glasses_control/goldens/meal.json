@@ -1,0 +1,50 @@
+{
+ "version": 2,
+ "card": {
+  "id": "va:meal:01a1-meal",
+  "title": "Zjedzone: Kawa z mlekiem ${x} 'o'",
+  "body": "50 kcal · 16:28 · zostało 320 kcal"
+ },
+ "open": "va/meal/01a1-meal",
+ "screens": {
+  "va/meal/01a1-meal": {
+   "version": 2,
+   "path": "va/meal/01a1-meal",
+   "use": "rows",
+   "title": "Zjedzone",
+   "state": {
+    "undone": false,
+    "meal": "Kawa z mlekiem ${x} 'o' · 16:28",
+    "kcal": "50 kcal (20–100)",
+    "left": "Zostało 320 kcal"
+   },
+   "rows": [
+    {
+     "label": "${meal}"
+    },
+    {
+     "label": "${kcal}"
+    },
+    {
+     "label": "${left}"
+    },
+    {
+     "label": "${if(undone, 'Cofnięto', 'Cofnij: przytrzymaj')}",
+     "on_hold": [
+      {
+       "call": {
+        "method": "DELETE",
+        "path": "/api/v1/diet/meals/01a1-meal"
+       },
+       "when": "not(undone)"
+      },
+      {
+       "set": "undone",
+       "to": "true"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

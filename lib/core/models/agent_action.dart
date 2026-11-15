@@ -1,6 +1,11 @@
+/// What a turn did: a meal logged (ADR-API-127), or the owner's words put
+/// aside for the evening (ADR-API-131).
+enum AgentActionKind { mealLogged, utteranceQueued }
+
 /// One thing a turn did, carried by personal-agent's reply for the card
-/// under it (personal-agent ADR-API-127, C10; ADR-NET-009). Only the kinds the
-/// app knows are read; any other is skipped.
+/// under it (personal-agent ADR-API-127, C10; ADR-NET-009) and the glasses'
+/// confirmation (G4). Only the kinds the app knows are read; any other is
+/// skipped.
 class AgentAction {
   const AgentAction.mealLogged({
     required this.mealId,
@@ -13,7 +18,29 @@ class AgentAction {
     this.proteinG,
     this.leftKcal,
     this.warning = '',
-  });
+  })  : kind = AgentActionKind.mealLogged,
+        queuedId = '',
+        said = '';
+
+  /// The owner's words put aside for the evening (ADR-API-131).
+  const AgentAction.utteranceQueued({required this.queuedId, required this.said})
+      : kind = AgentActionKind.utteranceQueued,
+        mealId = '',
+        name = '',
+        day = '',
+        time = '',
+        kcal = 0,
+        kcalLow = 0,
+        kcalHigh = 0,
+        proteinG = null,
+        leftKcal = null,
+        warning = '';
+
+  final AgentActionKind kind;
+
+  /// The queued utterance's id and its words as said, for [AgentActionKind.utteranceQueued].
+  final String queuedId;
+  final String said;
 
   final String mealId;
   final String name;
@@ -37,6 +64,13 @@ class AgentAction {
     if (json is! List) return const [];
     final out = <AgentAction>[];
     for (final a in json) {
+      if (a is Map && a['kind'] == 'utterance_queued') {
+        final q = a['queued'];
+        if (q is Map && q['id'] is String && q['said'] is String) {
+          out.add(AgentAction.utteranceQueued(queuedId: q['id'] as String, said: q['said'] as String));
+        }
+        continue;
+      }
       if (a is! Map || a['kind'] != 'meal_logged') continue;
       final meal = a['meal'];
       if (meal is! Map || meal['id'] is! String) continue;
