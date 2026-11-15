@@ -10,8 +10,8 @@ import 'package:voice_agent/core/theme/app_colors.dart';
 /// A surface either blurs what is behind it ([blur], a `BackdropFilter`) or
 /// lays a translucent fill over it. Cards sit on the soft sky, where a blur
 /// changes almost nothing, so they do not blur; the floating input and the
-/// tab bar have the list scrolling under them, so they do (D2 of S2, from
-/// the spike's frame times).
+/// tab bar have the list scrolling under them, so they do (D11 of S2: Dziś
+/// scrolled on the Pixel at 120 Hz with under 1% of frames late).
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     super.key,
