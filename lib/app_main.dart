@@ -23,6 +23,8 @@ import 'package:voice_agent/app/background/wire_agenda_for_background.dart';
 import 'package:voice_agent/core/background/flutter_foreground_task_service.dart';
 import 'package:voice_agent/core/background/workmanager_core_boot.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
+import 'package:voice_agent/core/home_widget/home_widget_provider.dart';
+import 'package:voice_agent/core/home_widget/widget_tap_channel.dart';
 import 'package:voice_agent/core/notifications/arrival_tap_channel.dart';
 import 'package:voice_agent/core/notifications/data/local_notification_service.dart';
 import 'package:voice_agent/core/notifications/notification_providers.dart';
@@ -61,6 +63,11 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
   // over its own channel; its route joins the same two channels.
   final arrivalTaps = ArrivalTapChannel();
   final coldArrival = await arrivalTaps.takeInitialRoute();
+
+  // A tap on the home-screen widget comes over its own channel
+  // (ADR-PLATFORM-015), in the same two-channel pattern.
+  final widgetTaps = WidgetTapChannel();
+  final coldWidgetTap = await widgetTaps.takeInitialTap();
 
   final sharedTexts = SharedTextChannel();
   final coldSharedText = await sharedTexts.takeInitialText();
@@ -144,6 +151,8 @@ Future<void> appMain({AfterStorageInit? afterStorageInit}) async {
         // Deep-link channels (ADR-PLATFORM-008).
         pendingDeepLinkProvider.overrideWith((ref) => cold ?? coldArrival),
         notificationTapStreamProvider.overrideWith((ref) => taps.stream),
+        pendingWidgetTapProvider.overrideWith((ref) => coldWidgetTap),
+        widgetTapStreamProvider.overrideWith((ref) => widgetTaps.taps),
         pendingSharedTextProvider.overrideWith((ref) => coldSharedText),
         sharedTextStreamProvider.overrideWith((ref) => sharedTexts.texts),
 

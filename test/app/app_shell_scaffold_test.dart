@@ -17,7 +17,16 @@ import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
 import 'package:voice_agent/core/notifications/domain/notification_service.dart';
 import 'package:voice_agent/core/notifications/notification_providers.dart';
+import 'package:voice_agent/core/home_widget/home_widget_provider.dart';
+import 'package:voice_agent/core/home_widget/widget_tap_channel.dart';
+import 'package:voice_agent/core/models/today.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
+import 'package:voice_agent/features/diet/domain/diet_repository.dart';
+import 'package:voice_agent/features/diet/presentation/diet_day_screen.dart';
+import 'package:voice_agent/features/diet/presentation/diet_providers.dart';
+import 'package:voice_agent/features/matters/presentation/matters_providers.dart';
+import 'package:voice_agent/features/today/domain/today_repository.dart';
+import 'package:voice_agent/features/today/presentation/today_providers.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:voice_agent/core/models/sync_queue_item.dart';
@@ -38,6 +47,7 @@ import 'package:voice_agent/features/recording/domain/hands_free_session_state.d
 import 'package:voice_agent/features/recording/presentation/hands_free_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/features/shopping/presentation/shopping_providers.dart';
+import '../features/matters/fake_matters_repository.dart';
 
 import '../core/network/fake_shopping_proposals.dart';
 import '../features/shopping/fake_shopping_repository.dart';
@@ -194,6 +204,37 @@ class _TrackingHfController extends HandsFreeController {
   }
 }
 
+/// Counts the widget mic's asks for listening.
+class _ListenHfController extends _TrackingHfController {
+  _ListenHfController(super.ref);
+
+  int listenCalls = 0;
+
+  @override
+  void listen() => listenCalls++;
+}
+
+class _CountingTodayRepo implements TodayRepository {
+  int reads = 0;
+
+  @override
+  Future<TodayView> fetchToday() async {
+    reads++;
+    return TodayView.fromMap({'day': '2026-11-15', 'title': 'Dziś'});
+  }
+
+  @override
+  Future<void> run(TodayAction action) async {}
+}
+
+/// The diet's day fails to read: its screen still opens, which is all the
+/// widget's tap needs.
+class _OfflineDiet implements DietRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      Future<Never>.error(Exception('offline'));
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
@@ -312,5 +353,104 @@ void main() {
     expect(controller.stopCalls, 0);
     expect(controller.startCalls, 1, reason: 'only the explicit start');
     expect(controller.state, isA<HandsFreeListening>());
+  });
+
+  group('home-screen widget taps (ADR-PLATFORM-015)', () {
+    late _ListenHfController controller;
+    late _CountingTodayRepo today;
+
+    Future<StreamController<WidgetTap>> pump(
+      WidgetTester tester, {
+      WidgetTap? cold,
+    }) async {
+      final warm = StreamController<WidgetTap>();
+      addTearDown(warm.close);
+      today = _CountingTodayRepo();
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          ..._baseOverrides,
+          micModesEnabledProvider.overrideWithValue(true),
+          handsFreeControllerProvider.overrideWith((ref) {
+            controller = _ListenHfController(ref);
+            return controller;
+          }),
+          todayRepositoryProvider.overrideWithValue(today),
+          dietRepositoryProvider.overrideWithValue(_OfflineDiet()),
+          mattersRepositoryProvider.overrideWithValue(FakeMattersRepository()),
+          pendingWidgetTapProvider.overrideWith((ref) => cold),
+          widgetTapStreamProvider.overrideWith((ref) => warm.stream),
+        ],
+        child: const App(),
+      ));
+      await tester.pumpAndSettle();
+      return warm;
+    }
+
+    int tab(WidgetTester tester) =>
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
+
+    testWidgets('the calories open the diet\'s day over Dziś; Back lands '
+        'on Dziś, read again', (tester) async {
+      final warm = await pump(tester);
+      await tester.tap(find.byIcon(Icons.calendar_today));
+      await tester.pumpAndSettle();
+
+      warm.add(WidgetTap.food);
+      await tester.pumpAndSettle();
+      expect(find.byType(DietDayScreen), findsOneWidget);
+
+      final reads = today.reads;
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(DietDayScreen), findsNothing);
+      expect(tab(tester), 0);
+      expect(today.reads, greaterThan(reads));
+    });
+
+    testWidgets('the tasks open Dziś, the matters open Sprawy',
+        (tester) async {
+      final warm = await pump(tester);
+      warm.add(WidgetTap.matters);
+      await tester.pumpAndSettle();
+      expect(tab(tester), 2);
+
+      warm.add(WidgetTap.tasks);
+      await tester.pumpAndSettle();
+      expect(tab(tester), 0);
+    });
+
+    testWidgets('the mic opens Dziś and asks to listen, once per tap',
+        (tester) async {
+      final warm = await pump(tester);
+      await tester.tap(find.byIcon(Icons.calendar_today));
+      await tester.pumpAndSettle();
+
+      // A warm tap comes through onNewIntent, before the activity resumes.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      warm.add(WidgetTap.listen);
+      await tester.pumpAndSettle();
+      expect(tab(tester), 0);
+      expect(controller.listenCalls, 0, reason: 'not before it is in front');
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(controller.listenCalls, 1);
+
+      warm.add(WidgetTap.listen);
+      await tester.pumpAndSettle();
+      expect(controller.listenCalls, 2, reason: 'in front, at once');
+    });
+
+    testWidgets('a tap that launched the app is taken once', (tester) async {
+      await pump(tester, cold: WidgetTap.listen);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(tab(tester), 0);
+      expect(controller.listenCalls, 1);
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(App)));
+      expect(container.read(pendingWidgetTapProvider), isNull);
+    });
   });
 }

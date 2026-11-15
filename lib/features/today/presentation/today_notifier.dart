@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/home_widget/home_widget_numbers.dart';
+import 'package:voice_agent/core/home_widget/home_widget_provider.dart';
 import 'package:voice_agent/core/models/today.dart';
 import 'package:voice_agent/core/providers/agenda_changes_provider.dart';
 import 'package:voice_agent/features/today/domain/today_repository.dart';
@@ -24,6 +28,10 @@ class TodayNotifier extends StateNotifier<TodayState> {
     state = TodayState(view: state.view, loading: true);
     try {
       final view = await _repo.fetchToday();
+      // Every read of the day redraws the home-screen widget (ADR-PLATFORM-015).
+      unawaited(
+        _ref.read(homeWidgetProvider).show(HomeWidgetNumbers.of(view, DateTime.now())),
+      );
       if (mounted) state = TodayState(view: view);
     } on Object catch (e) {
       if (mounted) state = TodayState(view: state.view, error: '$e');

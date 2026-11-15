@@ -433,16 +433,24 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     });
     switch (command) {
       case GlassesCommand.listening:
-        if (micMode == MicMode.off) {
-          unawaited(startSession());
-        } else if (micMode == MicMode.standby &&
-            !_suspendedForManualRecording) {
-          unawaited(resumeSession());
-        }
+        listen();
       case GlassesCommand.standby:
         if (micMode == MicMode.listening) unawaited(pauseSession());
       case GlassesCommand.off:
         if (micMode != MicMode.off) unawaited(stopSession());
+    }
+  }
+
+  /// Listening on, asked for from outside the mic button: the glasses'
+  /// Rozmowa page (ADR-AUDIO-016) and the home-screen widget's mic
+  /// (ADR-PLATFORM-015). From Off a session starts, from Standby it resumes;
+  /// already listening, or held by a manual recording, nothing changes.
+  void listen() {
+    if (!mounted) return;
+    if (micMode == MicMode.off) {
+      unawaited(startSession());
+    } else if (micMode == MicMode.standby && !_suspendedForManualRecording) {
+      unawaited(resumeSession());
     }
   }
 

@@ -3,11 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/app/router.dart';
+import 'package:voice_agent/core/home_widget/home_widget_provider.dart';
+import 'package:voice_agent/core/home_widget/widget_tap_channel.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/features/places/presentation/places_sync.dart';
 import 'package:voice_agent/features/recording/presentation/mic_activity.dart';
+import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
+import 'package:voice_agent/features/today/presentation/today_providers.dart';
 
 class App extends ConsumerStatefulWidget {
   const App({super.key, this.scaffoldMessengerKey});
@@ -44,6 +48,11 @@ class _AppState extends ConsumerState<App> {
         _router.go(pending, extra: DeepLinkTap());
         ref.read(pendingDeepLinkProvider.notifier).state = null;
       }
+      final widgetTap = ref.read(pendingWidgetTapProvider);
+      if (widgetTap != null) {
+        _openWidgetTap(widgetTap);
+        ref.read(pendingWidgetTapProvider.notifier).state = null;
+      }
       final sharedText = ref.read(pendingSharedTextProvider);
       if (sharedText != null) {
         _openSharedText(sharedText);
@@ -62,6 +71,48 @@ class _AppState extends ConsumerState<App> {
     closed.then((_) => _refreshPins());
   }
 
+  /// A tap on the home-screen widget (ADR-PLATFORM-015). Every screen opens
+  /// over Dziś, so Back lands there; the mic opens Dziś listening, as a widget
+  /// cannot start the microphone without the app in front (the task's D1).
+  void _openWidgetTap(WidgetTap tap) {
+    switch (tap) {
+      case WidgetTap.food:
+        _router.go('/today');
+        _router.push<Object?>('/diet').then((_) => _refreshToday());
+      case WidgetTap.tasks:
+        _router.go('/today');
+      case WidgetTap.matters:
+        _router.go('/matters');
+      case WidgetTap.listen:
+        _router.go('/today');
+        _whenResumed(
+          () => ref.read(handsFreeControllerProvider.notifier).listen(),
+        );
+    }
+  }
+
+  /// The microphone starts only with the activity in front: a warm tap
+  /// arrives through onNewIntent, before the activity is resumed.
+  void _whenResumed(VoidCallback action) {
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      action();
+      return;
+    }
+    late final AppLifecycleListener listener;
+    listener = AppLifecycleListener(
+      onResume: () {
+        listener.dispose();
+        if (mounted) action();
+      },
+    );
+  }
+
+  void _refreshToday() {
+    if (mounted && ref.exists(todayNotifierProvider)) {
+      ref.read(todayNotifierProvider.notifier).refresh();
+    }
+  }
+
   /// The list loads once, and a form opened from here has no list to return to.
   void _refreshPins() {
     if (mounted && ref.exists(pinsNotifierProvider)) {
@@ -77,6 +128,10 @@ class _AppState extends ConsumerState<App> {
       next.whenData((payload) {
         if (payload.isNotEmpty) _router.go(payload, extra: DeepLinkTap());
       });
+    });
+
+    ref.listen<AsyncValue<WidgetTap>>(widgetTapStreamProvider, (prev, next) {
+      next.whenData(_openWidgetTap);
     });
 
     ref.listen<AsyncValue<SharedText>>(sharedTextStreamProvider, (prev, next) {
