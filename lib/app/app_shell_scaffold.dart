@@ -8,6 +8,7 @@ import 'package:voice_agent/core/network/connectivity_service.dart';
 import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/providers/app_foreground_provider.dart';
 import 'package:voice_agent/core/providers/shopping_list_changes_provider.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
 import 'package:voice_agent/features/api_sync/sync_provider.dart';
 import 'package:voice_agent/features/matters/presentation/matters_providers.dart';
@@ -90,7 +91,8 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
     // Leaving the app is when the owner next sees the home-screen widget: what
     // was done in the app (a meal logged on the diet's day) reaches it now,
     // not at the next background read (ADR-PLATFORM-015).
-    if (state == AppLifecycleState.paused && ref.exists(todayNotifierProvider)) {
+    if (state == AppLifecycleState.paused &&
+        ref.exists(todayNotifierProvider)) {
       unawaited(ref.read(todayNotifierProvider.notifier).refresh());
     }
   }
@@ -149,53 +151,58 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
         if (!didPop) widget.navigationShell.goBranch(_todayTabIndex);
       },
       child: Scaffold(
+        // The tabs' pages run under the floating bar (off-roadmap S2).
+        extendBody: true,
         body: VoiceInputsHost(child: widget.navigationShell),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: widget.navigationShell.currentIndex,
-          onDestinationSelected: (index) {
-            final currentIndex = widget.navigationShell.currentIndex;
-            // ADR-AUDIO-013: the tabs never touch the microphone; since Record
-            // stopped being a tab (V1 of the redesign) that holds on iOS too.
-            if (index == _todayTabIndex && ref.exists(todayNotifierProvider)) {
-              unawaited(ref.read(todayNotifierProvider.notifier).refresh());
-            }
-            if (index == _shoppingTabIndex && index != currentIndex) {
-              ref.read(shoppingListChangesProvider.notifier).state++;
-            }
-            // The first visit builds the list, which reads it; only a return
-            // reads it again.
-            if (index == _mattersTabIndex &&
-                index != currentIndex &&
-                ref.exists(mattersNotifierProvider)) {
-              unawaited(ref.read(mattersNotifierProvider.notifier).refresh());
-            }
-            widget.navigationShell.goBranch(
-              index,
-              initialLocation: index == currentIndex,
-            );
-          },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.wb_sunny_outlined),
-              label: 'Dziś',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.calendar_today),
-              label: 'Agenda',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.topic_outlined),
-              label: 'Sprawy',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.shopping_cart_outlined),
-              label: 'Zakupy',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline),
-              label: 'Rozmowy',
-            ),
-          ],
+        bottomNavigationBar: GlassTabBar(
+          bar: NavigationBar(
+            selectedIndex: widget.navigationShell.currentIndex,
+            onDestinationSelected: (index) {
+              final currentIndex = widget.navigationShell.currentIndex;
+              // ADR-AUDIO-013: the tabs never touch the microphone; since Record
+              // stopped being a tab (V1 of the redesign) that holds on iOS too.
+              if (index == _todayTabIndex &&
+                  ref.exists(todayNotifierProvider)) {
+                unawaited(ref.read(todayNotifierProvider.notifier).refresh());
+              }
+              if (index == _shoppingTabIndex && index != currentIndex) {
+                ref.read(shoppingListChangesProvider.notifier).state++;
+              }
+              // The first visit builds the list, which reads it; only a return
+              // reads it again.
+              if (index == _mattersTabIndex &&
+                  index != currentIndex &&
+                  ref.exists(mattersNotifierProvider)) {
+                unawaited(ref.read(mattersNotifierProvider.notifier).refresh());
+              }
+              widget.navigationShell.goBranch(
+                index,
+                initialLocation: index == currentIndex,
+              );
+            },
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.wb_sunny_outlined),
+                label: 'Dziś',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.event_outlined),
+                label: 'Agenda',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.folder_open_outlined),
+                label: 'Sprawy',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.shopping_cart_outlined),
+                label: 'Zakupy',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.forum_outlined),
+                label: 'Rozmowy',
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voice_agent/core/theme/app_colors.dart';
+import 'package:voice_agent/core/widgets/aurora_background.dart';
 
 /// Aurora Graphite (off-roadmap S1, 2026-11-15-va-graphite-theme): grey glass
 /// with one teal accent, light and dark, set in Sora. The values are those
@@ -94,12 +95,32 @@ abstract final class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       fontFamily: fontFamily,
-      scaffoldBackgroundColor: scheme.surface,
+      // The sky is drawn behind every page by its route (S2), so a page's
+      // scaffold is clear; the transition carries page and sky together.
+      scaffoldBackgroundColor: Colors.transparent,
+      canvasColor: colors.background,
       extensions: [colors],
     );
+    final glassFill = Color.alphaBlend(colors.glassFill, colors.background.withValues(alpha: 0.22));
     return base.copyWith(
+      pageTransitionsTheme: PageTransitionsTheme(builders: {
+        for (final e in const PageTransitionsTheme().builders.entries)
+          e.key: AuroraPageTransitionsBuilder(e.value),
+      }),
+      // A Material card on the sky reads as glass until its screen is
+      // restyled (S3, S4).
+      cardTheme: CardThemeData(
+        color: glassFill,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: colors.glassLine),
+        ),
+      ),
       appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
+        backgroundColor: Colors.transparent,
         foregroundColor: scheme.onSurface,
         surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
