@@ -41,7 +41,8 @@ class AppBarActions extends StatelessWidget {
               },
             ),
           ),
-        const SizedBox(width: 4),
+        // Away from the screen's edge, as the mockups' 20 dp gutter.
+        const SizedBox(width: 14),
       ],
     );
   }

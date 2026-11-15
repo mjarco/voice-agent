@@ -243,8 +243,10 @@ class _FoodBlock extends StatelessWidget {
                   ),
               ],
               // The sentence of personal-agent: the number in words, or the
-              // warning under the reserve.
-              Padding(
+              // warning under the reserve. With the number shown large, the
+              // sentence would only repeat it, so it stays for a warning or
+              // when there is no number.
+              if (warned || !food.hasTarget || left == null) Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: Text(
                   food.line,
