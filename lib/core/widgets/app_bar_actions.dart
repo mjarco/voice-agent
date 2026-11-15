@@ -6,7 +6,11 @@ import 'package:go_router/go_router.dart';
 /// every tab, for the screens that live outside the tabs. Settings is the
 /// last, at the right edge (the owner's word).
 class AppBarActions extends StatelessWidget {
-  const AppBarActions({super.key});
+  const AppBarActions({super.key, this.onReturn});
+
+  /// Called when the screen an icon opened is closed, for a tab whose content
+  /// that screen may have changed (Dziś after Jedzenie).
+  final VoidCallback? onReturn;
 
   /// Route, label, icon; the order the bar shows them, left to right.
   static const entries = [
@@ -27,7 +31,10 @@ class AppBarActions extends StatelessWidget {
             icon: Icon(icon),
             tooltip: label,
             // Pushed, not gone to: the tab keeps its place under the screen.
-            onPressed: () => context.push(route),
+            onPressed: () async {
+              await context.push(route);
+              onReturn?.call();
+            },
           ),
       ],
     );

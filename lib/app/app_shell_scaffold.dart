@@ -81,6 +81,11 @@ class _AppShellScaffoldState extends ConsumerState<AppShellScaffold>
     // P040 §Reconciler Triggers #2: staleness-driven foreground refresh.
     if (state == AppLifecycleState.resumed) {
       unawaited(_kickRefreshIfStale());
+      // Dziś is the day as it is now: an app left overnight must not open on
+      // yesterday, nor on what another device changed meanwhile.
+      if (ref.exists(todayNotifierProvider)) {
+        unawaited(ref.read(todayNotifierProvider.notifier).refresh());
+      }
     }
   }
 

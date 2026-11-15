@@ -33,7 +33,7 @@ class TodayScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(view?.title ?? 'Dziś', key: const Key('today-title')),
-        actions: const [AppBarActions()],
+        actions: [AppBarActions(onReturn: () => unawaited(notifier.refresh()))],
       ),
       body: Column(
         children: [
