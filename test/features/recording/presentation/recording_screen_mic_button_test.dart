@@ -39,6 +39,7 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 
 import '../../../helpers/stub_notifications.dart';
 import '../../../helpers/stub_session_control.dart';
+import '../../../helpers/open_record.dart';
 
 // ── Stubs ────────────────────────────────────────────────────────────────────
 
@@ -187,6 +188,7 @@ Future<void> pumpApp(WidgetTester tester) async {
       child: const App(),
     ),
   );
+  await openRecord(tester);
   await tester.pumpAndSettle();
 }
 
@@ -219,6 +221,7 @@ Future<_SpyTtsService> _pumpAppWithSpyTts(WidgetTester tester) async {
       child: const App(),
     ),
   );
+  await openRecord(tester);
   await tester.pumpAndSettle();
   return spy;
 }
@@ -253,8 +256,8 @@ void main() {
       await tester.tap(find.byKey(const Key('record-button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Listening — tap to suspend'), findsOneWidget);
-      expect(find.text('Tap to start listening'), findsNothing);
+      expect(find.text('Słucham — stuknij, by przerwać'), findsOneWidget);
+      expect(find.text('Stuknij, by słuchać'), findsNothing);
     });
   });
 
@@ -272,7 +275,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump();
 
-      expect(find.text('Release to stop'), findsOneWidget);
+      expect(find.text('Puść, by wysłać'), findsOneWidget);
 
       // Clean up: release gesture.
       await gesture.up();
@@ -318,7 +321,7 @@ void main() {
 
       // silentOnEmpty → RecordingIdle, no error
       expect(find.byIcon(Icons.error), findsNothing);
-      expect(find.text('Tap to start listening'), findsOneWidget);
+      expect(find.text('Stuknij, by słuchać'), findsOneWidget);
     });
   });
 
@@ -337,6 +340,7 @@ void main() {
           }),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       // Verify reply card is visible
@@ -362,6 +366,7 @@ void main() {
           }),
         ),
       );
+      await openRecord(tester);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('agent-reply-card')), findsOneWidget);

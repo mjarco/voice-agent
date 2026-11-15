@@ -194,32 +194,16 @@ class _TrackingHfController extends HandsFreeController {
   }
 }
 
-/// Variant with a controllable drain delay for race-condition tests.
-class _SlowStopHfController extends _TrackingHfController {
-  _SlowStopHfController(super.ref, this._drainCompleter);
-
-  final Completer<void> _drainCompleter;
-
-  @override
-  Future<void> stopSession() async {
-    if (state is HandsFreeIdle) return;
-    stopCalls++;
-    await _drainCompleter.future;
-    state = const HandsFreeIdle();
-  }
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   tz_data.initializeTimeZones();
 
-  // Finder for the Record icon inside the NavigationBar (avoids ambiguity with
-  // the mic icon on the RecordingScreen itself).
-  final recordNavIcon = find.descendant(
+  // Dziś's icon inside the NavigationBar (ADR-ARCH-013).
+  final todayNavIcon = find.descendant(
     of: find.byType(NavigationBar),
-    matching: find.byIcon(Icons.mic),
+    matching: find.byIcon(Icons.wb_sunny_outlined),
   );
 
   testWidgets('opening the Shopping tab reads the proposals again',
@@ -240,7 +224,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('shopping-proposal-p1')), findsNothing);
 
-    await tester.tap(recordNavIcon);
+    await tester.tap(todayNavIcon);
     await tester.pumpAndSettle();
     proposals.rows = [sampleProposal()];
     await tester.tap(shopping);
@@ -249,7 +233,9 @@ void main() {
     expect(find.byKey(const Key('shopping-proposal-p1')), findsOneWidget);
   });
 
-  testWidgets('switching away from Record tab calls stopSession', (tester) async {
+  testWidgets(
+      'switching tabs never touches the microphone, without the Android '
+      'modes too (ADR-ARCH-013)', (tester) async {
     late _TrackingHfController controller;
 
     await tester.pumpWidget(ProviderScope(
@@ -264,87 +250,37 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // P037 v2: app opens in Idle. Engage explicitly to mirror the
-    // production AirPods short-click entry point so the tab-switch
-    // teardown has something to stop.
     await controller.startSession();
     await tester.pumpAndSettle();
-    expect(controller.startCalls, 1);
 
     await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle();
+    await tester.tap(todayNavIcon);
+    await tester.pumpAndSettle();
 
-    expect(controller.stopCalls, 1);
+    expect(controller.stopCalls, 0);
+    expect(controller.startCalls, 1, reason: 'only the explicit start');
   });
 
-  testWidgets('switching back to Record tab calls startSession', (tester) async {
-    late _TrackingHfController controller;
-
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ..._baseOverrides,
-        handsFreeControllerProvider.overrideWith((ref) {
-          controller = _TrackingHfController(ref);
-          return controller;
-        }),
-      ],
-      child: const App(),
-    ));
+  testWidgets('the app opens on Dziś with five Polish tabs', (tester) async {
+    await tester.pumpWidget(ProviderScope(overrides: _baseOverrides, child: const App()));
     await tester.pumpAndSettle();
-
-    // v2: explicit engage first (replaces auto-start in initState).
-    await controller.startSession();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.calendar_today));
-    await tester.pumpAndSettle(); // stopSession called, state → idle
-
-    await tester.tap(recordNavIcon);
-    await tester.pumpAndSettle();
-
-    expect(controller.startCalls, 2); // 1 manual engage + 1 from tab return
+    for (final label in ['Dziś', 'Agenda', 'Sprawy', 'Zakupy', 'Rozmowy']) {
+      expect(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)), findsOneWidget);
+    }
+    expect(find.byKey(const Key('field-mic')), findsOneWidget, reason: 'the conversation field');
   });
 
-  testWidgets('session recovers when user returns to Record during stopSession drain',
-      (tester) async {
-    final drainCompleter = Completer<void>();
-    late _SlowStopHfController controller;
-
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        ..._baseOverrides,
-        handsFreeControllerProvider.overrideWith((ref) {
-          controller = _SlowStopHfController(ref, drainCompleter);
-          return controller;
-        }),
-      ],
-      child: const App(),
-    ));
+  testWidgets('Back on another tab goes to Dziś, not out of the app', (tester) async {
+    await tester.pumpWidget(ProviderScope(overrides: _baseOverrides, child: const App()));
     await tester.pumpAndSettle();
-
-    // v2: explicit engage first (replaces auto-start in initState).
-    await controller.startSession();
-    await tester.pumpAndSettle();
-    expect(controller.startCalls, 1);
-
-    // Navigate away — stopSession starts but won't finish until drainCompleter fires.
     await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle();
-
-    expect(controller.stopCalls, 1);
-    expect(controller.startCalls, 1); // unchanged
-
-    // Navigate back — startSession is called but the guard blocks it (not idle yet).
-    await tester.tap(recordNavIcon);
+    expect(find.byKey(const Key('field-mic')), findsNothing);
+    final popped = await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-
-    expect(controller.startCalls, 1); // still blocked
-
-    // Complete the drain — the .then() callback registers addPostFrameCallback.
-    drainCompleter.complete();
-    await tester.pumpAndSettle(); // frame fires → currentIndex == 2 → startSession
-
-    expect(controller.startCalls, 2); // recovery call
+    expect(popped, isTrue, reason: 'handled inside the app');
+    expect(find.byKey(const Key('field-mic')), findsOneWidget);
   });
 
   testWidgets(
@@ -370,7 +306,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.calendar_today));
     await tester.pumpAndSettle();
-    await tester.tap(recordNavIcon);
+    await tester.tap(todayNavIcon);
     await tester.pumpAndSettle();
 
     expect(controller.stopCalls, 0);

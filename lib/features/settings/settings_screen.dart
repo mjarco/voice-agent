@@ -277,6 +277,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/advanced'),
           ),
+          // Record's screen since V1 of the redesign: the voice session's
+          // segments and the phone's own transcript queue and history.
+          ListTile(
+            key: const Key('record-diagnostics-tile'),
+            title: const Text('Nagrywanie i historia'),
+            subtitle: const Text('Segmenty sesji, wysłane i nieudane transkrypcje'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/record'),
+          ),
           if (Platform.isAndroid) ...[
             _buildSectionHeader('Location'),
             ListTile(

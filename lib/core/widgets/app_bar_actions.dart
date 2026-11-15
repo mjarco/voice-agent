@@ -10,9 +10,10 @@ class AppBarActions extends StatelessWidget {
 
   /// Route, label, icon; the order the bar shows them, left to right.
   static const entries = [
+    ('/diet', 'Jedzenie', Icons.restaurant_outlined),
     ('/places', 'Miejsca', Icons.place_outlined),
-    ('/pins', 'Pins', Icons.push_pin_outlined),
-    ('/settings', 'Settings', Icons.settings),
+    ('/pins', 'Pinezki', Icons.push_pin_outlined),
+    ('/settings', 'Ustawienia', Icons.settings),
   ];
 
   @override

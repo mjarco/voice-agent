@@ -27,12 +27,12 @@ void main() {
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
   }
 
-  testWidgets('Miejsca, Pins, Settings are icons; Settings at the right edge',
+  testWidgets('Jedzenie, Miejsca, Pinezki, Ustawienia are icons; Ustawienia at the right edge',
       (tester) async {
     await pump(tester);
 
     final xs = [
-      for (final key in ['app-places', 'app-pins', 'app-settings'])
+      for (final key in ['app-diet', 'app-places', 'app-pins', 'app-settings'])
         tester.getTopLeft(find.byKey(Key(key))).dx,
     ];
     expect(xs, orderedEquals([...xs]..sort()));

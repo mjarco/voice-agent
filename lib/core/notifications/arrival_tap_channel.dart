@@ -46,7 +46,7 @@ class ArrivalTapChannel {
 final _storeTypeId = RegExp(r'^[a-z][a-z0-9_]{0,39}$');
 
 /// The start screen, which a route a trigger may not open gives instead.
-const arrivalStartRoute = '/record';
+const arrivalStartRoute = '/today';
 
 /// The routes a trigger may open (04, section 6): only `/shopping`, with an
 /// optional `store=` list of type ids. Ids of another shape are dropped; with

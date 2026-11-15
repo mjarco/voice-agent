@@ -159,11 +159,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Agenda'), findsWidgets);
-    expect(find.text('Shopping'), findsWidgets);
-    expect(find.text('Record'), findsWidgets);
-    expect(find.text('Sprawy'), findsWidgets);
-    expect(find.text('Chat'), findsWidgets);
+    for (final label in ['Dziś', 'Agenda', 'Sprawy', 'Zakupy', 'Rozmowy']) {
+      expect(find.widgetWithText(NavigationDestination, label), findsOneWidget,
+          reason: label);
+    }
+    // Recording left the tabs (ADR-ARCH-013).
+    expect(find.widgetWithText(NavigationDestination, 'Record'), findsNothing);
     // Routines live in the Agenda since ADR-ARCH-012.
     expect(
       find.widgetWithText(NavigationDestination, 'Routines'),
@@ -171,7 +172,7 @@ void main() {
     );
   });
 
-  testWidgets('Sprawy are tab 3, and the Agenda holds the routines',
+  testWidgets('Sprawy are tab 2, and the Agenda holds the routines',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -190,7 +191,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      3,
+      2,
     );
     expect(find.widgetWithText(AppBar, 'Sprawy'), findsOneWidget);
 
@@ -199,7 +200,7 @@ void main() {
     expect(find.byKey(const Key('agenda-routines-section')), findsOneWidget);
   });
 
-  testWidgets('Default tab is Record (index 2)', (tester) async {
+  testWidgets('Default tab is Dziś (index 0, ADR-ARCH-013)', (tester) async {
     await tester.pumpWidget(
       ProviderScope(overrides: _testOverrides, child: const App()),
     );
@@ -208,10 +209,10 @@ void main() {
     final navBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
-    expect(navBar.selectedIndex, 2);
+    expect(navBar.selectedIndex, 0);
   });
 
-  testWidgets('Tapping Agenda tab switches to index 0', (tester) async {
+  testWidgets('Tapping Agenda tab switches to index 1', (tester) async {
     await tester.pumpWidget(
       ProviderScope(overrides: _testOverrides, child: const App()),
     );
@@ -223,7 +224,7 @@ void main() {
     final navBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
-    expect(navBar.selectedIndex, 0);
+    expect(navBar.selectedIndex, 1);
   });
 
   testWidgets('Tapping Chat tab switches to index 4', (tester) async {
@@ -330,7 +331,7 @@ void main() {
 
       expect(
         tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-        2,
+        0,
       );
     });
 

@@ -104,18 +104,19 @@ void main() {
   ];
 
   group('5-tab navigation', () {
-    testWidgets('initial location is /record (center tab)', (tester) async {
+    testWidgets('initial location is /today, the first tab (ADR-ARCH-013)',
+        (tester) async {
       await tester.pumpWidget(
         ProviderScope(overrides: overrides, child: const App()),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Record'), findsWidgets);
+      expect(find.widgetWithText(NavigationDestination, 'Dziś'), findsOneWidget);
 
       final navBar = tester.widget<NavigationBar>(
         find.byType(NavigationBar),
       );
-      expect(navBar.selectedIndex, 2);
+      expect(navBar.selectedIndex, 0);
     });
 
     testWidgets('all 5 tab destinations render', (tester) async {
@@ -134,18 +135,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Record'), findsWidgets);
-
       await tester.tap(find.byIcon(Icons.calendar_today));
       await tester.pumpAndSettle();
+      expect(tester.widget<NavigationBar>(find.byType(NavigationBar))
+          .selectedIndex, 1);
 
-      await tester.tap(find.byIcon(Icons.mic));
+      await tester.tap(find.byIcon(Icons.wb_sunny_outlined));
       await tester.pumpAndSettle();
 
       final navBar = tester.widget<NavigationBar>(
         find.byType(NavigationBar),
       );
-      expect(navBar.selectedIndex, 2);
+      expect(navBar.selectedIndex, 0);
     });
   });
 
@@ -172,7 +173,7 @@ void main() {
         'rtn-1',
       );
       expect(tester.widget<NavigationBar>(find.byType(NavigationBar))
-          .selectedIndex, 0);
+          .selectedIndex, 1);
     });
   });
 
@@ -196,7 +197,7 @@ void main() {
       await open(tester, '/routines');
 
       expect(tester.widget<NavigationBar>(find.byType(NavigationBar))
-          .selectedIndex, 0);
+          .selectedIndex, 1);
       expect(find.byKey(const Key('agenda-routines-section')), findsOneWidget);
     });
 
@@ -232,7 +233,7 @@ void main() {
       final screen = tester.widget<ShoppingScreen>(find.byType(ShoppingScreen));
       expect(screen.placeTypes, ['electrical', 'grocery']);
       expect(tester.widget<NavigationBar>(find.byType(NavigationBar))
-          .selectedIndex, 1);
+          .selectedIndex, 3);
     });
 
     testWidgets('a warm tap opens it too', (tester) async {
