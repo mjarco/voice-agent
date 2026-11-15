@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -407,7 +408,14 @@ class GlassBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return ClipRRect(
+    // It follows a changed value within 600 ms (off-roadmap S5); at once
+    // under Android's "Remove animations".
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: fraction),
+      duration: still ? Duration.zero : const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
+      builder: (context, shown, _) => ClipRRect(
       borderRadius: BorderRadius.circular(4),
       child: SizedBox(
         height: 8,
@@ -417,7 +425,7 @@ class GlassBar extends StatelessWidget {
             ColoredBox(color: colors.chip),
             FractionallySizedBox(
               alignment: Alignment.centerLeft,
-              widthFactor: fraction,
+              widthFactor: shown,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -429,6 +437,78 @@ class GlassBar extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
+}
+
+/// A number that counts to its new value when it changes (off-roadmap S5,
+/// research drafts/13 §3): within 600 ms, then a small bounce of its size;
+/// at once under Android's "Remove animations". The first value shows as it
+/// is.
+class CountingNumber extends StatefulWidget {
+  const CountingNumber(this.value, {super.key, this.textKey, this.style});
+
+  final int value;
+
+  /// The key of the [Text], for finding the number shown.
+  final Key? textKey;
+  final TextStyle? style;
+
+  @override
+  State<CountingNumber> createState() => _CountingNumberState();
+}
+
+class _CountingNumberState extends State<CountingNumber>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 600),
+    value: 1,
+  );
+  late int _from = widget.value;
+
+  @override
+  void didUpdateWidget(CountingNumber old) {
+    super.didUpdateWidget(old);
+    if (old.value == widget.value) return;
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    // From what shows now, so a second change mid-count does not jump.
+    _from = _shown(old.value);
+    if (still) {
+      _c.value = 1;
+    } else {
+      _c.forward(from: 0);
+    }
+  }
+
+  int _shown(int to) {
+    final t = Curves.easeOutCubic.transform((_c.value / 0.8).clamp(0.0, 1.0));
+    return (_from + (to - _from) * t).round();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          // The count takes the first 80%; the bounce the last 20%.
+          final b = ((_c.value - 0.8) / 0.2).clamp(0.0, 1.0);
+          final scale = 1 + 0.06 * math.sin(math.pi * b);
+          return Transform.scale(
+            scale: scale,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${_shown(widget.value)}',
+              key: widget.textKey,
+              style: widget.style,
+            ),
+          );
+        },
+      );
 }

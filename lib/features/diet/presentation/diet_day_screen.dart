@@ -269,9 +269,10 @@ class _DayCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(
-                  '${view.eaten.kcal}',
-                  key: const Key('diet-eaten-kcal'),
+                // It counts to a new value (off-roadmap S5).
+                CountingNumber(
+                  view.eaten.kcal,
+                  textKey: const Key('diet-eaten-kcal'),
                   style: theme.textTheme.displayLarge?.copyWith(
                     fontWeight: FontWeight.w600,
                     fontSize: 58,

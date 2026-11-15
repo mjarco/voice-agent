@@ -221,9 +221,10 @@ class _FoodBlock extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(
-                      '$left',
-                      key: const Key('today-kcal-left'),
+                    // It counts to a new value (off-roadmap S5).
+                    CountingNumber(
+                      left,
+                      textKey: const Key('today-kcal-left'),
                       style: theme.textTheme.displayLarge?.copyWith(
                         fontWeight: FontWeight.w600,
                         fontSize: 58,
