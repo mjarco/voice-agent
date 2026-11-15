@@ -261,6 +261,11 @@ void main() {
           'created_at': '2026-11-15T09:00:00Z', 'event_count': 2,
           'first_message_preview': 'co mam jutro', 'channel': 'typed',
         }),
+        Conversation.fromMap({
+          'conversation_id': 'c-3', 'session_id': 's-3', 'status': 'open',
+          'created_at': '2026-11-15T08:00:00Z', 'event_count': 2,
+          'first_message_preview': 'wypiłem kawę', 'subject': 'diet', 'channel': 'voice',
+        }),
       ]));
 
       final matter = find.byKey(const Key('conversation-c-1'));
@@ -269,6 +274,9 @@ void main() {
       final day = find.byKey(const Key('conversation-c-2'));
       expect(find.descendant(of: day, matching: find.text('Bez sprawy')), findsOneWidget);
       expect(find.descendant(of: day, matching: find.byIcon(Icons.keyboard_outlined)), findsOneWidget);
+      // ADR-NET-009: held on the diet.
+      expect(find.descendant(of: find.byKey(const Key('conversation-c-3')), matching: find.text('Jedzenie')),
+          findsOneWidget);
     });
 
     testWidgets('conversation tile shows fallback preview when null',

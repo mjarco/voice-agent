@@ -42,7 +42,7 @@ class Conversation {
   final DateTime? lastEventAt;
   final String? firstMessagePreview;
 
-  /// The subject it was held in, `day` or `matter` (personal-agent's
+  /// The subject it was held in, `day`, `matter` or `diet` (personal-agent's
   /// ADR-API-126); `day` from an older server.
   final String subject;
 

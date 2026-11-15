@@ -95,10 +95,12 @@ class _ConversationTile extends StatelessWidget {
           semanticLabel: voice ? 'głosem' : 'pisana',
         ),
         title: Text(
-          conversation.matterTitle ?? 'Bez sprawy',
+          // Held on the diet: Jedzenie (ADR-NET-009).
+          conversation.matterTitle ??
+              (conversation.subject == 'diet' ? 'Jedzenie' : 'Bez sprawy'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: conversation.matterTitle == null
+          style: conversation.matterTitle == null && conversation.subject != 'diet'
               ? TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)
               : null,
         ),
