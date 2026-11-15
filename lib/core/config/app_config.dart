@@ -22,6 +22,7 @@ class AppConfig {
     this.devTelemetryEnabled = true,
     this.otelCollectorUrl = defaultOtelCollectorUrl,
     this.appearance = AppearanceMode.system,
+    this.backgroundMotion = true,
   });
 
   final String? apiUrl;
@@ -42,6 +43,9 @@ class AppConfig {
 
   final AppearanceMode appearance;
 
+  /// "Tło w ruchu" (off-roadmap S2): the sky drifts; off, it stands still.
+  final bool backgroundMotion;
+
   AppConfig copyWith({
     Object? apiUrl = _sentinel,
     Object? apiToken = _sentinel,
@@ -55,6 +59,7 @@ class AppConfig {
     bool? devTelemetryEnabled,
     String? otelCollectorUrl,
     AppearanceMode? appearance,
+    bool? backgroundMotion,
   }) {
     return AppConfig(
       apiUrl: apiUrl == _sentinel ? this.apiUrl : apiUrl as String?,
@@ -70,6 +75,7 @@ class AppConfig {
       devTelemetryEnabled: devTelemetryEnabled ?? this.devTelemetryEnabled,
       otelCollectorUrl: otelCollectorUrl ?? this.otelCollectorUrl,
       appearance: appearance ?? this.appearance,
+      backgroundMotion: backgroundMotion ?? this.backgroundMotion,
     );
   }
 }

@@ -130,6 +130,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (m) =>
                 ref.read(appConfigProvider.notifier).updateAppearance(m),
           ),
+          SwitchListTile(
+            key: const Key('settings-background-motion'),
+            title: const Text('Tło w ruchu'),
+            subtitle: const Text('Tło płynie powoli; stoi też przy wyłączonych animacjach Androida'),
+            value: config.backgroundMotion,
+            onChanged: (v) =>
+                ref.read(appConfigProvider.notifier).updateBackgroundMotion(v),
+          ),
           _buildSectionHeader('API Configuration'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),

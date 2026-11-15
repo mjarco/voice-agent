@@ -33,6 +33,7 @@ class AppConfigService {
 
   /// 'light' or 'dark'; absent until the owner picks one (off-roadmap S1).
   static const _appearanceKey = 'appearance';
+  static const _backgroundMotionKey = 'background_motion';
 
   // Cross-isolate-safe scalar config per ADR-ARCH-005 (P040 amendment).
   // Read by the foreground staleness check on app resume and by the
@@ -126,7 +127,13 @@ class AppConfigService {
           defaultOtelCollectorUrl,
       appearance: AppearanceMode.values.asNameMap()[prefs.getString(_appearanceKey)] ??
           AppearanceMode.system,
+      backgroundMotion: prefs.getBool(_backgroundMotionKey) ?? true,
     );
+  }
+
+  Future<void> saveBackgroundMotion(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool(_backgroundMotionKey, value);
   }
 
   Future<void> saveAppearance(AppearanceMode mode) async {

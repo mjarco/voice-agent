@@ -28,6 +28,15 @@ void main() {
       expect(config.keepHistory, isTrue);
     });
 
+    test('background motion: on when absent, off kept', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final service = AppConfigService(prefs: prefs);
+
+      expect((await service.load()).backgroundMotion, isTrue);
+      await service.saveBackgroundMotion(false);
+      expect((await service.load()).backgroundMotion, isFalse);
+    });
+
     test('appearance: system when absent, light and dark round-trip, system clears', () async {
       final prefs = await SharedPreferences.getInstance();
       final service = AppConfigService(prefs: prefs);

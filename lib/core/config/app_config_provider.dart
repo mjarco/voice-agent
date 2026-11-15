@@ -74,6 +74,11 @@ class AppConfigNotifier extends StateNotifier<AppConfig> {
     state = state.copyWith(ttsEnabled: value);
   }
 
+  Future<void> updateBackgroundMotion(bool value) async {
+    await _service.saveBackgroundMotion(value);
+    state = state.copyWith(backgroundMotion: value);
+  }
+
   Future<void> updateAppearance(AppearanceMode mode) async {
     await _service.saveAppearance(mode);
     state = state.copyWith(appearance: mode);

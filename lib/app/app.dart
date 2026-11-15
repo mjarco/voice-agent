@@ -11,6 +11,7 @@ import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/theme/app_theme.dart';
+import 'package:voice_agent/core/widgets/aurora_background.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/features/places/presentation/places_sync.dart';
@@ -168,7 +169,9 @@ class _AppState extends ConsumerState<App> {
       scaffoldMessengerKey: widget.scaffoldMessengerKey,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: switch (ref.watch(appConfigProvider.select((c) => c.appearance))) {
+      themeMode: switch (ref.watch(
+        appConfigProvider.select((c) => c.appearance),
+      )) {
         AppearanceMode.system => ThemeMode.system,
         AppearanceMode.light => ThemeMode.light,
         AppearanceMode.dark => ThemeMode.dark,
@@ -176,27 +179,30 @@ class _AppState extends ConsumerState<App> {
       routerConfig: _router,
       // The mic's state over every screen (V1 device check, the owner's
       // remark of 2026-11-15): a strip at the top edge, under the status bar.
-      builder: (context, child) => Stack(
-        children: [
-          // The dev build's sign, now that the theme no longer turns it
-          // orange (off-roadmap S1): a corner band, as the debug banner.
-          if (isDev && child != null)
-            Banner(
-              key: const Key('dev-banner'),
-              message: 'DEV',
-              location: BannerLocation.topStart,
-              color: AppColors.of(context).warning,
-              child: child,
-            )
-          else
-            ?child,
-          Positioned(
-            top: MediaQuery.paddingOf(context).top,
-            left: 0,
-            right: 0,
-            child: const MicActivityStrip(),
-          ),
-        ],
+      builder: (context, child) => AuroraDrift(
+        enabled: ref.watch(appConfigProvider.select((c) => c.backgroundMotion)),
+        child: Stack(
+          children: [
+            // The dev build's sign, now that the theme no longer turns it
+            // orange (off-roadmap S1): a corner band, as the debug banner.
+            if (isDev && child != null)
+              Banner(
+                key: const Key('dev-banner'),
+                message: 'DEV',
+                location: BannerLocation.topStart,
+                color: AppColors.of(context).warning,
+                child: child,
+              )
+            else
+              ?child,
+            Positioned(
+              top: MediaQuery.paddingOf(context).top,
+              left: 0,
+              right: 0,
+              child: const MicActivityStrip(),
+            ),
+          ],
+        ),
       ),
     );
   }
