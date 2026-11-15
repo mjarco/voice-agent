@@ -24,6 +24,9 @@ evening, V5) showed only on the phone.
    whose screen undoes it with a long press on "Cofnij" (`DELETE /api/v1/diet/meals/{id}`, as the
    phone's card), an utterance queued (personal-agent ADR-API-131) as the card "Odłożone na wieczór".
 4. Texts said by the owner go in a screen's state and are read as `${…}`.
+5. **The sender shares its identity** (`BroadcastOptions.setShareIdentityEnabled`, Android 14+):
+   glass-native takes a document whose screens call personal-agent only from voice-agent as the
+   system names it, since the intent's permission is `normal`.
 
 ## Rationale
 

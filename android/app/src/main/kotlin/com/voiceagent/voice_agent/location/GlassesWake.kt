@@ -1,7 +1,9 @@
 package com.voiceagent.voice_agent.location
 
 import android.content.Context
+import android.app.BroadcastOptions
 import android.content.Intent
+import android.os.Build
 import android.util.Log
 import org.json.JSONObject
 
@@ -48,7 +50,12 @@ object GlassesWake {
 
     /** Hands glass-native a document written here or in Dart (G4); false when sending failed. */
     fun sendDoc(context: Context, doc: String): Boolean = try {
-        context.sendBroadcast(Intent(ACTION).setPackage(PACKAGE).putExtra("doc", doc).putExtra("source", "voice-agent"))
+        val intent = Intent(ACTION).setPackage(PACKAGE).putExtra("doc", doc).putExtra("source", "voice-agent")
+        // glass-native takes a document whose screens call personal-agent only from voice-agent, as the
+        // system names the sender (Android 14+): so the sender shares its identity.
+        if (Build.VERSION.SDK_INT >= 34) {
+            context.sendBroadcast(intent, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle())
+        } else context.sendBroadcast(intent)
         true
     } catch (failure: Exception) {
         Log.w("GlassesWake", "document not sent: $failure")
