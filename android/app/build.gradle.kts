@@ -29,6 +29,27 @@ android {
         versionName = flutter.versionName
     }
 
+    // Plugins' native libraries (onnxruntime: 13-22 MB per ABI) follow
+    // `flutter build apk --target-platform`, as Flutter's own do; without this
+    // they ship for every ABI their AAR carries (#423). Not abiFilters: the
+    // Flutter Gradle plugin resets those to all three ABIs.
+    val abiOf = mapOf(
+        "android-arm" to "armeabi-v7a",
+        "android-arm64" to "arm64-v8a",
+        "android-x64" to "x86_64",
+    )
+    val wantedAbis = (project.findProperty("target-platform") as String?)
+        ?.split(",")
+        ?.mapNotNull { abiOf[it.trim()] }
+        .orEmpty()
+    if (wantedAbis.isNotEmpty()) {
+        packaging {
+            jniLibs {
+                abiOf.values.filterNot { it in wantedAbis }.forEach { excludes += "lib/$it/**" }
+            }
+        }
+    }
+
     flavorDimensions += "environment"
     productFlavors {
         create("stable") {
