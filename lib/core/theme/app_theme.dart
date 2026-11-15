@@ -137,6 +137,85 @@ abstract final class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       dividerTheme: DividerThemeData(color: scheme.outlineVariant, space: 1),
+      // S3: Material's own parts on glass, so every screen's chips,
+      // switches, check boxes, sheets and fields share Aurora's shapes.
+      listTileTheme: const ListTileThemeData(tileColor: Colors.transparent),
+      expansionTileTheme: const ExpansionTileThemeData(
+        backgroundColor: Colors.transparent,
+        collapsedBackgroundColor: Colors.transparent,
+        shape: Border(),
+        collapsedShape: Border(),
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        backgroundColor: colors.chip,
+        selectedColor: scheme.onSurface,
+        secondarySelectedColor: scheme.onSurface,
+        checkmarkColor: scheme.surface,
+        side: BorderSide(color: colors.glassLine),
+        shape: const StadiumBorder(),
+        labelStyle: base.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w500),
+        showCheckmark: false,
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.selected) ? scheme.onSurface : glassFill,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.selected) ? scheme.surface : scheme.onSurface,
+          ),
+          side: WidgetStatePropertyAll(BorderSide(color: colors.glassLine)),
+          shape: const WidgetStatePropertyAll(StadiumBorder()),
+        ),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        shape: const CircleBorder(),
+        side: BorderSide(color: scheme.outline, width: 1.5),
+        fillColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? scheme.primary : Colors.transparent,
+        ),
+        checkColor: WidgetStatePropertyAll(scheme.onPrimary),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: scheme.onSurface,
+        foregroundColor: scheme.surface,
+        elevation: 2,
+        shape: const CircleBorder(),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: scheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        showDragHandle: true,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: scheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: scheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: glassFill,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: colors.glassLine),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: colors.glassLine),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: scheme.primary, width: 1.5),
+        ),
+      ),
     );
   }
 }

@@ -288,7 +288,13 @@ class GlassIconButton extends StatelessWidget {
         child: InkWell(
           onTap: onPressed,
           customBorder: const CircleBorder(),
-          child: Center(child: Icon(icon, size: 22)),
+          // A button with nothing to do fades, as Material's disabled one.
+          child: Center(
+            child: Opacity(
+              opacity: onPressed == null ? 0.35 : 1,
+              child: Icon(icon, size: 22),
+            ),
+          ),
         ),
       ),
     );
