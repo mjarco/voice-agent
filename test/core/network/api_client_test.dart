@@ -25,6 +25,21 @@ void main() {
   });
 
   group('ApiClient', () {
+    test('a transcript said on a matter carries its subject (ADR-NET-008)', () async {
+      await client.post(
+        Transcript(
+          id: 'tx-2', text: 'Kasia przysłała wycenę', deviceId: 'dev-1',
+          createdAt: 1710000000000, subject: 'matter:m-1',
+        ),
+        url: 'https://example.com/api',
+      );
+      final body = _MockAdapter.lastRequestData as Map<String, dynamic>;
+      expect(body['subject'], {'kind': 'matter', 'matter_id': 'm-1'});
+
+      await client.post(transcript, url: 'https://example.com/api');
+      expect((_MockAdapter.lastRequestData as Map<String, dynamic>).containsKey('subject'), isFalse);
+    });
+
     test('200 response returns ApiSuccess', () async {
       _MockAdapter.nextStatusCode = 200;
       final result = await client.post(

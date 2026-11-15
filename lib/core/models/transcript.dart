@@ -6,6 +6,7 @@ class Transcript {
     this.audioDurationMs,
     required this.deviceId,
     required this.createdAt,
+    this.subject,
   });
 
   /// UUIDv4, generated client-side.
@@ -26,6 +27,10 @@ class Transcript {
   /// Unix epoch milliseconds.
   final int createdAt;
 
+  /// The subject it was said in, read when it ended (ADR-NET-008): null for
+  /// Dzień, `matter:<id>`.
+  final String? subject;
+
   factory Transcript.fromMap(Map<String, dynamic> map) {
     return Transcript(
       id: map['id'] as String,
@@ -34,6 +39,7 @@ class Transcript {
       audioDurationMs: map['audio_duration_ms'] as int?,
       deviceId: map['device_id'] as String,
       createdAt: map['created_at'] as int,
+      subject: map['subject'] as String?,
     );
   }
 
@@ -45,6 +51,7 @@ class Transcript {
       'audio_duration_ms': audioDurationMs,
       'device_id': deviceId,
       'created_at': createdAt,
+      'subject': subject,
     };
   }
 
@@ -58,7 +65,8 @@ class Transcript {
           language == other.language &&
           audioDurationMs == other.audioDurationMs &&
           deviceId == other.deviceId &&
-          createdAt == other.createdAt;
+          createdAt == other.createdAt &&
+          subject == other.subject;
 
   @override
   int get hashCode => Object.hash(
@@ -68,5 +76,6 @@ class Transcript {
         audioDurationMs,
         deviceId,
         createdAt,
+        subject,
       );
 }

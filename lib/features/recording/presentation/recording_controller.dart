@@ -9,6 +9,7 @@ import 'package:voice_agent/core/audio_focus/audio_focus_provider.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/models/transcript.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/features/recording/domain/recording_result.dart';
 import 'package:voice_agent/features/recording/domain/recording_service.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
@@ -97,6 +98,9 @@ class RecordingController extends StateNotifier<RecordingState>
   /// If [silentOnEmpty] is true and the transcription result is empty,
   /// emits [RecordingIdle] without an error (used for press-and-hold).
   Future<void> stopAndTranscribe({bool silentOnEmpty = false}) async {
+    // ADR-NET-008: the subject is the screen's at the release, before the
+    // owner can leave it while the recording is transcribed.
+    final subject = _ref.read(utteranceSubjectReaderProvider)().key;
     try {
       final RecordingResult recordingResult;
       try {
@@ -139,6 +143,7 @@ class RecordingController extends StateNotifier<RecordingState>
         audioDurationMs: transcriptResult.audioDurationMs,
         deviceId: deviceId,
         createdAt: DateTime.now().millisecondsSinceEpoch,
+        subject: subject,
       );
 
       await storage.saveTranscript(transcript);

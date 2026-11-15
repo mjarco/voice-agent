@@ -28,7 +28,7 @@ class SqliteStorageService implements StorageService {
     final db = await factory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 2,
+        version: 3,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
@@ -48,7 +48,8 @@ class SqliteStorageService implements StorageService {
         language         TEXT,
         audio_duration_ms INTEGER,
         device_id        TEXT NOT NULL,
-        created_at       INTEGER NOT NULL
+        created_at       INTEGER NOT NULL,
+        subject          TEXT
       )
     ''');
 
@@ -98,6 +99,9 @@ class SqliteStorageService implements StorageService {
       switch (v) {
         case 2:
           await _createTelemetryOutbox(db);
+        case 3:
+          // ADR-NET-008: the subject an utterance was said in.
+          await db.execute('ALTER TABLE transcripts ADD COLUMN subject TEXT');
         default:
           break;
       }

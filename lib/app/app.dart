@@ -6,6 +6,7 @@ import 'package:voice_agent/app/router.dart';
 import 'package:voice_agent/core/home_widget/home_widget_provider.dart';
 import 'package:voice_agent/core/home_widget/widget_tap_channel.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/features/places/presentation/places_sync.dart';
@@ -41,6 +42,8 @@ class _AppState extends ConsumerState<App> {
     // window before the warm-path callback is registered, it is lost —
     // documented as acceptable; user can re-tap.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(utteranceSubjectReaderProvider.notifier).state = _readSubject;
       if (_coldStartConsumed) return;
       _coldStartConsumed = true;
       final pending = ref.read(pendingDeepLinkProvider);
@@ -59,6 +62,17 @@ class _AppState extends ConsumerState<App> {
         ref.read(pendingSharedTextProvider.notifier).state = null;
       }
     });
+  }
+
+  /// The subject of an utterance ending now (ADR-NET-008): the matter whose
+  /// screen is on top while the app is in front, otherwise Dzień (the app
+  /// hidden or the phone locked).
+  UtteranceSubject _readSubject() {
+    if (!mounted ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return UtteranceSubject.day;
+    }
+    return UtteranceSubject.ofLocation(_router.state.matchedLocation);
   }
 
   /// Pushes, as `go` would drop the shell and the hands-free session under it.

@@ -23,6 +23,7 @@ import 'package:voice_agent/core/observability/telemetry.dart';
 import 'package:voice_agent/core/session_control/hands_free_control_port.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/engagement_controller.dart';
 import 'package:voice_agent/features/recording/domain/engagement_state.dart';
@@ -1055,6 +1056,9 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       label: label,
       state: const QueuedForTranscription(),
       wavPath: wavPath,
+      // ADR-NET-008: the subject is the screen's when the segment ends, not
+      // when it is transcribed or sent.
+      subject: _ref.read(utteranceSubjectReaderProvider)().key,
     );
     _jobs.add(job);
     state = _listeningOrBacklog();
@@ -1131,6 +1135,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         audioDurationMs: audioDurationMs,
         deviceId: deviceId,
         createdAt: DateTime.now().millisecondsSinceEpoch,
+        subject: job.subject,
       );
 
       await storage.saveTranscript(transcript);

@@ -582,4 +582,36 @@ void main() {
       expect(count, 0);
     });
   });
+
+  group('the subject of a transcript (ADR-NET-008)', () {
+    test('is kept and read back', () async {
+      const t = Transcript(id: 's-1', text: 'x', deviceId: 'd', createdAt: 1, subject: 'matter:m-1');
+      await storage.saveTranscript(t);
+      expect((await storage.getTranscript('s-1'))?.subject, 'matter:m-1');
+    });
+
+    test('a database of version 2 gains the column and keeps its rows', () async {
+      final dir = Directory.systemTemp.createTempSync('voice_agent_v2_');
+      final path = '${dir.path}/v2.db';
+      final old = await databaseFactoryFfi.openDatabase(path, options: OpenDatabaseOptions(
+        version: 2,
+        onCreate: (db, _) async {
+          await db.execute('CREATE TABLE transcripts (id TEXT PRIMARY KEY, text TEXT NOT NULL, language TEXT, '
+              'audio_duration_ms INTEGER, device_id TEXT NOT NULL, created_at INTEGER NOT NULL)');
+          await db.execute('CREATE TABLE sync_queue (id TEXT PRIMARY KEY, transcript_id TEXT NOT NULL, '
+              "status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, last_attempt_at INTEGER, "
+              'error_message TEXT, created_at INTEGER NOT NULL)');
+          await db.insert('transcripts', {'id': 'old', 'text': 'stare', 'device_id': 'd', 'created_at': 1});
+        },
+      ));
+      await old.close();
+
+      final upgraded = await SqliteStorageService.initialize(databaseFactory: databaseFactoryFfi, path: path);
+      final kept = await upgraded.getTranscript('old');
+      expect(kept?.text, 'stare');
+      expect(kept?.subject, isNull);
+      await upgraded.saveTranscript(const Transcript(id: 'new', text: 'x', deviceId: 'd', createdAt: 2, subject: 'matter:m'));
+      expect((await upgraded.getTranscript('new'))?.subject, 'matter:m');
+    });
+  });
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_provider.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
@@ -280,6 +281,16 @@ void main() {
       fakeStorage.enqueuedIds.first,
       fakeStorage.savedTranscripts.first.id,
     );
+  });
+
+  test('a held press keeps the subject of its release (ADR-NET-008)', () async {
+    fakeService.lastPath = '/tmp/test.wav';
+    container.read(utteranceSubjectReaderProvider.notifier).state =
+        () => const UtteranceSubject.matter('m-1');
+
+    await controller.stopAndTranscribe();
+
+    expect(fakeStorage.savedTranscripts.single.subject, 'matter:m-1');
   });
 
   test('stopAndTranscribe transitions to error on STT failure', () async {
