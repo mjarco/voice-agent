@@ -14,8 +14,8 @@ See CLAUDE.md for architecture rules, coding conventions, and cross-proposal con
 ## Verification Commands
 
 ```bash
-flutter analyze    # Static analysis — zero issues required
-flutter test       # All tests must pass
+make verify-changed  # analyze + the tests of the touched modules — before each commit
+make verify          # analyze + the full suite — before the PR goes ready and every push to it
 ```
 
-Both must pass before any commit or PR.
+Details: Verification Gates in CLAUDE.md.

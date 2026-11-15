@@ -131,12 +131,23 @@ Architectural decisions are tracked in `docs/decisions/` as ADR files.
 ## Verification Gates
 
 ```bash
-make verify        # Runs analyze + test
+make verify-changed  # dev loop: analyze + the tests of the modules you touched
+make verify          # analyze + the full suite
 ```
 
-`make verify` must pass before any commit or PR (docs-only changes excepted).
-Use `make analyze` or `make test` only when you need a narrower diagnostic
-command.
+- **While building**, `make verify-changed` must pass before each commit. It
+  runs the tests of every module the branch touches since `origin/main`
+  (`lib/features/agenda/…` → `test/features/agenda/`, see
+  `scripts/test-changed.sh`) and falls back to the full suite when a shared
+  file changed (`pubspec.yaml` beyond its version, `pubspec.lock`,
+  `test/helpers/`, `assets/`).
+- **The full `make verify`** must pass before the PR goes ready, before every
+  push to a ready PR, and after a rebase onto `main`. Its output is the verify
+  evidence of the PR.
+- Docs-only changes need neither.
+- Narrower still while iterating: `flutter test test/features/agenda` or one
+  file. `make test-times` lists the slowest test files; a file that waits on
+  real time (`Future.delayed`, timers) belongs on `fakeAsync`.
 
 Before committing, also verify:
 
@@ -331,9 +342,12 @@ annotated `vMAJOR.MINOR.PATCH` tag and push it. The tag is the canonical
 
 ```bash
 git checkout main && git pull --ff-only
-git tag -a v1.1.0 -m "v1.1.0 — open the source conversation from a pin"
-git push origin v1.1.0
+make tag                      # version from pubspec.yaml, note from the merge commit's subject
+make tag MSG="v1.1.0 — open the source conversation from a pin"   # own note
 ```
+
+`make tag` refuses when `HEAD` is not `origin/main` and does nothing when the
+version is already tagged.
 
 One tag per `MAJOR.MINOR.PATCH`; the BUILD number is not tagged. If several
 device builds share a version, only the version is tagged.
@@ -362,9 +376,10 @@ OpenJDK 21 **JDK** (`openjdk-21-jdk-headless` — a JRE alone fails with
 with the current Android CLI; Gradle downloads missing platforms itself.
 
 - `make install-android` / `make install-android-dev` build the release APK of
-  the flavour and install it over adb; exactly one Android device must be
-  connected (USB debugging or wireless debugging). Over USB, `adb devices` shows
-  "no permissions" until the udev rules are installed
+  the flavour for arm64 only (the Pixel; `ANDROID_TARGET=` overrides, e.g.
+  `android-arm,android-arm64,android-x64` for a universal APK) and install it
+  over adb; exactly one Android device must be connected (USB debugging or
+  wireless debugging). Over USB, `adb devices` shows "no permissions" until the udev rules are installed
   (`sudo apt install android-sdk-platform-tools-common`, then replug).
 - The Silero VAD model is not in git: `make vad-model` (a prerequisite of both
   targets) fetches it; copy `.env.mobile` into a new worktree by hand.
@@ -624,9 +639,12 @@ Two design slices defined stub providers that 006 replaced:
 make setup                   # Full setup: flutter pub get + download Silero VAD model
 make deps                    # Flutter pub get only
 make vad-model               # Download Silero VAD v5 ONNX model (~2 MB)
-make verify                  # Run analyze + test
+make verify-changed          # Dev loop: analyze + tests of the touched modules
+make verify                  # Run analyze + the full suite (before PR ready / push)
 make analyze                 # Static analysis only
 make test                    # Run tests only
+make test-times              # Full suite + the slowest test files
+make tag                     # Tag main's HEAD with pubspec.yaml's version, push the tag
 make clean                   # Remove build artifacts and downloaded models
 make install-android-dev     # Build + install dev (release) on the connected Android device
 
@@ -634,6 +652,7 @@ make install-android-dev     # Build + install dev (release) on the connected An
 flutter analyze              # Static analysis — zero issues required
 flutter test                 # Run all tests
 flutter test --coverage      # With coverage report
+flutter test test/features/agenda   # One module's tests
 flutter build apk --debug    # Android debug build
 flutter build ios --debug --no-codesign  # iOS debug build
 ```
