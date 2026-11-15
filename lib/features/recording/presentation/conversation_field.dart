@@ -8,6 +8,7 @@ import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
 import 'package:voice_agent/core/theme/app_colors.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
@@ -79,100 +80,117 @@ class ConversationField extends ConsumerWidget {
       }
     }
 
-    return Material(
-      color: scheme.surfaceContainerHigh,
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (reply != null)
-              Padding(
-                key: const Key('field-reply'),
-                padding: const EdgeInsets.fromLTRB(16, 10, 4, 0),
+    // The floating input of Aurora (off-roadmap S2): a glass pill over the
+    // page, the round mic at its right end; the whole pill takes the mic's
+    // colour while sound is captured.
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        child: GlassSurface(
+          key: const Key('field-glass'),
+          radius: 28,
+          blur: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+                if (reply != null)
+                  Padding(
+                    key: const Key('field-reply'),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 4, 0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(reply, maxLines: 4, overflow: TextOverflow.ellipsis),
+                              for (final a in actions) actionCard!(a),
+                              TextButton(
+                                key: const Key('field-open-conversation'),
+                                style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                                onPressed: openConversation,
+                                child: const Text('Otwórz rozmowę ›'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('field-reply-dismiss'),
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Zamknij odpowiedź',
+                          onPressed: () {
+                            unawaited(ref.read(ttsServiceProvider).stop());
+                            ref.read(latestAgentReplyProvider.notifier).state = null;
+                            ref.read(latestAgentActionsProvider.notifier).state = const [];
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+              AnimatedContainer(
+                key: const Key('field-bar'),
+                duration: const Duration(milliseconds: 150),
+                decoration: BoxDecoration(
+                  color: barColor ?? Colors.transparent,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                constraints: const BoxConstraints(minHeight: 56),
+                padding: const EdgeInsets.fromLTRB(20, 5, 5, 5),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(reply, maxLines: 4, overflow: TextOverflow.ellipsis),
-                          for (final a in actions) actionCard!(a),
-                          TextButton(
-                            key: const Key('field-open-conversation'),
-                            style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                            onPressed: openConversation,
-                            child: const Text('Otwórz rozmowę ›'),
-                          ),
-                        ],
+                      child: activity.capturing
+                          ? _CaptureLine(
+                              // A new capture starts the clock from zero.
+                              key: ValueKey(activity),
+                              text: activity == MicActivity.recording
+                                  ? 'Nagrywam'
+                                  : 'Słyszę',
+                              hint: activity == MicActivity.recording
+                                  ? ' — puść, by wysłać'
+                                  : '',
+                              color: onBar,
+                            )
+                          : Text(
+                              line,
+                              key: const Key('field-state'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    fontSize: 15,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                            ),
+                    ),
+                    if (micModes && mode != MicMode.off)
+                      TextButton(
+                        key: const Key('field-stop'),
+                        onPressed: () => unawaited(
+                          ref.read(handsFreeControllerProvider.notifier).stopSession(),
+                        ),
+                        style: TextButton.styleFrom(foregroundColor: onBar),
+                        child: const Text('Zakończ'),
                       ),
-                    ),
                     IconButton(
-                      key: const Key('field-reply-dismiss'),
-                      icon: const Icon(Icons.close),
-                      tooltip: 'Zamknij odpowiedź',
-                      onPressed: () {
-                        unawaited(ref.read(ttsServiceProvider).stop());
-                        ref.read(latestAgentReplyProvider.notifier).state = null;
-                        ref.read(latestAgentActionsProvider.notifier).state = const [];
-                      },
+                      key: const Key('field-write'),
+                      color: onBar ?? scheme.onSurfaceVariant,
+                      icon: const Icon(Icons.keyboard_outlined),
+                      tooltip: 'Napisz',
+                      onPressed: matterId != null
+                          ? () => unawaited(context.push('/conversation/new?matter=$matterId'))
+                          : diet
+                              ? () => unawaited(context.push('/conversation/new?subject=diet'))
+                              : openConversation,
                     ),
+                    const SizedBox(width: 4),
+                    const MicButton(key: Key('field-mic'), compact: true),
                   ],
                 ),
               ),
-            AnimatedContainer(
-              key: const Key('field-bar'),
-              duration: const Duration(milliseconds: 150),
-              color: barColor ?? Colors.transparent,
-              padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-              child: Row(
-                children: [
-                  const MicButton(key: Key('field-mic'), compact: true),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: activity.capturing
-                        ? _CaptureLine(
-                            // A new capture starts the clock from zero.
-                            key: ValueKey(activity),
-                            text: activity == MicActivity.recording
-                                ? 'Nagrywam'
-                                : 'Słyszę',
-                            hint: activity == MicActivity.recording
-                                ? ' — puść, by wysłać'
-                                : '',
-                            color: onBar,
-                          )
-                        : Text(
-                            line,
-                            key: const Key('field-state'),
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                  ),
-                  if (micModes && mode != MicMode.off)
-                    TextButton(
-                      key: const Key('field-stop'),
-                      onPressed: () => unawaited(
-                        ref.read(handsFreeControllerProvider.notifier).stopSession(),
-                      ),
-                      style: TextButton.styleFrom(foregroundColor: onBar),
-                      child: const Text('Zakończ'),
-                    ),
-                  IconButton(
-                    key: const Key('field-write'),
-                    color: onBar,
-                    icon: const Icon(Icons.keyboard_outlined),
-                    tooltip: 'Napisz',
-                    onPressed: matterId != null
-                        ? () => unawaited(context.push('/conversation/new?matter=$matterId'))
-                        : diet
-                            ? () => unawaited(context.push('/conversation/new?subject=diet'))
-                            : openConversation,
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

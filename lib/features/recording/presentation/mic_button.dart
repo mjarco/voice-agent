@@ -186,7 +186,7 @@ class _MicButtonState extends ConsumerState<MicButton> {
                         : isHfListeningQuiet
                             ? 'Słucham — stuknij, by przerwać'
                             : 'Stuknij, by słuchać';
-    final size = widget.compact ? 48.0 : 96.0;
+    final size = widget.compact ? 46.0 : 96.0;
     final iconSize = widget.compact ? 26.0 : 48.0;
 
     final micButton = GestureDetector(
@@ -204,6 +204,8 @@ class _MicButtonState extends ConsumerState<MicButton> {
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
+              // Aurora's orb glows in its own colour (off-roadmap S2).
+              boxShadow: [BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 18)],
             ),
             child: isTranscribing
                 ? Padding(
