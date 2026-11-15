@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/sync_status.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/features/history/history_notifier.dart';
 
 class TranscriptDetailScreen extends ConsumerWidget {
@@ -145,10 +146,11 @@ class _StatusDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final color = switch (status) {
-      DisplaySyncStatus.sent => Colors.green,
-      DisplaySyncStatus.pending => Colors.orange,
-      DisplaySyncStatus.failed => Colors.red,
+      DisplaySyncStatus.sent => colors.success,
+      DisplaySyncStatus.pending => colors.warning,
+      DisplaySyncStatus.failed => Theme.of(context).colorScheme.error,
     };
 
     return Container(

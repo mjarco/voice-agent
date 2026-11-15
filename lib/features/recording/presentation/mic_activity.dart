@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
@@ -55,10 +56,10 @@ final micActivityProvider = Provider<MicActivity>((ref) => micActivityOf(
     ));
 
 /// The colour of an activity, or null when nothing needs showing.
-Color? micActivityColor(MicActivity a) => switch (a) {
-      MicActivity.recording || MicActivity.hearing => Colors.red.shade600,
-      MicActivity.listening => Colors.orange.shade600,
-      MicActivity.processing => Colors.blueGrey,
+Color? micActivityColor(MicActivity a, AppColors colors) => switch (a) {
+      MicActivity.recording || MicActivity.hearing => colors.micRecording,
+      MicActivity.listening => colors.micListening,
+      MicActivity.processing => colors.micProcessing,
       MicActivity.idle || MicActivity.standby => null,
     };
 
@@ -73,7 +74,7 @@ class MicActivityStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final color = micActivityColor(ref.watch(micActivityProvider));
+    final color = micActivityColor(ref.watch(micActivityProvider), AppColors.of(context));
     return IgnorePointer(
       child: AnimatedContainer(
         key: const Key('mic-activity-strip'),

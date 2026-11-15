@@ -33,6 +33,7 @@ import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/features/recording/presentation/recording_controller.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 import 'package:voice_agent/core/background/background_service_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 
 import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
@@ -234,12 +235,12 @@ void main() {
   tz_data.initializeTimeZones();
 
   group('Record screen in the three modes', () {
-    testWidgets('Off: start label, green, no Stop', (tester) async {
+    testWidgets('Off: start label, teal, no Stop', (tester) async {
       final (c, _) = await _pumpApp(tester);
 
       expect(c.read(micModeProvider), MicMode.off);
       expect(find.text('Stuknij, by słuchać'), findsOneWidget);
-      expect(_buttonColor(tester), Colors.green);
+      expect(_buttonColor(tester), AppColors.light.micIdle);
       expect(_stop, findsNothing);
     });
 
@@ -250,7 +251,7 @@ void main() {
 
       expect(c.read(micModeProvider), MicMode.listening);
       expect(find.text('Słucham — stuknij, by wstrzymać'), findsOneWidget);
-      expect(_buttonColor(tester), Colors.orange);
+      expect(_buttonColor(tester), AppColors.light.micListening);
       expect(_stop, findsOneWidget);
     });
 
@@ -262,7 +263,7 @@ void main() {
 
       expect(c.read(micModeProvider), MicMode.standby);
       expect(find.text('Wstrzymane — stuknij, by słuchać'), findsOneWidget);
-      expect(_buttonColor(tester), Colors.blueGrey);
+      expect(_buttonColor(tester), AppColors.light.micStandby);
       expect(_stop, findsOneWidget);
     });
 

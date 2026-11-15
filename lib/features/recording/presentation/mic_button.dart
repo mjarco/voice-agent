@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
@@ -153,23 +154,24 @@ class _MicButtonState extends ConsumerState<MicButton> {
 
     // Color reflects what the next tap does + what is currently going
     // on under the hood. Red = audio is actively being captured (manual
-    // record OR VAD mid-utterance). Orange = engaged but quiet (gate
+    // record OR VAD mid-utterance). Amber = engaged but quiet (gate
     // open, manual paused, or press-and-hold mid-recording). Grey =
-    // transcribing in progress (button is non-interactive). Green =
-    // idle / available — tap to engage.
+    // transcribing in progress (button is non-interactive). Teal =
+    // idle / available — tap to engage. Slate = paused by the owner.
+    final colors = AppColors.of(context);
     final color = isTranscribing
-        ? Colors.grey
+        ? colors.micProcessing
         : isPaused
-            ? Colors.orange
+            ? colors.micListening
             : isRecording && _isPressAndHold
-                ? Colors.orange
+                ? colors.micListening
                 : (isRecording || isHfCapturing)
-                    ? Colors.red
+                    ? colors.micRecording
                     : (isHfListeningQuiet || isModeListening)
-                        ? Colors.orange
+                        ? colors.micListening
                         : isStandby
-                            ? Colors.blueGrey
-                            : Colors.green;
+                            ? colors.micStandby
+                            : colors.micIdle;
 
     final label = isPaused
         ? 'Pauza — stuknij, by wznowić'
@@ -207,13 +209,13 @@ class _MicButtonState extends ConsumerState<MicButton> {
                 ? Padding(
                     padding: EdgeInsets.all(size * 0.29),
                     child: CircularProgressIndicator(
-                      color: Colors.white,
+                      color: colors.onMic,
                       strokeWidth: 3,
                     ),
                   )
                 : (isPaused || (isStandby && !isRecording))
-                    ? Icon(Icons.pause, color: Colors.white, size: iconSize)
-                    : Icon(Icons.mic, color: Colors.white, size: iconSize),
+                    ? Icon(Icons.pause, color: colors.onMic, size: iconSize)
+                    : Icon(Icons.mic, color: colors.onMic, size: iconSize),
           ),
           if (!widget.compact) ...[
             const SizedBox(height: 16),

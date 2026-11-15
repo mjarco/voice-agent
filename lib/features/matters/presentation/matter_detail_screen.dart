@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/matter.dart';
 import 'package:voice_agent/core/providers/agent_turns_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/features/matters/domain/matters_state.dart';
 import 'package:voice_agent/features/matters/presentation/matter_detail_notifier.dart';
 import 'package:voice_agent/features/matters/presentation/matter_dialogs.dart';
@@ -238,13 +239,15 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
       key: Key('matter-task-${t.id}'),
       direction: t.canTick ? DismissDirection.horizontal : DismissDirection.endToStart,
       background: _SwipeBackground(
-        color: Colors.green.shade600,
+        color: AppColors.of(context).success,
+        onColor: AppColors.of(context).onSuccess,
         icon: Icons.check,
         label: 'Zrobione',
         alignment: Alignment.centerLeft,
       ),
       secondaryBackground: _SwipeBackground(
         color: scheme.error,
+        onColor: scheme.onError,
         icon: Icons.delete_outline,
         label: 'Usuń',
         alignment: Alignment.centerRight,
@@ -634,12 +637,14 @@ class _Header extends StatelessWidget {
 class _SwipeBackground extends StatelessWidget {
   const _SwipeBackground({
     required this.color,
+    required this.onColor,
     required this.icon,
     required this.label,
     required this.alignment,
   });
 
   final Color color;
+  final Color onColor;
   final IconData icon;
   final String label;
   final Alignment alignment;
@@ -653,9 +658,9 @@ class _SwipeBackground extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white),
+          Icon(icon, color: onColor),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white)),
+          Text(label, style: TextStyle(color: onColor)),
         ],
       ),
     );
@@ -674,7 +679,7 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
           const SizedBox(height: 16),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 16),

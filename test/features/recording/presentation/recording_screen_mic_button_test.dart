@@ -34,6 +34,7 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 import 'package:voice_agent/core/background/background_service_provider.dart';
 import 'package:voice_agent/core/session_control/haptic_service.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 
 import '../../../helpers/stub_background_service.dart';
 import '../../../helpers/stub_media_button.dart';
@@ -300,7 +301,7 @@ void main() {
   setUpAll(() => WidgetsFlutterBinding.ensureInitialized());
 
   group('tap-to-engage (P038 — hands-free via mic button)', () {
-    testWidgets('idle → tap → button turns orange (listening)', (tester) async {
+    testWidgets('idle → tap → button turns amber (listening)', (tester) async {
       await pumpApp(tester);
 
       await tester.tap(find.byKey(const Key('record-button')));
@@ -310,7 +311,7 @@ void main() {
         find.byKey(const Key('record-button')),
       );
       final decoration = container.decoration as BoxDecoration;
-      expect(decoration.color, equals(Colors.orange),
+      expect(decoration.color, equals(AppColors.light.micListening),
           reason: 'tap engages hands-free; button reflects gate-open state');
     });
 
@@ -364,7 +365,7 @@ void main() {
         find.byKey(const Key('record-button')),
       );
       final decoration = container.decoration as BoxDecoration;
-      expect(decoration.color, equals(Colors.orange));
+      expect(decoration.color, equals(AppColors.light.micListening));
 
       // Clean up: release gesture.
       await gesture.up();
@@ -493,7 +494,7 @@ void main() {
       final line = tester.widget<Text>(find.byKey(const Key('field-state')));
       expect(line.data, 'Nagrywam 0:00 — puść, by wysłać');
       final bar = tester.widget<AnimatedContainer>(find.byKey(const Key('field-bar')));
-      expect((bar.decoration as BoxDecoration?)?.color, Colors.red.shade600);
+      expect((bar.decoration as BoxDecoration?)?.color, AppColors.light.micRecording);
       expect(tester.getSize(strip).height, 4);
       expect(haptic.calls, ['medium']);
 

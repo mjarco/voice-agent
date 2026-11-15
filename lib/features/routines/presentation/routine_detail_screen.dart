@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/features/routines/domain/routine_detail_state.dart';
 import 'package:voice_agent/features/routines/domain/routine_schedule.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_notifier.dart';
@@ -120,7 +121,7 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
           const SizedBox(height: 16),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 16),
@@ -385,7 +386,7 @@ class _OccurrencesSection extends StatelessWidget {
           ...occurrences.map((occ) => Card(
                 key: Key('occurrence-${occ.id}'),
                 child: ListTile(
-                  leading: _tickIcon(occ.status),
+                  leading: _tickIcon(context, occ.status),
                   title: Text(occ.scheduledFor),
                   subtitle: Text(occ.status.toJson()),
                   trailing: busyActions.contains('undo-${occ.id}')
@@ -429,7 +430,7 @@ class _TickSection extends StatelessWidget {
     if (resolved != null) {
       return ListTile(
         key: const Key('detail-resolved'),
-        leading: _tickIcon(resolved.status),
+        leading: _tickIcon(context, resolved.status),
         title: Text(resolved.status == OccurrenceStatus.skipped
             ? 'Skipped'
             : 'Done'),
@@ -482,13 +483,13 @@ class _TickSection extends StatelessWidget {
   }
 }
 
-Widget _tickIcon(OccurrenceStatus status) => switch (status) {
+Widget _tickIcon(BuildContext context, OccurrenceStatus status) => switch (status) {
       OccurrenceStatus.done =>
-        const Icon(Icons.check_circle, color: Colors.green),
+        Icon(Icons.check_circle, color: AppColors.of(context).success),
       OccurrenceStatus.skipped =>
-        const Icon(Icons.skip_next, color: Colors.orange),
+        Icon(Icons.skip_next, color: AppColors.of(context).warning),
       OccurrenceStatus.pending =>
-        const Icon(Icons.schedule, color: Colors.grey),
+        Icon(Icons.schedule, color: Theme.of(context).colorScheme.onSurfaceVariant),
     };
 
 class _ActionsSection extends StatelessWidget {

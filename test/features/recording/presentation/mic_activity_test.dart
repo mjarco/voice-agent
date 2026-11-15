@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
@@ -35,7 +36,7 @@ void main() {
   test('standby and off show nothing', () {
     expect(micActivityOf(const RecordingState.idle(), idleHf, MicMode.standby), MicActivity.standby);
     expect(micActivityOf(const RecordingState.idle(), idleHf, MicMode.off), MicActivity.idle);
-    expect(micActivityColor(MicActivity.standby), isNull);
-    expect(micActivityColor(MicActivity.idle), isNull);
+    expect(micActivityColor(MicActivity.standby, AppColors.light), isNull);
+    expect(micActivityColor(MicActivity.idle, AppColors.light), isNull);
   });
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/today.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/features/today/presentation/day_story_view.dart';
 import 'package:voice_agent/features/today/presentation/today_notifier.dart';
@@ -291,13 +292,15 @@ class _TaskRow extends ConsumerWidget {
     return Dismissible(
       key: Key('today-task-${item.key}'),
       background: _SwipeBackground(
-        color: Colors.green.shade600,
+        color: AppColors.of(context).success,
+        onColor: AppColors.of(context).onSuccess,
         icon: Icons.check,
         label: 'Zrobione',
         alignment: Alignment.centerLeft,
       ),
       secondaryBackground: _SwipeBackground(
         color: scheme.outline,
+        onColor: scheme.surface,
         icon: Icons.redo,
         label: 'Pomiń',
         alignment: Alignment.centerRight,
@@ -328,12 +331,14 @@ class _TaskRow extends ConsumerWidget {
 class _SwipeBackground extends StatelessWidget {
   const _SwipeBackground({
     required this.color,
+    required this.onColor,
     required this.icon,
     required this.label,
     required this.alignment,
   });
 
   final Color color;
+  final Color onColor;
   final IconData icon;
   final String label;
   final Alignment alignment;
@@ -347,9 +352,9 @@ class _SwipeBackground extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white),
+          Icon(icon, color: onColor),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white)),
+          Text(label, style: TextStyle(color: onColor)),
         ],
       ),
     );

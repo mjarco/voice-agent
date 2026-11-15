@@ -12,6 +12,7 @@ import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_version_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -183,19 +184,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(width: 12),
                 if (_testStatus == _TestStatus.success)
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 20),
-                      SizedBox(width: 4),
-                      Text('Connection successful'),
+                      Icon(Icons.check_circle, color: AppColors.of(context).success, size: 20),
+                      const SizedBox(width: 4),
+                      const Text('Connection successful'),
                     ],
                   ),
                 if (_testStatus == _TestStatus.error)
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.error, color: Colors.red, size: 20),
-                      SizedBox(width: 4),
-                      Text('Could not reach server'),
+                      Icon(Icons.error, color: Theme.of(context).colorScheme.error, size: 20),
+                      const SizedBox(width: 4),
+                      const Text('Could not reach server'),
                     ],
                   ),
               ],

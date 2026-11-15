@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/sync_status.dart';
 import 'package:voice_agent/core/models/transcript_with_status.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/features/history/history_notifier.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget {
@@ -41,11 +42,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('History')),
       body: state.items.isEmpty && !state.isLoading
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.history, size: 64, color: Colors.grey),
+                  Icon(Icons.history, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   SizedBox(height: 16),
                   Text('No transcripts yet'),
                 ],
@@ -125,10 +126,11 @@ class _StatusDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final color = switch (status) {
-      DisplaySyncStatus.sent => Colors.green,
-      DisplaySyncStatus.pending => Colors.orange,
-      DisplaySyncStatus.failed => Colors.red,
+      DisplaySyncStatus.sent => colors.success,
+      DisplaySyncStatus.pending => colors.warning,
+      DisplaySyncStatus.failed => Theme.of(context).colorScheme.error,
     };
 
     return Container(

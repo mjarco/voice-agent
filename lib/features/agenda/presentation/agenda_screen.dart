@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/providers/routine_changes_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_state.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_notifier.dart';
@@ -130,20 +131,20 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 ? ListView(
                     children: [
                       const SizedBox(height: 120),
-                      const Center(
+                      Center(
                         child: Column(
                           children: [
                             Icon(
                               Icons.check_circle_outline,
                               size: 64,
-                              color: Colors.grey,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                             SizedBox(height: 16),
                             Text(
                               'No items for this date',
                               style: TextStyle(
                                 fontSize: 16,
-                                color: Colors.grey,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -217,7 +218,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
           const SizedBox(height: 16),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 16),
@@ -436,10 +437,10 @@ class _RoutineItemTile extends StatelessWidget {
       key: Key('routine-dismiss-${item.routineId}'),
       direction: DismissDirection.endToStart,
       background: Container(
-        color: Colors.orange,
+        color: AppColors.of(context).warning,
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 16),
-        child: const Text('Skip', style: TextStyle(color: Colors.white)),
+        child: Text('Skip', style: TextStyle(color: AppColors.of(context).onWarning)),
       ),
       confirmDismiss: (_) async {
         onSkip();
@@ -448,10 +449,10 @@ class _RoutineItemTile extends StatelessWidget {
       child: ExpansionTile(
         key: Key('routine-item-${item.routineId}'),
         leading: item.overdue
-            ? const Icon(Icons.warning, color: Colors.orange)
+            ? Icon(Icons.warning, color: AppColors.of(context).warning)
             : Icon(
                 item.isOneOff ? Icons.task_alt : Icons.repeat,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         title: Text(item.routineName),
         subtitle: Wrap(
@@ -526,7 +527,7 @@ class _TickedTile extends StatelessWidget {
       key: Key('ticked-${item.routineId}-${item.scheduledFor}'),
       leading: Icon(
         skipped ? Icons.skip_next : Icons.check,
-        color: Colors.grey,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
       title: Text(item.routineName),
       subtitle: Text(

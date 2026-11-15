@@ -95,13 +95,13 @@ class _RoutinesSectionState extends ConsumerState<RoutinesSection> {
           ],
         ];
     if (sections.isEmpty) {
-      return const [
+      return [
         Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Text(
             'No routines or tasks yet',
-            key: Key('routines-empty-state'),
-            style: TextStyle(color: Colors.grey),
+            key: const Key('routines-empty-state'),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ),
       ];

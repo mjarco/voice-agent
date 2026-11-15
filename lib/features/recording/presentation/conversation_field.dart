@@ -7,6 +7,7 @@ import 'package:voice_agent/core/models/agent_action.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
@@ -61,12 +62,13 @@ class ConversationField extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     // The whole bar shows the mic's state: a held button is under the finger.
     final activity = ref.watch(micActivityProvider);
+    final colors = AppColors.of(context);
     final barColor = activity.capturing
-        ? micActivityColor(activity)
+        ? micActivityColor(activity, colors)
         : activity == MicActivity.listening
-            ? Colors.orange.withValues(alpha: 0.18)
+            ? colors.micListening.withValues(alpha: 0.18)
             : null;
-    final onBar = activity.capturing ? Colors.white : null;
+    final onBar = activity.capturing ? colors.onMic : null;
 
     void openConversation() {
       final id = ref.read(sessionIdCoordinatorProvider).currentConversationId;
