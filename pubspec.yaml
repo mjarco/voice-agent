@@ -54,3 +54,16 @@ flutter:
   assets:
     - assets/models/silero_vad_v5.onnx
     - assets/audio/
+
+  # Sora, SIL Open Font License 1.1 (assets/fonts/OFL.txt); static weights
+  # cut from the variable font of google/fonts (off-roadmap S1).
+  fonts:
+    - family: Sora
+      fonts:
+        - asset: assets/fonts/Sora-Regular.ttf
+        - asset: assets/fonts/Sora-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Sora-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Sora-Bold.ttf
+          weight: 700

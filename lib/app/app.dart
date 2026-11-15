@@ -7,6 +7,7 @@ import 'package:voice_agent/core/home_widget/home_widget_provider.dart';
 import 'package:voice_agent/core/home_widget/widget_tap_channel.dart';
 import 'package:voice_agent/core/providers/deep_link_providers.dart';
 import 'package:voice_agent/core/subject/utterance_subject.dart';
+import 'package:voice_agent/core/theme/app_theme.dart';
 import 'package:voice_agent/features/location_log/presentation/location_log_sync.dart';
 import 'package:voice_agent/features/pins/presentation/pins_providers.dart';
 import 'package:voice_agent/features/places/presentation/places_sync.dart';
@@ -162,10 +163,9 @@ class _AppState extends ConsumerState<App> {
     return MaterialApp.router(
       title: isDev ? 'Voice Agent DEV' : 'Voice Agent',
       scaffoldMessengerKey: widget.scaffoldMessengerKey,
-      theme: ThemeData(
-        colorSchemeSeed: isDev ? Colors.orange : Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.system,
       routerConfig: _router,
       // The mic's state over every screen (V1 device check, the owner's
       // remark of 2026-11-15): a strip at the top edge, under the status bar.
