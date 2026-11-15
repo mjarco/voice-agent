@@ -1,4 +1,4 @@
-.PHONY: deps vad-model analyze test verify clean setup doctor env run-web run-ios run-ios-dev run-macos simulator install-ios install-ios-dev install-ios-dev-debug install-android install-android-dev help
+.PHONY: deps vad-model analyze test verify test-changed verify-changed test-times clean setup doctor env run-web run-ios run-ios-dev run-macos simulator install-ios install-ios-dev install-ios-dev-debug install-android install-android-dev tag help
 
 MODEL_DIR := assets/models
 
@@ -41,8 +41,19 @@ analyze:
 test:
 	flutter test
 
-## verify: Run all checks (analyze + test)
+## verify: Run all checks (analyze + test) — before a PR goes ready and before every push to it
 verify: analyze test
+
+## test-changed: Run the tests of the modules this branch touches (scripts/test-changed.sh; BASE=<ref>)
+test-changed:
+	@scripts/test-changed.sh
+
+## verify-changed: The dev loop: analyze + the tests of the touched modules
+verify-changed: analyze test-changed
+
+## test-times: The full suite with the slowest test files listed (TOP=N, default 20)
+test-times:
+	@flutter test --reporter json | scripts/test-times.py --top $(or $(TOP),20)
 
 # ──────────────────────────────────────────────
 # Environment setup
@@ -153,6 +164,10 @@ install-ios-dev-debug:
 # adb install -r keeps the app's data (settings, token); flutter install
 # uninstalls the old version first and wipes it.
 ADB := $(or $(ANDROID_HOME),$(HOME)/Android/Sdk)/platform-tools/adb
+# The Pixel is arm64, so the APK carries only arm64-v8a: one Dart AOT
+# compilation instead of three and ~40 MB instead of ~120 MB (#423). For a
+# universal APK: ANDROID_TARGET=android-arm,android-arm64,android-x64
+ANDROID_TARGET ?= android-arm64
 ANDROID_DEVICE_IDS = flutter devices 2>/dev/null | awk -F' *• *' '$$3 ~ /^android/{print $$2}'
 ANDROID_DEVICE_CHECK = IDS=$$($(ANDROID_DEVICE_IDS)); COUNT=$$(echo "$$IDS" | grep -c .); \
 	if [ "$$COUNT" -ne 1 ]; then \
@@ -164,7 +179,7 @@ ANDROID_DEVICE_CHECK = IDS=$$($(ANDROID_DEVICE_IDS)); COUNT=$$(echo "$$IDS" | gr
 install-android: vad-model
 	@$(ANDROID_DEVICE_CHECK); \
 	echo "Building stable (release)..."; \
-	flutter build apk --flavor stable --release $(DART_DEFINE_FLAG) && \
+	flutter build apk --flavor stable --release --target-platform $(ANDROID_TARGET) $(DART_DEFINE_FLAG) && \
 	echo "Installing on: $$DEVICE_ID" && \
 	$(ADB) -s "$$DEVICE_ID" install -r build/app/outputs/flutter-apk/app-stable-release.apk
 
@@ -172,9 +187,29 @@ install-android: vad-model
 install-android-dev: vad-model
 	@$(ANDROID_DEVICE_CHECK); \
 	echo "Building dev (release)..."; \
-	flutter build apk --flavor dev --release $(DART_DEFINE_FLAG) && \
+	flutter build apk --flavor dev --release --target-platform $(ANDROID_TARGET) $(DART_DEFINE_FLAG) && \
 	echo "Installing on: $$DEVICE_ID" && \
 	$(ADB) -s "$$DEVICE_ID" install -r build/app/outputs/flutter-apk/app-dev-release.apk
+
+## tag: Tag main's HEAD with pubspec.yaml's version and push the tag (MSG="vX.Y.Z — …" overrides the note)
+# Run after a version-bearing PR merged, in an up-to-date main checkout. The
+# default note is the merge commit's subject without its "(x.y.z)" and "(#N)".
+# A version that is already tagged is left alone (a build-number-only bump).
+tag:
+	@set -e; \
+	V=$$(sed -n 's/^version: *\([0-9]*\.[0-9]*\.[0-9]*\)+.*/\1/p' pubspec.yaml); \
+	if [ -z "$$V" ]; then echo "ERROR: no MAJOR.MINOR.PATCH+BUILD version in pubspec.yaml"; exit 1; fi; \
+	git fetch -q origin main --tags; \
+	if [ "$$(git rev-parse HEAD)" != "$$(git rev-parse origin/main)" ]; then \
+	echo "ERROR: HEAD is not origin/main; tag from an up-to-date main checkout"; exit 1; fi; \
+	if git rev-parse -q --verify "refs/tags/v$$V" >/dev/null; then \
+	echo "v$$V is already tagged at $$(git rev-list -n1 "v$$V" | cut -c1-7); nothing to do"; exit 0; fi; \
+	SUBJ=$$(git log -1 --format=%s | sed -E 's/ \(#[0-9]+\)$$//; s/ \([0-9]+\.[0-9]+\.[0-9]+\)$$//' \
+	| awk '{print tolower(substr($$0,1,1)) substr($$0,2)}'); \
+	NOTE="$${MSG:-v$$V — $$SUBJ}"; \
+	git tag -a "v$$V" -m "$$NOTE"; \
+	git push -q origin "v$$V"; \
+	echo "tagged v$$V at $$(git rev-parse --short HEAD): $$NOTE"
 
 ## devices: List available devices
 devices:
