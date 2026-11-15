@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/today.dart';
 import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/widgets/app_bar_actions.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/features/today/presentation/day_story_view.dart';
 import 'package:voice_agent/features/today/presentation/today_notifier.dart';
 import 'package:voice_agent/features/today/presentation/today_providers.dart';
@@ -36,16 +37,18 @@ class TodayScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        // The day's title opens the day's story and, from there, any other day.
-        title: GestureDetector(
-          onTap: () => unawaited(open('/day/${dayOf(clock())}')),
-          child: Text(view?.title ?? 'Dziś', key: const Key('today-title')),
-        ),
-        actions: [AppBarActions(onReturn: () => unawaited(notifier.refresh()))],
-      ),
-      body: Column(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
         children: [
+          // Aurora's header (off-roadmap S2): the day's date over a large
+          // "Dziś", the bar's actions as round glass buttons. The date opens
+          // the day's story and, from there, any other day.
+          _Header(
+            title: view?.title ?? '',
+            onTitle: () => unawaited(open('/day/${dayOf(clock())}')),
+            onReturn: () => unawaited(notifier.refresh()),
+          ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: notifier.refresh,
@@ -53,7 +56,7 @@ class TodayScreen extends ConsumerWidget {
                   ? _Empty(state: state, onRetry: notifier.refresh)
                   : ListView(
                       key: const Key('today-list'),
-                      padding: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.only(top: 4, bottom: 16),
                       children: [
                         if (state.error != null) _ErrorLine(state.error!),
                         DayStoryBlock(now: clock()),
@@ -66,6 +69,58 @@ class TodayScreen extends ConsumerWidget {
             ),
           ),
           ?field,
+        ],
+      ),
+      ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.title, required this.onTitle, required this.onReturn});
+
+  final String title;
+  final VoidCallback onTitle;
+  final VoidCallback onReturn;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 14, 12, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: onTitle,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    key: const Key('today-title'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    'Dziś',
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      height: 1.05,
+                      letterSpacing: -1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AppBarActions(onReturn: onReturn),
         ],
       ),
     );
@@ -121,26 +176,6 @@ class _ErrorLine extends StatelessWidget {
   }
 }
 
-class _Heading extends StatelessWidget {
-  const _Heading(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              letterSpacing: 1.2,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-      ),
-    );
-  }
-}
-
 // ── Jedzenie ─────────────────────────────────────────────────────────────────
 
 class _FoodBlock extends StatelessWidget {
@@ -151,44 +186,92 @@ class _FoodBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final colors = AppColors.of(context);
     final warned = food.warning != FoodWarning.none;
     final next = food.nextMeal;
     final nudge = food.nudge;
+    final left = food.leftKcal;
+    final max = food.kcalMax;
+    final muted = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w500,
+      color: scheme.onSurfaceVariant,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _Heading('JEDZENIE'),
-        Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12),
-          color: warned ? scheme.errorContainer : null,
+        const SizedBox(height: 6),
+        GlassCard(
+          key: const Key('today-food-line'),
+          fill: warned ? colors.warningContainer.withValues(alpha: 0.85) : null,
+          onTap: () => open(food.hasTarget ? '/diet' : '/diet/target'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ListTile(
-                key: const Key('today-food-line'),
-                title: Text(
-                  food.line,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: warned ? scheme.onErrorContainer : null,
+              Row(
+                children: [
+                  Expanded(child: Text('Jedzenie', style: muted)),
+                  if (max != null) Text('z $max', style: muted),
+                ],
+              ),
+              if (food.hasTarget && left != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '$left',
+                      key: const Key('today-kcal-left'),
+                      style: theme.textTheme.displayLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 58,
+                        height: 1,
+                        letterSpacing: -2,
+                        color: warned ? colors.onWarningContainer : null,
                       ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text('kcal zostało', style: muted),
+                  ],
                 ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => open(food.hasTarget ? '/diet' : '/diet/target'),
+                if (max != null && max > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: _KcalBar(eaten: ((max - left) / max).clamp(0.0, 1.0), warned: warned),
+                  ),
+              ],
+              // The sentence of personal-agent: the number in words, or the
+              // warning under the reserve.
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  food.line,
+                  style: warned
+                      ? theme.textTheme.bodyMedium?.copyWith(
+                          color: colors.onWarningContainer,
+                          fontWeight: FontWeight.w600,
+                        )
+                      : muted?.copyWith(fontWeight: FontWeight.w400),
+                ),
               ),
               if (next != null)
-                ListTile(
+                InkWell(
                   key: const Key('today-next-meal'),
-                  dense: true,
-                  title: Text('${next.slotLabel} z jadłospisu: ${next.name}'),
-                  subtitle: Text('${next.kcal} kcal'),
-                  trailing: const Icon(Icons.chevron_right),
                   onTap: () => open('/diet/menu'),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Następny: ${next.slotLabel.toLowerCase()} · ${next.name} · ${next.kcal}',
+                      style: muted?.copyWith(fontWeight: FontWeight.w400),
+                    ),
+                  ),
                 ),
               if (nudge != null)
                 Padding(
                   key: const Key('today-nudge'),
-                  padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+                  padding: const EdgeInsets.only(top: 4),
                   child: Row(
                     children: [
                       Expanded(child: Text(nudge.text)),
@@ -207,6 +290,42 @@ class _FoodBlock extends StatelessWidget {
   }
 }
 
+/// How much of the day's top is eaten, in the accent's gradient.
+class _KcalBar extends StatelessWidget {
+  const _KcalBar({required this.eaten, required this.warned});
+
+  final double eaten;
+  final bool warned;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: SizedBox(
+        height: 8,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: colors.chip),
+            FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: eaten,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: warned ? [colors.warning, colors.warning] : colors.accentGradient,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Dziś: meetings and tasks ─────────────────────────────────────────────────
 
 class _AgendaBlock extends ConsumerWidget {
@@ -220,22 +339,25 @@ class _AgendaBlock extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _Heading('DZIŚ'),
-        if (agenda.line.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(agenda.line, key: const Key('today-nothing')),
-          ),
-        for (final item in agenda.items)
-          item.isTask ? _TaskRow(item: item, open: open) : _MeetingRow(item: item),
-        ListTile(
-          key: const Key('today-all-agenda'),
-          dense: true,
-          title: Text(agenda.moreTasks > 0
-              ? 'Cała agenda · jeszcze ${agenda.moreTasks}'
-              : 'Cała agenda'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.go('/agenda'),
+        const SectionLabel('DZIŚ'),
+        GlassList(
+          children: [
+            if (agenda.line.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Text(agenda.line, key: const Key('today-nothing')),
+              ),
+            for (final item in agenda.items)
+              item.isTask ? _TaskRow(item: item, open: open) : _MeetingRow(item: item),
+            GlassRow(
+              key: const Key('today-all-agenda'),
+              title: agenda.moreTasks > 0
+                  ? 'Cała agenda · jeszcze ${agenda.moreTasks}'
+                  : 'Cała agenda',
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.go('/agenda'),
+            ),
+          ],
         ),
       ],
     );
@@ -249,11 +371,7 @@ class _MeetingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      leading: SizedBox(width: 72, child: Text(item.time)),
-      title: Text(item.title),
-    );
+    return GlassRow(leading: GlassPill(item.time), title: item.title);
   }
 }
 
@@ -309,18 +427,11 @@ class _TaskRow extends ConsumerWidget {
           ? act(item.done, 'Zrobione')
           : act(item.skip, 'Pominięte'),
       onDismissed: (_) => notifier.drop(item.key),
-      child: ListTile(
-        dense: true,
-        leading: SizedBox(
-          width: 72,
-          child: Text(
-            item.overdue ? '!' : item.time,
-            style: item.overdue
-                ? TextStyle(color: scheme.error, fontWeight: FontWeight.bold)
-                : null,
-          ),
-        ),
-        title: Text(item.title),
+      child: GlassRow(
+        leading: item.overdue
+            ? const GlassPill('zaległe', warning: true)
+            : GlassPill(item.time.isEmpty ? '·' : item.time),
+        title: item.title,
         trailing: item.note.isEmpty ? null : Text(item.note),
         onTap: item.routineId.isEmpty ? null : () => open('/routine/${item.routineId}'),
       ),
@@ -375,20 +486,22 @@ class _MattersBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _Heading('SPRAWY W TOKU · ${matters.inProgress}'),
-        for (final m in matters.items)
-          ListTile(
-            dense: true,
-            title: Text(m.title),
-            subtitle: m.line.isEmpty ? null : Text(m.line),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => open('/matter/${m.id}'),
-          ),
-        ListTile(
-          dense: true,
-          title: Text(matters.more > 0 ? 'Wszystkie · jeszcze ${matters.more}' : 'Wszystkie'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.go('/matters'),
+        SectionLabel('SPRAWY W TOKU · ${matters.inProgress}'),
+        GlassList(
+          children: [
+            for (final m in matters.items)
+              GlassRow(
+                title: m.title,
+                subtitle: m.line,
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => open('/matter/${m.id}'),
+              ),
+            GlassRow(
+              title: matters.more > 0 ? 'Wszystkie · jeszcze ${matters.more}' : 'Wszystkie',
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.go('/matters'),
+            ),
+          ],
         ),
       ],
     );
@@ -408,13 +521,16 @@ class _ShoppingLine extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _Heading('ZAKUPY'),
-        ListTile(
-          key: const Key('today-shopping'),
-          dense: true,
-          title: Text(shopping.line),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.go('/shopping'),
+        const SectionLabel('ZAKUPY'),
+        GlassList(
+          children: [
+            GlassRow(
+              key: const Key('today-shopping'),
+              title: shopping.line,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.go('/shopping'),
+            ),
+          ],
         ),
       ],
     );
