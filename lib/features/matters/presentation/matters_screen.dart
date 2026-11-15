@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/matter.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/widgets/app_bar_actions.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/features/matters/domain/matters_state.dart';
 import 'package:voice_agent/features/matters/presentation/matter_dialogs.dart';
 import 'package:voice_agent/features/matters/presentation/matters_notifier.dart';
@@ -45,12 +47,19 @@ class MattersScreen extends ConsumerWidget {
         child: const Icon(Icons.add),
       ),
       body: switch (state) {
-        MattersListLoading() =>
-          const Center(child: CircularProgressIndicator()),
-        MattersListLoaded(:final proposed, :final matters) =>
-          _list(context, notifier, proposed, matters),
-        MattersListError(:final message) =>
-          _ErrorState(message: message, onRetry: notifier.refresh),
+        MattersListLoading() => const Center(
+          child: CircularProgressIndicator(),
+        ),
+        MattersListLoaded(:final proposed, :final matters) => _list(
+          context,
+          notifier,
+          proposed,
+          matters,
+        ),
+        MattersListError(:final message) => _ErrorState(
+          message: message,
+          onRetry: notifier.refresh,
+        ),
       },
     );
   }
@@ -73,7 +82,7 @@ class MattersScreen extends ConsumerWidget {
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         // Room for the "+" button, so it covers no row.
-        padding: const EdgeInsets.only(top: 4, bottom: 88),
+        padding: const EdgeInsets.only(top: 4, bottom: 168),
         children: [
           if (proposed.isEmpty && matters.isEmpty) const _EmptyState(),
           if (proposed.isNotEmpty) ...[
@@ -86,14 +95,21 @@ class MattersScreen extends ConsumerWidget {
                 key: Key('matter-proposed-${m.id}'),
                 matter: m,
                 onTap: () => open(m),
-                onAccept: (status) =>
-                    _run(context, 'przyjąć', () => notifier.accept(m.id, status),
-                        notifier),
+                onAccept: (status) => _run(
+                  context,
+                  'przyjąć',
+                  () => notifier.accept(m.id, status),
+                  notifier,
+                ),
                 onDrop: () async {
                   if (await confirmDrop(context) != true) return;
                   if (!context.mounted) return;
-                  await _run(context, 'odrzucić', () => notifier.drop(m.id),
-                      notifier);
+                  await _run(
+                    context,
+                    'odrzucić',
+                    () => notifier.drop(m.id),
+                    notifier,
+                  );
                 },
               ),
           ],
@@ -135,11 +151,14 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: const EdgeInsets.fromLTRB(24, 18, 16, 8),
       child: Text(
         text,
-        style: theme.textTheme.titleSmall
-            ?.copyWith(color: theme.colorScheme.primary),
+        style: theme.textTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -161,28 +180,44 @@ class _ProposedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            title: Text(matter.title),
-            subtitle: matter.lastEntry.isEmpty
-                ? null
-                : Text(
-                    matter.lastEntry,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+    // A proposal is glass with a dashed accent border (off-roadmap S3).
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: CustomPaint(
+        foregroundPainter: _DashedBorder(
+          color: Theme.of(context).colorScheme.primary,
+          radius: 24,
+        ),
+        child: GlassSurface(
+          radius: 24,
+          shadow: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ListTile(
+                title: Text(
+                  matter.title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-            onTap: onTap,
+                ),
+                subtitle: matter.lastEntry.isEmpty
+                    ? null
+                    : Text(
+                        matter.lastEntry,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                onTap: onTap,
+              ),
+              ProposedActions(
+                idSuffix: matter.id,
+                onAccept: onAccept,
+                onDrop: onDrop,
+              ),
+            ],
           ),
-          ProposedActions(
-            idSuffix: matter.id,
-            onAccept: onAccept,
-            onDrop: onDrop,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -206,26 +241,49 @@ class _MatterTile extends StatelessWidget {
     final detail = matter.nextStep.isNotEmpty
         ? 'Następny krok: ${matter.nextStep}'
         : matter.lastEntry;
-    // A card per matter, as the proposed ones have, so the rows read apart.
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        title: Text(matter.title),
-        subtitle: Text(
-          [matter.status.label, if (detail.isNotEmpty) detail].join(' · '),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: matter.standingStill
-            ? Text(
-                standingStillLabel(matter.daysStill(now)),
-                key: Key('matter-still-${matter.id}'),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.error),
-              )
-            : null,
-        onTap: onTap,
+    final muted = theme.colorScheme.onSurfaceVariant;
+    // A glass card per matter, so the matters read apart (off-roadmap S3).
+    return GlassCard(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  matter.title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  [
+                    matter.status.label,
+                    if (detail.isNotEmpty) detail,
+                  ].join(' · '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                ),
+              ],
+            ),
+          ),
+          if (matter.standingStill) ...[
+            const SizedBox(width: 8),
+            Text(
+              standingStillLabel(matter.daysStill(now)),
+              key: Key('matter-still-${matter.id}'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.of(context).warning,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -233,10 +291,10 @@ class _MatterTile extends StatelessWidget {
 
 /// "stoi od N dni", or "stoi" when the server sent no time to count from.
 String standingStillLabel(int? days) => switch (days) {
-      null => 'stoi',
-      1 => 'stoi od 1 dnia',
-      final n => 'stoi od $n dni',
-    };
+  null => 'stoi',
+  1 => 'stoi od 1 dnia',
+  final n => 'stoi od $n dni',
+};
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
@@ -266,7 +324,11 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Theme.of(context).colorScheme.error,
+          ),
           const SizedBox(height: 16),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 16),
@@ -279,4 +341,36 @@ class _ErrorState extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A dashed rounded border: a proposal not yet taken.
+class _DashedBorder extends CustomPainter {
+  _DashedBorder({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(radius),
+        ).deflate(0.75),
+      );
+    for (final metric in path.computeMetrics()) {
+      for (var d = 0.0; d < metric.length; d += 10) {
+        canvas.drawPath(metric.extractPath(d, d + 6), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorder old) =>
+      old.color != color || old.radius != radius;
 }
