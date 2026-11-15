@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:voice_agent/core/config/app_config.dart';
 import 'package:voice_agent/core/config/app_config_service.dart';
 import 'package:voice_agent/core/config/vad_config.dart';
 
@@ -25,6 +26,28 @@ void main() {
       expect(config.autoSend, isTrue);
       expect(config.language, 'auto');
       expect(config.keepHistory, isTrue);
+    });
+
+    test('background motion: on when absent, off kept', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final service = AppConfigService(prefs: prefs);
+
+      expect((await service.load()).backgroundMotion, isTrue);
+      await service.saveBackgroundMotion(false);
+      expect((await service.load()).backgroundMotion, isFalse);
+    });
+
+    test('appearance: system when absent, light and dark round-trip, system clears', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final service = AppConfigService(prefs: prefs);
+
+      expect((await service.load()).appearance, AppearanceMode.system);
+      await service.saveAppearance(AppearanceMode.dark);
+      expect((await service.load()).appearance, AppearanceMode.dark);
+      await service.saveAppearance(AppearanceMode.light);
+      expect((await service.load()).appearance, AppearanceMode.light);
+      await service.saveAppearance(AppearanceMode.system);
+      expect(prefs.containsKey('appearance'), isFalse);
     });
 
     test('saveApiUrl then load round-trips', () async {

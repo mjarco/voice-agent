@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 import 'package:voice_agent/core/providers/shopping_list_changes_provider.dart';
 import 'package:voice_agent/core/widgets/app_bar_actions.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/core/widgets/shopping_proposal_card.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_models.dart';
 import 'package:voice_agent/features/shopping/domain/shopping_state.dart';
@@ -179,7 +180,7 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
 
   Widget _buildForm() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
           Expanded(
@@ -194,7 +195,6 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
                 hintText: 'Add an item',
                 counterText: '',
                 isDense: true,
-                border: OutlineInputBorder(),
               ),
             ),
           ),
@@ -268,8 +268,10 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+          // A glass segmented control (off-roadmap S3, the theme's).
           child: SegmentedButton<ShoppingView>(
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(value: ShoppingView.toBuy, label: Text('To buy')),
               ButtonSegment(value: ShoppingView.bought, label: Text('Bought')),
@@ -298,6 +300,12 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
               ),
           ],
         ),
+        if (state.placeTypes.isNotEmpty)
+          _NearShop(
+            labels: [
+              for (final t in state.placeTypes) state.catalogue.label(t),
+            ],
+          ),
         Expanded(child: _buildList(state, notifier)),
       ],
     );
@@ -329,16 +337,20 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
                 ),
               ],
             )
-          : ListView.builder(
+          : ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: proposals.length + state.items.length,
-              itemBuilder: (context, index) => index < proposals.length
-                  ? _buildProposal(proposals[index], notifier)
-                  : _buildItem(
-                      state.items[index - proposals.length],
-                      state.catalogue,
-                      notifier,
-                    ),
+              // Room for the floating tab bar.
+              padding: const EdgeInsets.only(top: 6, bottom: 120),
+              children: [
+                for (final row in proposals) _buildProposal(row, notifier),
+                // The items on one glass card (off-roadmap S3).
+                GlassList(
+                  children: [
+                    for (final item in state.items)
+                      _buildItem(item, state.catalogue, notifier),
+                  ],
+                ),
+              ],
             ),
     );
   }
@@ -368,7 +380,11 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
           : IconButton(
               key: Key('shopping-bought-${item.id}'),
               tooltip: 'Bought',
-              icon: const Icon(Icons.check_box_outline_blank),
+              // A round check box in the accent, as the mockups.
+              icon: Icon(
+                Icons.radio_button_unchecked,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               onPressed: busy
                   ? null
                   : () => _act(item.id, () => notifier.markBought(item.id)),
@@ -398,11 +414,41 @@ class _ChipRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
           for (final chip in children)
             Padding(padding: const EdgeInsets.only(right: 6), child: chip),
+        ],
+      ),
+    );
+  }
+}
+
+/// Being near a shop: a small glass card with a pin and the shop's types,
+/// the ones the filter shows (off-roadmap S3, the mockups' card).
+class _NearShop extends StatelessWidget {
+  const _NearShop({required this.labels});
+
+  final List<String> labels;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GlassCard(
+      key: const Key('shopping-near-shop'),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(Icons.place_outlined, size: 20, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Near: ${labels.join(', ')}',
+              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+            ),
+          ),
         ],
       ),
     );
@@ -514,7 +560,6 @@ class _ItemSheetState extends State<_ItemSheet> {
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(
                 labelText: 'Item',
-                border: OutlineInputBorder(),
                 counterText: '',
               ),
             ),

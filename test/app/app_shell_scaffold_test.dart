@@ -327,7 +327,7 @@ void main() {
     await controller.startSession();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.calendar_today));
+    await tester.tap(find.byIcon(Icons.event_outlined));
     await tester.pumpAndSettle();
     await tester.tap(todayNavIcon);
     await tester.pumpAndSettle();
@@ -348,7 +348,7 @@ void main() {
   testWidgets('Back on another tab goes to Dziś, not out of the app', (tester) async {
     await tester.pumpWidget(ProviderScope(overrides: _baseOverrides, child: const App()));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.calendar_today));
+    await tester.tap(find.byIcon(Icons.event_outlined));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('field-mic')), findsNothing);
     final popped = await tester.binding.handlePopRoute();
@@ -378,7 +378,7 @@ void main() {
     await controller.startSession();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.calendar_today));
+    await tester.tap(find.byIcon(Icons.event_outlined));
     await tester.pumpAndSettle();
     await tester.tap(todayNavIcon);
     await tester.pumpAndSettle();
@@ -425,7 +425,7 @@ void main() {
     testWidgets('the calories open the diet\'s day over Dziś; Back lands '
         'on Dziś, read again', (tester) async {
       final warm = await pump(tester);
-      await tester.tap(find.byIcon(Icons.calendar_today));
+      await tester.tap(find.byIcon(Icons.event_outlined));
       await tester.pumpAndSettle();
 
       warm.add(WidgetTap.food);
@@ -455,7 +455,7 @@ void main() {
     testWidgets('the mic opens Dziś and asks to listen, once per tap',
         (tester) async {
       final warm = await pump(tester);
-      await tester.tap(find.byIcon(Icons.calendar_today));
+      await tester.tap(find.byIcon(Icons.event_outlined));
       await tester.pumpAndSettle();
 
       // A warm tap comes through onNewIntent, before the activity resumes.

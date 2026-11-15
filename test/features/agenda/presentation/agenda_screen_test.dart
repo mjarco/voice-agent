@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
@@ -280,7 +281,7 @@ void main() {
     testWidgets('previous day is disabled on today', (tester) async {
       await _pumpScreen(tester);
 
-      final prev = tester.widget<IconButton>(
+      final prev = tester.widget<GlassIconButton>(
         find.byKey(const Key('agenda-prev-day')),
       );
       expect(prev.onPressed, isNull);
@@ -305,7 +306,7 @@ void main() {
       expect(label(), todayText);
       expect(
         tester
-            .widget<IconButton>(find.byKey(const Key('agenda-prev-day')))
+            .widget<GlassIconButton>(find.byKey(const Key('agenda-prev-day')))
             .onPressed,
         isNull,
       );

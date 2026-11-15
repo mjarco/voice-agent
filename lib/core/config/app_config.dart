@@ -1,5 +1,9 @@
 import 'package:voice_agent/core/config/vad_config.dart';
 
+/// Light or dark, as set in Ustawienia → Wygląd (off-roadmap S1). [system]
+/// until the owner picks one: the app follows the phone's mode.
+enum AppearanceMode { system, light, dark }
+
 /// Sentinel object used to distinguish "not provided" from "explicitly null"
 /// in [AppConfig.copyWith].
 const _sentinel = Object();
@@ -17,6 +21,8 @@ class AppConfig {
     this.audioFeedbackEnabled = true,
     this.devTelemetryEnabled = true,
     this.otelCollectorUrl = defaultOtelCollectorUrl,
+    this.appearance = AppearanceMode.system,
+    this.backgroundMotion = true,
   });
 
   final String? apiUrl;
@@ -35,6 +41,11 @@ class AppConfig {
   final bool devTelemetryEnabled;
   final String otelCollectorUrl;
 
+  final AppearanceMode appearance;
+
+  /// "Tło w ruchu" (off-roadmap S2): the sky drifts; off, it stands still.
+  final bool backgroundMotion;
+
   AppConfig copyWith({
     Object? apiUrl = _sentinel,
     Object? apiToken = _sentinel,
@@ -47,6 +58,8 @@ class AppConfig {
     bool? audioFeedbackEnabled,
     bool? devTelemetryEnabled,
     String? otelCollectorUrl,
+    AppearanceMode? appearance,
+    bool? backgroundMotion,
   }) {
     return AppConfig(
       apiUrl: apiUrl == _sentinel ? this.apiUrl : apiUrl as String?,
@@ -61,6 +74,8 @@ class AppConfig {
       audioFeedbackEnabled: audioFeedbackEnabled ?? this.audioFeedbackEnabled,
       devTelemetryEnabled: devTelemetryEnabled ?? this.devTelemetryEnabled,
       otelCollectorUrl: otelCollectorUrl ?? this.otelCollectorUrl,
+      appearance: appearance ?? this.appearance,
+      backgroundMotion: backgroundMotion ?? this.backgroundMotion,
     );
   }
 }

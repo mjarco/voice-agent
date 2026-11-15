@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/matter.dart';
 import 'package:voice_agent/core/providers/agent_turns_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/features/matters/domain/matters_state.dart';
 import 'package:voice_agent/features/matters/presentation/matter_detail_notifier.dart';
 import 'package:voice_agent/features/matters/presentation/matter_dialogs.dart';
@@ -27,8 +29,7 @@ class MatterDetailScreen extends ConsumerStatefulWidget {
   final Widget? field;
 
   @override
-  ConsumerState<MatterDetailScreen> createState() =>
-      _MatterDetailScreenState();
+  ConsumerState<MatterDetailScreen> createState() => _MatterDetailScreenState();
 }
 
 class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
@@ -80,30 +81,35 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
         actions: [
           if (state is MatterDetailLoaded &&
               state.detail.matter.status != MatterStatus.proposed)
-            IconButton(
+            GlassIconButton(
               key: const Key('matter-delete'),
-              icon: const Icon(Icons.delete_outline),
+              icon: Icons.delete_outline,
               tooltip: 'Usuń sprawę',
               onPressed: _confirmDelete,
             ),
+          const SizedBox(width: 14),
         ],
       ),
       body: Column(
         children: [
           Expanded(
             child: switch (state) {
-              MatterDetailLoading() =>
-                const Center(child: CircularProgressIndicator()),
+              MatterDetailLoading() => const Center(
+                child: CircularProgressIndicator(),
+              ),
               MatterDetailLoaded(:final detail) => RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: _body(detail),
-                ),
-              MatterDetailError(:final message) =>
-                _ErrorState(message: message, onRetry: _notifier.refresh),
+                onRefresh: _refresh,
+                child: _body(detail),
+              ),
+              MatterDetailError(:final message) => _ErrorState(
+                message: message,
+                onRetry: _notifier.refresh,
+              ),
             },
           ),
           // A proposed matter is not a place to talk from until accepted.
-          if (state is MatterDetailLoaded && state.detail.matter.status != MatterStatus.proposed)
+          if (state is MatterDetailLoaded &&
+              state.detail.matter.status != MatterStatus.proposed)
             ?widget.field,
         ],
       ),
@@ -114,7 +120,10 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
     final m = detail.matter;
     final proposed = m.status == MatterStatus.proposed;
     final story = _story(detail);
-    final pins = [for (final l in detail.links) if (l.kind == MatterLinkKind.pin) l];
+    final pins = [
+      for (final l in detail.links)
+        if (l.kind == MatterLinkKind.pin) l,
+    ];
     return ListView(
       key: const Key('matter-list'),
       physics: const AlwaysScrollableScrollPhysics(),
@@ -129,45 +138,53 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
               onDrop: _drop,
             ),
           ),
-        ListTile(
-          title: Text(statusLine(m, _now()), key: const Key('matter-status')),
-          trailing: proposed
-              ? null
-              : PopupMenuButton<MatterStatus>(
-                  key: const Key('matter-status-menu'),
-                  icon: const Icon(Icons.swap_horiz),
-                  tooltip: 'Zmień status',
-                  onSelected: (s) => _write(
-                    'zmienić statusu',
-                    () => _notifier.setStatus(s),
-                  ),
-                  itemBuilder: (_) => [
-                    for (final s in const [
-                      MatterStatus.active,
-                      MatterStatus.waiting,
-                      MatterStatus.paused,
-                      MatterStatus.closed,
-                    ])
-                      PopupMenuItem(
-                        key: Key('matter-status-${s.name}'),
-                        value: s,
-                        enabled: s != m.status,
-                        child: Text(s.label),
+        // The state of the matter on one glass card (off-roadmap S3).
+        GlassList(
+          children: [
+            ListTile(
+              title: Text(
+                statusLine(m, _now()),
+                key: const Key('matter-status'),
+              ),
+              trailing: proposed
+                  ? null
+                  : PopupMenuButton<MatterStatus>(
+                      key: const Key('matter-status-menu'),
+                      icon: const Icon(Icons.swap_horiz),
+                      tooltip: 'Zmień status',
+                      onSelected: (s) => _write(
+                        'zmienić statusu',
+                        () => _notifier.setStatus(s),
                       ),
-                  ],
-                ),
-        ),
-        _field(
-          key: 'next-step',
-          title: 'Następny krok',
-          value: m.nextStep,
-          onSave: _notifier.setNextStep,
-        ),
-        _field(
-          key: 'waiting-for',
-          title: 'Czeka na',
-          value: m.waitingFor,
-          onSave: _notifier.setWaitingFor,
+                      itemBuilder: (_) => [
+                        for (final s in const [
+                          MatterStatus.active,
+                          MatterStatus.waiting,
+                          MatterStatus.paused,
+                          MatterStatus.closed,
+                        ])
+                          PopupMenuItem(
+                            key: Key('matter-status-${s.name}'),
+                            value: s,
+                            enabled: s != m.status,
+                            child: Text(s.label),
+                          ),
+                      ],
+                    ),
+            ),
+            _field(
+              key: 'next-step',
+              title: 'Następny krok',
+              value: m.nextStep,
+              onSave: _notifier.setNextStep,
+            ),
+            _field(
+              key: 'waiting-for',
+              title: 'Czeka na',
+              value: m.waitingFor,
+              onSave: _notifier.setWaitingFor,
+            ),
+          ],
         ),
         if (!proposed) ..._agenda(),
         _Header(
@@ -179,18 +196,30 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
             onPressed: _addEntry,
           ),
         ),
-        if (story.isEmpty)
-          const ListTile(dense: true, title: Text('Nic się jeszcze nie wydarzyło.')),
-        for (final s in story) _storyTile(s),
+        GlassList(
+          children: [
+            if (story.isEmpty)
+              const ListTile(
+                dense: true,
+                title: Text('Nic się jeszcze nie wydarzyło.'),
+              ),
+            for (final s in story) _storyTile(s),
+          ],
+        ),
         if (pins.isNotEmpty) ...[
           const _Header(text: 'Pinezki'),
-          for (final p in pins) _pinTile(p),
+          GlassList(children: [for (final p in pins) _pinTile(p)]),
         ],
-        _field(
-          key: 'keywords',
-          title: 'Słowa kluczowe',
-          value: m.keywords,
-          onSave: _notifier.setKeywords,
+        const SizedBox(height: 12),
+        GlassList(
+          children: [
+            _field(
+              key: 'keywords',
+              title: 'Słowa kluczowe',
+              value: m.keywords,
+              onSave: _notifier.setKeywords,
+            ),
+          ],
         ),
       ],
     );
@@ -210,25 +239,32 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
           onPressed: _addTask,
         ),
       ),
-      ...switch (state) {
-        MatterTasksLoading() => [const LinearProgressIndicator()],
-        MatterTasksError() => [
+      GlassList(
+        children: switch (state) {
+          MatterTasksLoading() => [const LinearProgressIndicator()],
+          MatterTasksError() => [
             ListTile(
               key: const Key('matter-tasks-error'),
               dense: true,
               title: const Text('Nie udało się wczytać zadań'),
-              trailing: TextButton(onPressed: _tasks.load, child: const Text('Ponów')),
+              trailing: TextButton(
+                onPressed: _tasks.load,
+                child: const Text('Ponów'),
+              ),
             ),
           ],
-        MatterTasksLoaded(:final tasks) when tasks.isEmpty => [
+          MatterTasksLoaded(:final tasks) when tasks.isEmpty => [
             const ListTile(
               key: Key('matter-tasks-empty'),
               dense: true,
               title: Text('Brak zadań. Powiedz, co trzeba zrobić, albo dodaj.'),
             ),
           ],
-        MatterTasksLoaded(:final tasks) => [for (final t in tasks) _taskTile(t)],
-      },
+          MatterTasksLoaded(:final tasks) => [
+            for (final t in tasks) _taskTile(t),
+          ],
+        },
+      ),
     ];
   }
 
@@ -236,15 +272,19 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Dismissible(
       key: Key('matter-task-${t.id}'),
-      direction: t.canTick ? DismissDirection.horizontal : DismissDirection.endToStart,
+      direction: t.canTick
+          ? DismissDirection.horizontal
+          : DismissDirection.endToStart,
       background: _SwipeBackground(
-        color: Colors.green.shade600,
+        color: AppColors.of(context).success,
+        onColor: AppColors.of(context).onSuccess,
         icon: Icons.check,
         label: 'Zrobione',
         alignment: Alignment.centerLeft,
       ),
       secondaryBackground: _SwipeBackground(
         color: scheme.error,
+        onColor: scheme.onError,
         icon: Icons.delete_outline,
         label: 'Usuń',
         alignment: Alignment.centerRight,
@@ -254,7 +294,14 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
         final tasks = _tasks;
         tasks.hide(t.id);
         if (direction == DismissDirection.startToEnd) {
-          unawaited(_taskWrite(t, 'Zrobione', () => tasks.done(t), () => tasks.undoDone(t)));
+          unawaited(
+            _taskWrite(
+              t,
+              'Zrobione',
+              () => tasks.done(t),
+              () => tasks.undoDone(t),
+            ),
+          );
         } else {
           unawaited(_removeTask(t));
         }
@@ -265,7 +312,9 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
           width: 88,
           child: Text(
             t.overdue ? '! ${t.when}' : t.when,
-            style: t.overdue ? TextStyle(color: scheme.error, fontWeight: FontWeight.bold) : null,
+            style: t.overdue
+                ? TextStyle(color: scheme.error, fontWeight: FontWeight.bold)
+                : null,
           ),
         ),
         title: Text(t.routine.name),
@@ -284,20 +333,24 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final tasks = _tasks;
     if (!await write()) {
-      if (mounted) showMatterError(context, 'zmienić zadania', tasks.lastActionError);
+      if (mounted) {
+        showMatterError(context, 'zmienić zadania', tasks.lastActionError);
+      }
       return;
     }
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(
-      key: const Key('matter-task-snackbar'),
-      content: Text('$done: ${t.routine.name}'),
-      persist: false,
-      action: SnackBarAction(
-        key: const Key('matter-task-undo'),
-        label: 'Cofnij',
-        onPressed: () => unawaited(undo()),
+    messenger.showSnackBar(
+      SnackBar(
+        key: const Key('matter-task-snackbar'),
+        content: Text('$done: ${t.routine.name}'),
+        persist: false,
+        action: SnackBarAction(
+          key: const Key('matter-task-undo'),
+          label: 'Cofnij',
+          onPressed: () => unawaited(undo()),
+        ),
       ),
-    ));
+    );
   }
 
   /// Off the agenda with an undo: personal-agent never takes an archived
@@ -308,16 +361,18 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
     final tasks = _tasks;
     messenger.hideCurrentSnackBar();
     final reason = await messenger
-        .showSnackBar(SnackBar(
-          key: const Key('matter-task-snackbar'),
-          content: Text('Usunięte z agendy: ${t.routine.name}'),
-          persist: false,
-          action: SnackBarAction(
-            key: const Key('matter-task-undo'),
-            label: 'Cofnij',
-            onPressed: () {},
+        .showSnackBar(
+          SnackBar(
+            key: const Key('matter-task-snackbar'),
+            content: Text('Usunięte z agendy: ${t.routine.name}'),
+            persist: false,
+            action: SnackBarAction(
+              key: const Key('matter-task-undo'),
+              label: 'Cofnij',
+              onPressed: () {},
+            ),
           ),
-        ))
+        )
         .closed;
     if (reason == SnackBarClosedReason.action) {
       await tasks.unhide(t.id);
@@ -349,7 +404,8 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
           _StoryLine(
             at: l.lastAt ?? l.createdAt,
             day: l.day ?? '',
-            text: 'Rozmowa: ${l.label.isEmpty ? '…' : l.label}${l.turns > 0 ? ' (${l.turns})' : ''}',
+            text:
+                'Rozmowa: ${l.label.isEmpty ? '…' : l.label}${l.turns > 0 ? ' (${l.turns})' : ''}',
             conversation: l,
           ),
     ];
@@ -372,42 +428,51 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
     final e = s.entry;
     final c = s.conversation;
     return ListTile(
-      key: Key(c != null ? 'matter-story-conversation-${c.targetId}' : 'matter-story-${e?.id ?? s.text.hashCode}'),
+      key: Key(
+        c != null
+            ? 'matter-story-conversation-${c.targetId}'
+            : 'matter-story-${e?.id ?? s.text.hashCode}',
+      ),
       dense: true,
       leading: SizedBox(
         width: 64,
-        child: Text(relativeDay(s.at, s.day, _now()), style: theme.textTheme.bodySmall),
+        child: Text(
+          relativeDay(s.at, s.day, _now()),
+          style: theme.textTheme.bodySmall,
+        ),
       ),
       title: Text(s.text),
       trailing: c != null
           ? const Icon(Icons.chevron_right)
           : e != null && e.removable && e.kind == MatterEntryKind.note
-              ? IconButton(
-                  key: Key('matter-entry-delete-${e.id}'),
-                  icon: const Icon(Icons.close),
-                  tooltip: 'Usuń wpis',
-                  onPressed: () => _removeEntry(e.id!),
-                )
-              : null,
-      onTap: c == null ? null : () => context.push('/conversation/${c.targetId}'),
+          ? IconButton(
+              key: Key('matter-entry-delete-${e.id}'),
+              icon: const Icon(Icons.close),
+              tooltip: 'Usuń wpis',
+              onPressed: () => _removeEntry(e.id!),
+            )
+          : null,
+      onTap: c == null
+          ? null
+          : () => context.push('/conversation/${c.targetId}'),
       onLongPress: c == null ? null : () => _unlink(c),
     );
   }
 
   Widget _pinTile(MatterLink l) => ListTile(
-        key: Key('matter-pin-${l.id}'),
-        dense: true,
-        enabled: !l.missing,
-        leading: const Icon(Icons.push_pin_outlined),
-        title: Text(l.label.isEmpty ? l.targetId : l.label),
-        onTap: l.missing ? null : () => context.push('/pins/${l.targetId}'),
-        trailing: IconButton(
-          key: Key('matter-link-remove-${l.id}'),
-          icon: const Icon(Icons.link_off),
-          tooltip: 'Odłącz',
-          onPressed: () => _unlink(l),
-        ),
-      );
+    key: Key('matter-pin-${l.id}'),
+    dense: true,
+    enabled: !l.missing,
+    leading: const Icon(Icons.push_pin_outlined),
+    title: Text(l.label.isEmpty ? l.targetId : l.label),
+    onTap: l.missing ? null : () => context.push('/pins/${l.targetId}'),
+    trailing: IconButton(
+      key: Key('matter-link-remove-${l.id}'),
+      icon: const Icon(Icons.link_off),
+      tooltip: 'Odłącz',
+      onPressed: () => _unlink(l),
+    ),
+  );
 
   Widget _field({
     required String key,
@@ -425,8 +490,11 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
         icon: const Icon(Icons.edit_outlined),
         tooltip: 'Zmień',
         onPressed: () async {
-          final text =
-              await askMatterText(context, title: title, initial: value);
+          final text = await askMatterText(
+            context,
+            title: title,
+            initial: value,
+          );
           if (text == null || text == value) return;
           await _write('zapisać', () => onSave(text));
         },
@@ -461,7 +529,8 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
       context,
       key: const Key('matter-delete-dialog'),
       title: 'Usunąć sprawę?',
-      content: 'Sprawa zniknie z jej historią i powiązaniami; rozmowy, '
+      content:
+          'Sprawa zniknie z jej historią i powiązaniami; rozmowy, '
           'rutyny i piny zostaną.',
       action: 'Usuń',
     );
@@ -477,11 +546,12 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
   }
 
   Future<void> _addEntry() async {
-    final text =
-        await askMatterText(context,
-            title: 'Dodaj wpis',
-            multiline: true,
-            hint: 'Co się wydarzyło, jednym zdaniem');
+    final text = await askMatterText(
+      context,
+      title: 'Dodaj wpis',
+      multiline: true,
+      hint: 'Co się wydarzyło, jednym zdaniem',
+    );
     if (text == null || text.isEmpty || !mounted) return;
     await _write('dodać wpisu', () => _notifier.addEntry(text));
   }
@@ -525,7 +595,8 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
       context,
       key: const Key('matter-unlink-dialog'),
       title: 'Odłączyć od sprawy?',
-      content: '„${l.label.isEmpty ? l.targetId : l.label}” przestanie '
+      content:
+          '„${l.label.isEmpty ? l.targetId : l.label}” przestanie '
           'należeć do tej sprawy; samo zostaje.',
       action: 'Odłącz',
     );
@@ -536,7 +607,13 @@ class _MatterDetailScreenState extends ConsumerState<MatterDetailScreen> {
 
 /// One line of the history: an entry or a conversation, at its time.
 class _StoryLine {
-  const _StoryLine({required this.at, required this.day, required this.text, this.entry, this.conversation});
+  const _StoryLine({
+    required this.at,
+    required this.day,
+    required this.text,
+    this.entry,
+    this.conversation,
+  });
   final DateTime? at;
   final String day;
   final String text;
@@ -590,16 +667,21 @@ String storyText(MatterEntry e) {
       .replaceFirst(RegExp(r'^pin: '), 'pinezka: ');
   return switch (e.kind) {
     MatterEntryKind.note => e.text,
-    MatterEntryKind.opened => e.text.isEmpty ? 'Założona' : 'Założona: ${e.text}',
-    MatterEntryKind.nextStep => e.text.isEmpty ? 'Bez następnego kroku' : 'Następny krok: ${e.text}',
-    MatterEntryKind.waitingFor => e.text.isEmpty ? 'Już na nic nie czeka' : 'Czeka na: ${e.text}',
-    MatterEntryKind.status => 'Status: ${MatterStatus.fromJson(e.text) == MatterStatus.unknown ? e.text : MatterStatus.fromJson(e.text).label}',
+    MatterEntryKind.opened =>
+      e.text.isEmpty ? 'Założona' : 'Założona: ${e.text}',
+    MatterEntryKind.nextStep =>
+      e.text.isEmpty ? 'Bez następnego kroku' : 'Następny krok: ${e.text}',
+    MatterEntryKind.waitingFor =>
+      e.text.isEmpty ? 'Już na nic nie czeka' : 'Czeka na: ${e.text}',
+    MatterEntryKind.status =>
+      'Status: ${MatterStatus.fromJson(e.text) == MatterStatus.unknown ? e.text : MatterStatus.fromJson(e.text).label}',
     MatterEntryKind.joined => 'Dołączone ${polish(e.text)}',
     MatterEntryKind.left => 'Odłączone ${polish(e.text)}',
-    MatterEntryKind.tick => e.text
-        .replaceFirst(RegExp(r'^done: '), '✓ ')
-        .replaceFirst(RegExp(r'^skipped: '), 'pominięte: ')
-        .replaceFirst(RegExp(r' \(\d{4}-\d{2}-\d{2}\)$'), ''),
+    MatterEntryKind.tick =>
+      e.text
+          .replaceFirst(RegExp(r'^done: '), '✓ ')
+          .replaceFirst(RegExp(r'^skipped: '), 'pominięte: ')
+          .replaceFirst(RegExp(r' \(\d{4}-\d{2}-\d{2}\)$'), ''),
     MatterEntryKind.unknown => e.text,
   };
 }
@@ -614,14 +696,17 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+      padding: const EdgeInsets.fromLTRB(24, 14, 12, 4),
       child: Row(
         children: [
           Expanded(
             child: Text(
               text.toUpperCase(),
-              style: theme.textTheme.labelMedium
-                  ?.copyWith(color: theme.colorScheme.primary, letterSpacing: 0.8),
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurfaceVariant,
+                letterSpacing: 1.4,
+              ),
             ),
           ),
           ?action,
@@ -634,12 +719,14 @@ class _Header extends StatelessWidget {
 class _SwipeBackground extends StatelessWidget {
   const _SwipeBackground({
     required this.color,
+    required this.onColor,
     required this.icon,
     required this.label,
     required this.alignment,
   });
 
   final Color color;
+  final Color onColor;
   final IconData icon;
   final String label;
   final Alignment alignment;
@@ -653,9 +740,9 @@ class _SwipeBackground extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white),
+          Icon(icon, color: onColor),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white)),
+          Text(label, style: TextStyle(color: onColor)),
         ],
       ),
     );
@@ -674,7 +761,11 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Theme.of(context).colorScheme.error,
+          ),
           const SizedBox(height: 16),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 16),

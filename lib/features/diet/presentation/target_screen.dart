@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/features/diet/domain/diet_models.dart';
 import 'package:voice_agent/features/diet/presentation/diet_days.dart';
 import 'package:voice_agent/features/diet/presentation/diet_providers.dart';
@@ -56,7 +57,10 @@ class _TargetScreenState extends ConsumerState<TargetScreen> {
           ? Center(child: _error == null ? const CircularProgressIndicator() : Text(_error!))
           : ListView(
               key: const Key('target-list'),
+              padding: const EdgeInsets.only(top: 8, bottom: 24),
               children: [
+                // The targets on glass cards (off-roadmap S3).
+                GlassList(children: [
                 if (current == null)
                   const ListTile(title: Text('Nie masz celu. Ustaw go, a pokażę, ile zostało.'))
                 else
@@ -70,6 +74,7 @@ class _TargetScreenState extends ConsumerState<TargetScreen> {
                           : 'bez ostrzeżenia',
                     ].join('\n')),
                   ),
+                ]),
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: FilledButton(
@@ -78,16 +83,21 @@ class _TargetScreenState extends ConsumerState<TargetScreen> {
                     child: Text(current == null ? 'Ustaw cel' : 'Zmień cel'),
                   ),
                 ),
-                for (final t in later)
-                  ListTile(dense: true, title: Text('od ${dayLabel(parseDay(t.from))}   ${t.range}'), subtitle: const Text('zaplanowany')),
+                if (later.isNotEmpty)
+                  GlassList(children: [
+                    for (final t in later)
+                      ListTile(dense: true, title: Text('od ${dayLabel(parseDay(t.from))}   ${t.range}'), subtitle: const Text('zaplanowany')),
+                  ]),
+                if (earlier.isNotEmpty) const SectionLabel('Wcześniej'),
                 if (earlier.isNotEmpty)
-                  const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 4), child: Text('WCZEŚNIEJ')),
-                for (final t in earlier)
-                  ListTile(
-                    dense: true,
-                    title: Text('od ${dayLabel(parseDay(t.from))}   ${t.range}'),
-                    subtitle: Text('zapas ${t.reserveKcal} kcal'),
-                  ),
+                  GlassList(children: [
+                    for (final t in earlier)
+                      ListTile(
+                        dense: true,
+                        title: Text('od ${dayLabel(parseDay(t.from))}   ${t.range}'),
+                        subtitle: Text('zapas ${t.reserveKcal} kcal'),
+                      ),
+                  ]),
               ],
             ),
     );

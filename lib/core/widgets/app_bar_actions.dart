@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 
 /// The rule of the top bar (off-roadmap 2026-11-11-va-polish): a tab's bar
 /// has its title, the tab's own actions, and then these icons, the same on
@@ -17,7 +18,7 @@ class AppBarActions extends StatelessWidget {
     ('/diet', 'Jedzenie', Icons.restaurant_outlined),
     ('/places', 'Miejsca', Icons.place_outlined),
     ('/pins', 'Pinezki', Icons.push_pin_outlined),
-    ('/settings', 'Ustawienia', Icons.settings),
+    ('/settings', 'Ustawienia', Icons.tune),
   ];
 
   @override
@@ -26,16 +27,22 @@ class AppBarActions extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final (route, label, icon) in entries)
-          IconButton(
-            key: Key('app-${route.substring(1)}'),
-            icon: Icon(icon),
-            tooltip: label,
-            // Pushed, not gone to: the tab keeps its place under the screen.
-            onPressed: () async {
-              await context.push(route);
-              onReturn?.call();
-            },
+          // Round glass buttons, as in Aurora's mockups (off-roadmap S2).
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: GlassIconButton(
+              key: Key('app-${route.substring(1)}'),
+              icon: icon,
+              tooltip: label,
+              // Pushed, not gone to: the tab keeps its place under the screen.
+              onPressed: () async {
+                await context.push(route);
+                onReturn?.call();
+              },
+            ),
           ),
+        // Away from the screen's edge, as the mockups' 20 dp gutter.
+        const SizedBox(width: 14),
       ],
     );
   }

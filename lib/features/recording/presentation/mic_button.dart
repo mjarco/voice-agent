@@ -5,9 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
 import 'package:voice_agent/features/recording/domain/recording_state.dart';
+import 'package:voice_agent/features/recording/presentation/mic_activity.dart';
+import 'package:voice_agent/features/recording/presentation/mic_orb.dart';
 import 'package:voice_agent/features/recording/presentation/recording_providers.dart';
 
 // ── Mic button ────────────────────────────────────────────────────────────────
@@ -153,23 +156,24 @@ class _MicButtonState extends ConsumerState<MicButton> {
 
     // Color reflects what the next tap does + what is currently going
     // on under the hood. Red = audio is actively being captured (manual
-    // record OR VAD mid-utterance). Orange = engaged but quiet (gate
+    // record OR VAD mid-utterance). Amber = engaged but quiet (gate
     // open, manual paused, or press-and-hold mid-recording). Grey =
-    // transcribing in progress (button is non-interactive). Green =
-    // idle / available — tap to engage.
+    // transcribing in progress (button is non-interactive). Teal =
+    // idle / available — tap to engage. Slate = paused by the owner.
+    final colors = AppColors.of(context);
     final color = isTranscribing
-        ? Colors.grey
+        ? colors.micProcessing
         : isPaused
-            ? Colors.orange
+            ? colors.micListening
             : isRecording && _isPressAndHold
-                ? Colors.orange
+                ? colors.micListening
                 : (isRecording || isHfCapturing)
-                    ? Colors.red
+                    ? colors.micRecording
                     : (isHfListeningQuiet || isModeListening)
-                        ? Colors.orange
+                        ? colors.micListening
                         : isStandby
-                            ? Colors.blueGrey
-                            : Colors.green;
+                            ? colors.micStandby
+                            : colors.micIdle;
 
     final label = isPaused
         ? 'Pauza — stuknij, by wznowić'
@@ -184,7 +188,7 @@ class _MicButtonState extends ConsumerState<MicButton> {
                         : isHfListeningQuiet
                             ? 'Słucham — stuknij, by przerwać'
                             : 'Stuknij, by słuchać';
-    final size = widget.compact ? 48.0 : 96.0;
+    final size = widget.compact ? 46.0 : 96.0;
     final iconSize = widget.compact ? 26.0 : 48.0;
 
     final micButton = GestureDetector(
@@ -194,7 +198,12 @@ class _MicButtonState extends ConsumerState<MicButton> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AnimatedContainer(
+          // The living mic (off-roadmap S5): its state shows by how it
+          // moves around the orb; the colour stays the button's.
+          MicOrb(
+            activity: ref.watch(micActivityProvider),
+            color: color,
+            child: AnimatedContainer(
             key: const Key('record-button'),
             duration: const Duration(milliseconds: 150),
             width: size,
@@ -202,18 +211,21 @@ class _MicButtonState extends ConsumerState<MicButton> {
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
+              // Aurora's orb glows in its own colour (off-roadmap S2).
+              boxShadow: [BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 18)],
             ),
             child: isTranscribing
                 ? Padding(
                     padding: EdgeInsets.all(size * 0.29),
                     child: CircularProgressIndicator(
-                      color: Colors.white,
+                      color: colors.onMic,
                       strokeWidth: 3,
                     ),
                   )
                 : (isPaused || (isStandby && !isRecording))
-                    ? Icon(Icons.pause, color: Colors.white, size: iconSize)
-                    : Icon(Icons.mic, color: Colors.white, size: iconSize),
+                    ? Icon(Icons.pause, color: colors.onMic, size: iconSize)
+                    : Icon(Icons.mic, color: colors.onMic, size: iconSize),
+          ),
           ),
           if (!widget.compact) ...[
             const SizedBox(height: 16),

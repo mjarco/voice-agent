@@ -168,10 +168,12 @@ void main() {
       await tester.tap(find.byKey(const Key('app-settings')));
       await tester.pumpAndSettle();
 
-      // Scroll until the tile is visible in the settings ListView
-      await tester.drag(
-        find.byType(ListView).last,
-        const Offset(0, -500),
+      // Scroll until the tile is visible in the settings ListView (the list
+      // grew a Wygląd section in off-roadmap S1 and S2).
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('advanced-vad-tile')),
+        300,
+        scrollable: find.descendant(of: find.byType(ListView).last, matching: find.byType(Scrollable)).first,
       );
       await tester.pumpAndSettle();
 

@@ -4,7 +4,7 @@ publish_to: 'none'
 # Single source of truth for the app version. Format: MAJOR.MINOR.PATCH+BUILD.
 # Bump it in the same PR as the change, and tag `vMAJOR.MINOR.PATCH` after merge.
 # See "Versioning & Releases" in CLAUDE.md for the rules.
-version: 2.6.0+69
+version: 2.11.1+75
 
 environment:
   sdk: ^3.11.1
@@ -42,6 +42,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_driver:
+    sdk: flutter
   flutter_lints: ^6.0.0
   sqflite_common_ffi: ^2.3.4+4
 
@@ -54,3 +58,16 @@ flutter:
   assets:
     - assets/models/silero_vad_v5.onnx
     - assets/audio/
+
+  # Sora, SIL Open Font License 1.1 (assets/fonts/OFL.txt); static weights
+  # cut from the variable font of google/fonts (off-roadmap S1).
+  fonts:
+    - family: Sora
+      fonts:
+        - asset: assets/fonts/Sora-Regular.ttf
+        - asset: assets/fonts/Sora-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Sora-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Sora-Bold.ttf
+          weight: 700

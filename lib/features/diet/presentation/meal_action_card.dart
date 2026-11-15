@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/models/agent_action.dart';
 import 'package:voice_agent/core/providers/agent_reply_provider.dart';
@@ -61,7 +62,6 @@ class _MealActionCardState extends ConsumerState<MealActionCard> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final estimate = DietEstimate(kcal: _a.kcal, low: _a.kcalLow, high: _a.kcalHigh);
     final left = _a.leftKcal;
     final warned = _a.warning.isNotEmpty;
@@ -77,7 +77,7 @@ class _MealActionCardState extends ConsumerState<MealActionCard> {
                 style: Theme.of(context).textTheme.titleSmall),
             Text(
               '${estimate.label} kcal${left == null ? '' : ' · zostało $left'}',
-              style: TextStyle(color: warned ? scheme.error : null),
+              style: TextStyle(color: warned ? AppColors.of(context).warning : null),
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,

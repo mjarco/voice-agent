@@ -68,7 +68,9 @@ void main() {
   testWidgets('shows the day composed by personal-agent, with the field', (tester) async {
     await _pump(tester, _view());
     expect(find.text('Niedziela, 15 listopada'), findsOneWidget);
-    expect(find.text('Zostało 540 kcal'), findsOneWidget);
+    // The number large, its sentence only for a warning (off-roadmap S2 D8).
+    expect(find.text('540'), findsOneWidget);
+    expect(find.text('Zostało 540 kcal'), findsNothing);
     expect(find.text('Podlać kwiaty'), findsOneWidget);
     expect(find.text('SPRAWY W TOKU · 1'), findsOneWidget);
     expect(find.text('czeka na Kasię'), findsOneWidget);

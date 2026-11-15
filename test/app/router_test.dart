@@ -135,7 +135,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.calendar_today));
+      await tester.tap(find.byIcon(Icons.event_outlined));
       await tester.pumpAndSettle();
       expect(tester.widget<NavigationBar>(find.byType(NavigationBar))
           .selectedIndex, 1);

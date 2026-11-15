@@ -418,7 +418,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                       setState(() => _touched(RoutineFormField.name)),
                   decoration: InputDecoration(
                     labelText: 'Name',
-                    border: const OutlineInputBorder(),
                     error: _mark(marked == RoutineFormField.name),
                   ),
                 ),
@@ -445,11 +444,11 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                 if (_type == RoutineKind.recurring) ..._buildSchedule(marked),
                 if (_type == RoutineKind.oneOff) ..._buildDue(marked),
                 if (_type == RoutineKind.someday)
-                  const Text(
+                  Text(
                     'No day: it is not on the agenda. Tick it off from here '
                     'when it is done.',
-                    key: Key('routine-form-someday-note'),
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    key: const Key('routine-form-someday-note'),
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 const SizedBox(height: 8),
                 _DateTile(
@@ -544,7 +543,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
         initialValue: _kind,
         decoration: InputDecoration(
           labelText: 'Schedule',
-          border: const OutlineInputBorder(),
           error: _mark(marked == RoutineFormField.schedule),
         ),
         items: const [
@@ -572,7 +570,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
               setState(() => _touched(RoutineFormField.interval)),
           decoration: InputDecoration(
             labelText: 'Every how many weeks',
-            border: const OutlineInputBorder(),
             error: _mark(marked == RoutineFormField.interval),
           ),
         ),
@@ -611,7 +608,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
               setState(() => _touched(RoutineFormField.monthday)),
           decoration: InputDecoration(
             labelText: 'Day of the month (1–31)',
-            border: const OutlineInputBorder(),
             error: _mark(marked == RoutineFormField.monthday),
           ),
         ),
@@ -636,7 +632,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
         initialValue: _dueWindow,
         decoration: const InputDecoration(
           labelText: 'Due',
-          border: OutlineInputBorder(),
         ),
         items: const [
           DropdownMenuItem(value: TimeWindow.day, child: Text('That day')),
@@ -647,9 +642,9 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
         ],
         onChanged: (w) => setState(() => _dueWindow = w ?? TimeWindow.day),
       ),
-      const Text(
+      Text(
         'A task not done in time waits on the agenda until ticked off.',
-        style: TextStyle(fontSize: 12, color: Colors.grey),
+        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
     ];
   }
@@ -669,7 +664,6 @@ class _RoutineFormScreenState extends ConsumerState<RoutineFormScreen> {
                   controller: _steps[i],
                   decoration: InputDecoration(
                     labelText: 'Step ${i + 1}',
-                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                 ),

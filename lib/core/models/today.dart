@@ -84,9 +84,13 @@ class TodayFood {
     required this.menuToday,
     required this.menuTomorrow,
     required this.nudge,
+    this.kcalMax,
   });
 
   final bool hasTarget;
+
+  /// The target's top, for the bar under the number (off-roadmap S2).
+  final int? kcalMax;
   final int? leftKcal;
   final int reserveKcal;
   final FoodWarning warning;
@@ -111,6 +115,7 @@ class TodayFood {
       menuToday: m['menu_today'] == true,
       menuTomorrow: m['menu_tomorrow'] == true,
       nudge: nudge is Map<String, dynamic> ? TodayNudge.fromMap(nudge) : null,
+      kcalMax: (m['kcal_max'] as num?)?.toInt(),
     );
   }
 }

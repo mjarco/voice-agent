@@ -374,7 +374,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
                 decoration: InputDecoration(
                   labelText: 'Title',
                   helperText: _titleHelper(),
-                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (value) {
                   setState(() => _titleTyped = value.isNotEmpty);
@@ -398,7 +397,6 @@ class _PinFormScreenState extends ConsumerState<PinFormScreen>
                   decoration: const InputDecoration(
                     labelText: 'Text',
                     alignLabelWithHint: true,
-                    border: OutlineInputBorder(),
                   ),
                   onChanged: _onTextChanged,
                 ),

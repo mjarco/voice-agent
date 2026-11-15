@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -437,9 +439,11 @@ class _MessageBubble extends StatelessWidget {
     final cs = theme.colorScheme;
     final isUser = role == EventRole.user;
 
+    // The owner's in solid teal, the agent's as glass (off-roadmap S4).
+    final colors = AppColors.of(context);
     final bubbleColor = isUser
         ? cs.primary.withAlpha(pending ? 128 : 255)
-        : cs.surfaceContainerHighest;
+        : Color.alphaBlend(colors.glassFill, colors.background.withValues(alpha: 0.22));
     final fgColor = isUser ? cs.onPrimary : cs.onSurface;
 
     final Widget body;
@@ -495,7 +499,13 @@ class _MessageBubble extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: bubbleColor,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(22),
+            topRight: const Radius.circular(22),
+            bottomLeft: Radius.circular(isUser ? 22 : 6),
+            bottomRight: Radius.circular(isUser ? 6 : 22),
+          ),
+          border: isUser ? null : Border.all(color: colors.glassLine),
         ),
         child: bubbleContent,
       ),
@@ -629,8 +639,9 @@ class _TypingIndicator extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
+          color: AppColors.of(context).chip,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.of(context).glassLine),
         ),
         child: Text(
           toolProgress ?? 'Thinking\u2026',
@@ -806,9 +817,13 @@ class _InputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A glass pill, as the conversation field (off-roadmap S4).
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(8),
+      child: GlassSurface(
+        blur: true,
+        radius: 28,
+        margin: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+        padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
         child: Row(
           children: [
             Expanded(
@@ -819,8 +834,13 @@ class _InputBar extends StatelessWidget {
                 maxLines: null,
                 decoration: const InputDecoration(
                   hintText: 'Message\u2026',
-                  border: OutlineInputBorder(),
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
                   isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 ),
                 onSubmitted: canSend ? (t) => onSend(t.trim()) : null,
               ),

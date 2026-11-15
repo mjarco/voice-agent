@@ -110,9 +110,14 @@ Future<FakeMattersRepository> _pump(
   return repo;
 }
 
-Future<void> _scrollTo(WidgetTester tester, Finder finder) =>
-    tester.scrollUntilVisible(finder, 100,
-        scrollable: find.byType(Scrollable).first);
+/// Scrolls the row in and fully into view: built is not enough since the
+/// glass groups (off-roadmap S3) — a row at the edge sits under the field.
+Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(finder, 100,
+      scrollable: find.byType(Scrollable).first);
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+}
 
 void main() {
   group('MatterDetailScreen', () {

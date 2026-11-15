@@ -12,6 +12,8 @@ import 'package:voice_agent/core/network/api_client.dart';
 import 'package:voice_agent/core/providers/api_client_provider.dart';
 import 'package:voice_agent/core/providers/app_version_provider.dart';
 import 'package:voice_agent/core/storage/storage_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -121,9 +123,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
+      // Grouped glass lists, Wygląd first (off-roadmap S4).
       body: ListView(
+        padding: const EdgeInsets.only(bottom: 32),
         children: [
+          _buildSectionHeader('Wygląd'),
+          GlassList(children: [
+          _AppearanceTile(
+            mode: config.appearance,
+            onChanged: (m) =>
+                ref.read(appConfigProvider.notifier).updateAppearance(m),
+          ),
+          SwitchListTile(
+            key: const Key('settings-background-motion'),
+            title: const Text('Tło w ruchu'),
+            subtitle: const Text('Tło płynie powoli; stoi też przy wyłączonych animacjach Androida'),
+            value: config.backgroundMotion,
+            onChanged: (v) =>
+                ref.read(appConfigProvider.notifier).updateBackgroundMotion(v),
+          ),
+          ]),
           _buildSectionHeader('API Configuration'),
+          GlassList(children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Text(
@@ -140,7 +161,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 hintText: 'http://192.168.x.x:8888/api/v1/voice/transcript',
                 helperText: 'Personal agent: http://<host>:8888/api/v1/voice/transcript',
                 helperMaxLines: 2,
-                border: const OutlineInputBorder(),
                 errorText: _urlError,
               ),
               keyboardType: TextInputType.url,
@@ -157,7 +177,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 controller: _tokenController,
                 decoration: const InputDecoration(
                   labelText: 'API Token',
-                  border: OutlineInputBorder(),
                 ),
                 obscureText: true,
               ),
@@ -183,25 +202,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(width: 12),
                 if (_testStatus == _TestStatus.success)
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 20),
-                      SizedBox(width: 4),
-                      Text('Connection successful'),
+                      Icon(Icons.check_circle, color: AppColors.of(context).success, size: 20),
+                      const SizedBox(width: 4),
+                      const Text('Connection successful'),
                     ],
                   ),
                 if (_testStatus == _TestStatus.error)
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.error, color: Colors.red, size: 20),
-                      SizedBox(width: 4),
-                      Text('Could not reach server'),
+                      Icon(Icons.error, color: Theme.of(context).colorScheme.error, size: 20),
+                      const SizedBox(width: 4),
+                      const Text('Could not reach server'),
                     ],
                   ),
               ],
             ),
           ),
+          ]),
           _buildSectionHeader('Transcription'),
+          GlassList(children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Focus(
@@ -213,7 +234,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Groq API Key',
                   hintText: 'gsk_...',
-                  border: OutlineInputBorder(),
                 ),
                 obscureText: true,
               ),
@@ -235,7 +255,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
+          ]),
           _buildSectionHeader('General'),
+          GlassList(children: [
           SwitchListTile(
             title: const Text('Auto-send'),
             subtitle: const Text('Send transcripts automatically'),
@@ -270,7 +292,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ref.read(appConfigProvider.notifier).updateAudioFeedbackEnabled(v);
             },
           ),
+          ]),
           _buildSectionHeader('Voice Activity Detection'),
+          GlassList(children: [
           ListTile(
             key: const Key('advanced-vad-tile'),
             title: const Text('Advanced (VAD)'),
@@ -304,8 +328,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 }
               },
             ),
+          ]),
           if (Platform.isAndroid) ...[
             _buildSectionHeader('Location'),
+            GlassList(children: [
             ListTile(
               key: const Key('location-log-tile'),
               title: const Text('Dziennik lokalizacji'),
@@ -313,21 +339,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/settings/location'),
             ),
+            ]),
           ],
           // P040 test-infra: debug entry for inspecting pending OS
           // notifications + firing one in 2 s. Debug-mode only — the
           // tile is invisible on release builds.
           if (kDebugMode) _buildSectionHeader('Debug'),
           if (kDebugMode)
-            ListTile(
+            GlassList(children: [ListTile(
               key: const Key('notifications-debug-tile'),
               title: const Text('Notifications (debug)'),
               subtitle: const Text('Inspect pending notifications + fire-now'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () =>
                   context.push('/settings/notifications-debug'),
-            ),
+            )]),
           _buildSectionHeader('About'),
+          GlassList(children: [
           ListTile(
             title: const Text('Version'),
             trailing: Text(
@@ -353,6 +381,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               );
             },
           ),
+          ]),
         ],
       ),
     );
@@ -360,11 +389,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
       child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
+        title.toUpperCase(),
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.4,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
       ),
     );
@@ -372,3 +403,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 }
 
 enum _TestStatus { idle, testing, success, error }
+
+/// Jasny / Ciemny (off-roadmap S1). Until the owner picks one the app follows
+/// the phone, and the switch shows the mode the phone has now.
+class _AppearanceTile extends StatelessWidget {
+  const _AppearanceTile({required this.mode, required this.onChanged});
+
+  final AppearanceMode mode;
+  final ValueChanged<AppearanceMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = switch (mode) {
+      AppearanceMode.system =>
+        MediaQuery.platformBrightnessOf(context) == Brightness.dark
+            ? AppearanceMode.dark
+            : AppearanceMode.light,
+      _ => mode,
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SegmentedButton<AppearanceMode>(
+        key: const Key('settings-appearance'),
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(
+            value: AppearanceMode.light,
+            icon: Icon(Icons.light_mode_outlined),
+            label: Text('Jasny'),
+          ),
+          ButtonSegment(
+            value: AppearanceMode.dark,
+            icon: Icon(Icons.dark_mode_outlined),
+            label: Text('Ciemny'),
+          ),
+        ],
+        selected: {shown},
+        onSelectionChanged: (s) => onChanged(s.single),
+      ),
+    );
+  }
+}

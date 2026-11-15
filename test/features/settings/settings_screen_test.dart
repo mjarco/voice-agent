@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/core/config/app_config.dart';
@@ -96,6 +98,17 @@ List<Override> _baseOverrides() => [
   ...sessionControlTestOverrides,
 ];
 
+/// The settings grew with Wygląd's glass groups (off-roadmap S4): the Groq
+/// field is below the first screen, so it is scrolled in first.
+Future<void> _scrollToGroq(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.widgetWithText(TextField, 'Groq API Key'),
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+}
+
 Future<void> _navigateToSettings(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('app-settings')));
   await tester.pumpAndSettle();
@@ -116,6 +129,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _navigateToSettings(tester);
+      await _scrollToGroq(tester);
 
       expect(find.widgetWithText(TextField, 'Groq API Key'), findsOneWidget);
     });
@@ -137,6 +151,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _navigateToSettings(tester);
+      await _scrollToGroq(tester);
 
       final groqField = tester.widget<TextField>(
         find.widgetWithText(TextField, 'Groq API Key'),
@@ -332,6 +347,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await _navigateToSettings(tester);
+      await _scrollToGroq(tester);
 
       await tester.tap(find.widgetWithText(TextField, 'Groq API Key'));
       await tester.pump();
@@ -340,11 +356,68 @@ void main() {
         'gsk_new_key',
       );
 
-      // Move focus away to trigger focus-lost save
+      // Move focus away to trigger focus-lost save; the token field is
+      // above, scrolled out with the Groq field in (off-roadmap S4).
+      await tester.scrollUntilVisible(
+        find.widgetWithText(TextField, 'API Token'),
+        -200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(find.widgetWithText(TextField, 'API Token'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(TextField, 'API Token'));
       await tester.pump();
 
       expect(savedKey, 'gsk_new_key');
+    });
+  });
+
+  group('Wygląd (off-roadmap S1)', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
+    });
+
+    Future<void> pumpFresh(WidgetTester tester) async {
+      // A new ProviderScope reads the config again, as a restart does.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(ProviderScope(
+        key: UniqueKey(),
+        overrides: _baseOverrides(),
+        child: const App(),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    Brightness shown(WidgetTester tester) =>
+        Theme.of(tester.element(find.byKey(const Key('app-settings')))).brightness;
+
+    testWidgets('follows the phone until picked, then Ciemny and Jasny both ways, kept over a restart',
+        (tester) async {
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+
+      await pumpFresh(tester);
+      expect(shown(tester), Brightness.light);
+
+      await _navigateToSettings(tester);
+      await tester.tap(find.text('Ciemny'));
+      await tester.pumpAndSettle();
+      expect(Theme.of(tester.element(find.text('Ciemny'))).brightness, Brightness.dark);
+      expect((await SharedPreferences.getInstance()).getString('appearance'), 'dark');
+
+      await pumpFresh(tester);
+      expect(shown(tester), Brightness.dark, reason: 'the choice survives a restart');
+
+      await _navigateToSettings(tester);
+      await tester.tap(find.text('Jasny'));
+      await tester.pumpAndSettle();
+      expect(Theme.of(tester.element(find.text('Jasny'))).brightness, Brightness.light);
+
+      // The phone going dark no longer moves an app set to Jasny.
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      await pumpFresh(tester);
+      expect(shown(tester), Brightness.light);
     });
   });
 }

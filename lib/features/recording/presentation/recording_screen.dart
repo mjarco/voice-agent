@@ -9,6 +9,7 @@ import 'package:voice_agent/core/providers/agent_reply_provider.dart';
 import 'package:voice_agent/core/providers/api_url_provider.dart';
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 import 'package:voice_agent/core/session_control/session_control_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/tts/tts_provider.dart';
 import 'package:voice_agent/core/widgets/app_bar_actions.dart';
 import 'package:voice_agent/features/recording/domain/hands_free_session_state.dart';
@@ -125,7 +126,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error, size: 64, color: Colors.red),
+            Icon(Icons.error, size: 64, color: Theme.of(context).colorScheme.error),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -400,7 +401,7 @@ class _SegmentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (icon, subtitle, color) = _renderJob(job.state);
+    final (icon, subtitle, color) = _renderJob(context, job.state);
     return ListTile(
       dense: true,
       leading: icon,
@@ -411,12 +412,13 @@ class _SegmentTile extends StatelessWidget {
     );
   }
 
-  (Widget, String?, Color?) _renderJob(SegmentJobState s) {
+  (Widget, String?, Color?) _renderJob(BuildContext context, SegmentJobState s) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     return switch (s) {
       QueuedForTranscription() => (
           const Icon(Icons.hourglass_empty),
           'Queued',
-          Colors.grey,
+          muted,
         ),
       Transcribing() => (
           const SizedBox(
@@ -439,17 +441,17 @@ class _SegmentTile extends StatelessWidget {
       Completed() => (
           const Icon(Icons.check_circle),
           'Saved',
-          Colors.green,
+          AppColors.of(context).success,
         ),
       Rejected(:final reason) => (
           const Icon(Icons.not_interested),
           'Skipped: $reason',
-          Colors.grey,
+          muted,
         ),
       JobFailed(:final message) => (
           const Icon(Icons.error_outline),
           'Failed: $message',
-          Colors.red,
+          Theme.of(context).colorScheme.error,
         ),
     };
   }

@@ -195,7 +195,7 @@ void main() {
     );
     expect(find.widgetWithText(AppBar, 'Sprawy'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.calendar_today));
+    await tester.tap(find.byIcon(Icons.event_outlined));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('agenda-routines-section')), findsOneWidget);
   });
@@ -218,7 +218,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.calendar_today));
+    await tester.tap(find.byIcon(Icons.event_outlined));
     await tester.pumpAndSettle();
 
     final navBar = tester.widget<NavigationBar>(
@@ -233,7 +233,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.chat_bubble_outline));
+    await tester.tap(find.byIcon(Icons.forum_outlined));
     await tester.pumpAndSettle();
 
     final navBar = tester.widget<NavigationBar>(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/core/models/shopping_proposal.dart';
 
 /// One proposal, on a thread and on the Shopping tab. It lives in `core/`
@@ -32,10 +33,12 @@ class ShoppingProposalCard extends StatelessWidget {
     final proposal = row.proposal;
     final theme = Theme.of(context);
     final note = row.note;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    // Glass, as every card on the sky (off-roadmap S3).
+    return GlassCard(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.fromLTRB(18, 14, 14, 8),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+        padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,

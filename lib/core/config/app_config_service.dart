@@ -31,6 +31,10 @@ class AppConfigService {
   static const _devTelemetryEnabledKey = 'dev_telemetry_enabled';
   static const _otelCollectorUrlKey = 'otel_collector_url';
 
+  /// 'light' or 'dark'; absent until the owner picks one (off-roadmap S1).
+  static const _appearanceKey = 'appearance';
+  static const _backgroundMotionKey = 'background_motion';
+
   // Cross-isolate-safe scalar config per ADR-ARCH-005 (P040 amendment).
   // Read by the foreground staleness check on app resume and by the
   // background isolate's 50-min skip guard (workmanager periodic task).
@@ -121,7 +125,24 @@ class AppConfigService {
       devTelemetryEnabled: prefs.getBool(_devTelemetryEnabledKey) ?? true,
       otelCollectorUrl: prefs.getString(_otelCollectorUrlKey) ??
           defaultOtelCollectorUrl,
+      appearance: AppearanceMode.values.asNameMap()[prefs.getString(_appearanceKey)] ??
+          AppearanceMode.system,
+      backgroundMotion: prefs.getBool(_backgroundMotionKey) ?? true,
     );
+  }
+
+  Future<void> saveBackgroundMotion(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool(_backgroundMotionKey, value);
+  }
+
+  Future<void> saveAppearance(AppearanceMode mode) async {
+    final prefs = await _preferences;
+    if (mode == AppearanceMode.system) {
+      await prefs.remove(_appearanceKey);
+    } else {
+      await prefs.setString(_appearanceKey, mode.name);
+    }
   }
 
   Future<void> saveDevTelemetryEnabled(bool value) async {

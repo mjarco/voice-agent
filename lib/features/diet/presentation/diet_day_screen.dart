@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/providers/agent_turns_provider.dart';
 import 'package:voice_agent/features/diet/domain/diet_models.dart';
@@ -76,22 +78,22 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
     final isToday = dayKey(_day) == dayKey(now);
     final isPast = _day.isBefore(DateTime(now.year, now.month, now.day));
     final view = _view;
-    final scheme = Theme.of(context).colorScheme;
     final warned = view != null && view.warning.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Jedzenie · ${dayLabel(_day, today: now)}'),
         actions: [
-          IconButton(
+          GlassIconButton(
             key: const Key('diet-prev-day'),
-            icon: const Icon(Icons.chevron_left),
+            icon: Icons.chevron_left,
             tooltip: 'Dzień wcześniej',
             onPressed: () => _move(-1),
           ),
-          IconButton(
+          const SizedBox(width: 6),
+          GlassIconButton(
             key: const Key('diet-next-day'),
-            icon: const Icon(Icons.chevron_right),
+            icon: Icons.chevron_right,
             tooltip: 'Dzień później',
             onPressed: isToday ? null : () => _move(1),
           ),
@@ -107,6 +109,7 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
               PopupMenuItem(value: '/diet/target', child: Text('Cel')),
             ],
           ),
+          const SizedBox(width: 6),
         ],
       ),
       body: Column(
@@ -129,18 +132,10 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
                   : ListView(
                       key: const Key('diet-day-list'),
                       children: [
-                        ListTile(
-                          key: const Key('diet-line'),
-                          tileColor: warned ? scheme.errorContainer : null,
-                          title: Text(
-                            view.line,
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                  color: warned ? scheme.onErrorContainer : null,
-                                ),
-                          ),
-                          subtitle: view.target == null
-                              ? null
-                              : Text(_targetLine(view)),
+                        _DayCard(
+                          view: view,
+                          warned: warned,
+                          targetLine: view.target == null ? null : _targetLine(view),
                           onTap: view.target == null
                               ? () async {
                                   await context.push('/diet/target');
@@ -151,9 +146,12 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
                         const _Heading('ZJEDZONE'),
                         if (view.meals.isEmpty)
                           const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                             child: Text('Nic jeszcze nie zapisane'),
                           ),
+                        // Eaten and planned as glass lists (off-roadmap S3).
+                        if (view.meals.isNotEmpty)
+                          GlassList(children: [
                         for (final m in view.meals)
                           ListTile(
                             key: Key('diet-meal-${m.id}'),
@@ -168,7 +166,10 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
                                     if (changed) unawaited(_load());
                                   },
                           ),
+                          ]),
                         if (view.planned.isNotEmpty) const _Heading('W PLANIE'),
+                        if (view.planned.isNotEmpty)
+                          GlassList(children: [
                         for (final e in view.planned)
                           ListTile(
                             key: Key('diet-planned-${e.id}'),
@@ -186,6 +187,8 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
                                   )
                                 : null,
                           ),
+                          ]),
+                        const SizedBox(height: 24),
                       ],
                     ),
             ),
@@ -215,13 +218,96 @@ class _Heading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
               letterSpacing: 1.2,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
+      ),
+    );
+  }
+}
+
+/// The day on one glass card: what is eaten as Dziś's large number against
+/// the target's top, the bar, and the day's line (off-roadmap S3); under the
+/// reserve or over the target it takes the warning's container.
+class _DayCard extends StatelessWidget {
+  const _DayCard({
+    required this.view,
+    required this.warned,
+    required this.targetLine,
+    required this.onTap,
+  });
+
+  final DietDay view;
+  final bool warned;
+  final String? targetLine;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+    final muted = theme.textTheme.bodyMedium?.copyWith(
+      color: warned ? colors.onWarningContainer : theme.colorScheme.onSurfaceVariant,
+    );
+    final target = view.target;
+    return GlassCard(
+      key: const Key('diet-line'),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      fill: warned ? colors.warningContainer.withValues(alpha: 0.85) : null,
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (target != null) ...[
+            Text('Zjedzone', style: muted),
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                // It counts to a new value (off-roadmap S5).
+                CountingNumber(
+                  view.eaten.kcal,
+                  textKey: const Key('diet-eaten-kcal'),
+                  style: theme.textTheme.displayLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 58,
+                    height: 1,
+                    letterSpacing: -2,
+                    color: warned ? colors.onWarningContainer : null,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text('z ${target.kcalMax} kcal', style: muted),
+              ],
+            ),
+            if (target.kcalMax > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: GlassBar(
+                  fraction: (view.eaten.kcal / target.kcalMax).clamp(0.0, 1.0),
+                  warned: warned,
+                ),
+              ),
+            const SizedBox(height: 12),
+          ],
+          Text(
+            view.line,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: warned ? colors.onWarningContainer : null,
+            ),
+          ),
+          if (targetLine != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(targetLine!, style: muted),
+            ),
+        ],
       ),
     );
   }

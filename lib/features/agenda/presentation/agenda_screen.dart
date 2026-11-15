@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/providers/routine_changes_provider.dart';
+import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/core/widgets/app_bar_actions.dart';
+import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/features/agenda/domain/agenda_state.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_notifier.dart';
 import 'package:voice_agent/features/agenda/presentation/agenda_providers.dart';
@@ -39,6 +41,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
             onPrevious: notifier.canGoBack ? notifier.previousDay : null,
             onNext: notifier.nextDay,
             onToday: notifier.goToToday,
+            onSelect: notifier.selectDate,
           ),
           Expanded(child: _buildBody(state, notifier)),
         ],
@@ -70,8 +73,9 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
   Widget _buildBody(AgendaState state, AgendaNotifier notifier) {
     return switch (state) {
-      AgendaInitial() =>
-        _withFooter(const Center(child: CircularProgressIndicator())),
+      AgendaInitial() => _withFooter(
+        const Center(child: CircularProgressIndicator()),
+      ),
       AgendaLoading(cached: final cached) =>
         cached != null
             ? _buildContent(
@@ -130,20 +134,24 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 ? ListView(
                     children: [
                       const SizedBox(height: 120),
-                      const Center(
+                      Center(
                         child: Column(
                           children: [
                             Icon(
                               Icons.check_circle_outline,
                               size: 64,
-                              color: Colors.grey,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                             ),
                             SizedBox(height: 16),
                             Text(
                               'No items for this date',
                               style: TextStyle(
                                 fontSize: 16,
-                                color: Colors.grey,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -159,8 +167,11 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                           title: 'Meetings',
                           count: meetings.length,
                         ),
-                        ...meetings.map(
-                          (m) => _MeetingTile(meeting: m, day: response.date),
+                        GlassList(
+                          children: [
+                            for (final m in meetings)
+                              _MeetingTile(meeting: m, day: response.date),
+                          ],
                         ),
                       ],
                       if (routineItems.isNotEmpty) ...[
@@ -170,35 +181,48 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                         ),
                         // The server's order: overdue first, then by day,
                         // hour and name.
-                        ...routineItems.map(
-                          (item) => _RoutineItemTile(
-                            item: item,
-                            onSkip: () =>
-                                _handleResolve(item, OccurrenceStatus.skipped),
-                            onComplete: () =>
-                                _handleResolve(item, OccurrenceStatus.done),
-                          ),
+                        GlassList(
+                          children: [
+                            for (final item in routineItems)
+                              _RoutineItemTile(
+                                item: item,
+                                onSkip: () => _handleResolve(
+                                  item,
+                                  OccurrenceStatus.skipped,
+                                ),
+                                onComplete: () =>
+                                    _handleResolve(item, OccurrenceStatus.done),
+                              ),
+                          ],
                         ),
                       ],
-                      if (ticked.isNotEmpty)
+                      if (ticked.isNotEmpty) ...[
+                        const SizedBox(height: 12),
                         // Folded: what was ticked on the day, newest first,
                         // each with its Undo.
-                        ExpansionTile(
-                          key: const Key('agenda-ticked-section'),
-                          title: Text(
-                            '${notifier.isToday ? 'Done today' : 'Done that day'} (${ticked.length})',
-                          ),
-                          children: ticked
-                              .map(
-                                (t) => _TickedTile(
-                                  item: t,
-                                  day: response.date,
-                                  onUndo: () => _handleUndoTicked(t),
-                                ),
-                              )
-                              .toList(),
+                        GlassList(
+                          children: [
+                            ExpansionTile(
+                              key: const Key('agenda-ticked-section'),
+                              title: Text(
+                                '${notifier.isToday ? 'Done today' : 'Done that day'} (${ticked.length})',
+                              ),
+                              children: ticked
+                                  .map(
+                                    (t) => _TickedTile(
+                                      item: t,
+                                      day: response.date,
+                                      onUndo: () => _handleUndoTicked(t),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ],
                         ),
+                      ],
                       ?_footer,
+                      // Room for the floating tab bar.
+                      const SizedBox(height: 96),
                     ],
                   ),
           ),
@@ -217,7 +241,11 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Theme.of(context).colorScheme.error,
+          ),
           const SizedBox(height: 16),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 16),
@@ -298,6 +326,7 @@ class _DateNavigationBar extends StatelessWidget {
     required this.onPrevious,
     required this.onNext,
     required this.onToday,
+    required this.onSelect,
   });
 
   final DateTime date;
@@ -307,6 +336,7 @@ class _DateNavigationBar extends StatelessWidget {
   final VoidCallback? onPrevious;
   final VoidCallback onNext;
   final VoidCallback onToday;
+  final void Function(DateTime day) onSelect;
 
   static const _weekdays = [
     'Monday',
@@ -339,37 +369,120 @@ class _DateNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final formatted = _formatDate(date);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: Column(
         children: [
-          IconButton(
-            key: const Key('agenda-prev-day'),
-            icon: const Icon(Icons.chevron_left),
-            tooltip: 'Previous day',
-            onPressed: onPrevious,
+          Row(
+            children: [
+              // Round glass buttons, as the mockups' agenda (off-roadmap S3).
+              GlassIconButton(
+                key: const Key('agenda-prev-day'),
+                icon: Icons.chevron_left,
+                tooltip: 'Previous day',
+                onPressed: onPrevious,
+              ),
+              Expanded(
+                child: Text(
+                  formatted,
+                  key: const Key('agenda-date-label'),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (!isToday) ...[
+                ActionChip(
+                  key: const Key('agenda-today-btn'),
+                  label: const Text('Today'),
+                  onPressed: onToday,
+                ),
+                const SizedBox(width: 6),
+              ],
+              GlassIconButton(
+                key: const Key('agenda-next-day'),
+                icon: Icons.chevron_right,
+                tooltip: 'Next day',
+                onPressed: onNext,
+              ),
+            ],
           ),
-          Expanded(
-            child: Text(
-              formatted,
-              key: const Key('agenda-date-label'),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          IconButton(
-            key: const Key('agenda-next-day'),
-            icon: const Icon(Icons.chevron_right),
-            tooltip: 'Next day',
-            onPressed: onNext,
-          ),
-          if (!isToday)
-            ActionChip(
-              key: const Key('agenda-today-btn'),
-              label: const Text('Today'),
-              onPressed: onToday,
-            ),
+          const SizedBox(height: 10),
+          _WeekStrip(selected: date, onSelect: onSelect),
         ],
       ),
+    );
+  }
+}
+
+/// Seven days as pills, the chosen one solid: from today while the chosen
+/// day is in this week, else around it. Past days are not shown.
+class _WeekStrip extends StatelessWidget {
+  const _WeekStrip({required this.selected, required this.onSelect});
+
+  final DateTime selected;
+  final void Function(DateTime day) onSelect;
+
+  static const _short = ['pn', 'wt', 'śr', 'cz', 'pt', 'sb', 'nd'];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final colors = AppColors.of(context);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final chosen = DateTime(selected.year, selected.month, selected.day);
+    final offset = chosen.difference(today).inDays;
+    final first = offset < 7 ? today : chosen.subtract(const Duration(days: 3));
+    return Row(
+      children: [
+        for (var i = 0; i < 7; i++)
+          Expanded(
+            child: Builder(
+              builder: (context) {
+                final day = DateTime(first.year, first.month, first.day + i);
+                final on = day == chosen;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Material(
+                    key: Key('agenda-week-${day.day}'),
+                    color: on ? scheme.onSurface : colors.chip,
+                    shape: StadiumBorder(
+                      side: BorderSide(color: colors.glassLine),
+                    ),
+                    child: InkWell(
+                      customBorder: const StadiumBorder(),
+                      onTap: () => onSelect(day),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Column(
+                          children: [
+                            Text(
+                              _short[day.weekday - 1],
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: on
+                                    ? scheme.surface
+                                    : scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              '${day.day}',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: on ? scheme.surface : scheme.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }
@@ -381,18 +494,21 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(24, 18, 16, 8),
       child: Row(
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(width: 8),
-          Text('($count)', style: Theme.of(context).textTheme.bodySmall),
+          GlassPill('$count', minWidth: 28),
         ],
       ),
     );
@@ -407,11 +523,11 @@ class _MeetingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    return GlassRow(
       key: Key('meeting-${meeting.calendar}-${meeting.uid}-${meeting.start}'),
-      leading: const Icon(Icons.event),
-      title: Text(meeting.title),
-      subtitle: Text(meeting.when(day)),
+      leading: const Icon(Icons.event_outlined, size: 20),
+      title: meeting.title,
+      subtitle: meeting.when(day),
       trailing: _StatusBadge(label: meeting.calendar),
     );
   }
@@ -436,10 +552,13 @@ class _RoutineItemTile extends StatelessWidget {
       key: Key('routine-dismiss-${item.routineId}'),
       direction: DismissDirection.endToStart,
       background: Container(
-        color: Colors.orange,
+        color: AppColors.of(context).warning,
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 16),
-        child: const Text('Skip', style: TextStyle(color: Colors.white)),
+        child: Text(
+          'Skip',
+          style: TextStyle(color: AppColors.of(context).onWarning),
+        ),
       ),
       confirmDismiss: (_) async {
         onSkip();
@@ -448,10 +567,10 @@ class _RoutineItemTile extends StatelessWidget {
       child: ExpansionTile(
         key: Key('routine-item-${item.routineId}'),
         leading: item.overdue
-            ? const Icon(Icons.warning, color: Colors.orange)
+            ? Icon(Icons.warning, color: AppColors.of(context).warning)
             : Icon(
                 item.isOneOff ? Icons.task_alt : Icons.repeat,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         title: Text(item.routineName),
         subtitle: Wrap(
@@ -526,7 +645,7 @@ class _TickedTile extends StatelessWidget {
       key: Key('ticked-${item.routineId}-${item.scheduledFor}'),
       leading: Icon(
         skipped ? Icons.skip_next : Icons.check,
-        color: Colors.grey,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
       title: Text(item.routineName),
       subtitle: Text(
@@ -554,10 +673,15 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: AppColors.of(context).chip,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
     );
   }
 }
@@ -574,7 +698,7 @@ class _StaleDataBanner extends StatelessWidget {
       key: const Key('stale-data-banner'),
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: AppColors.of(context).chip,
       child: Text(
         'Last updated at $formatted',
         style: Theme.of(context).textTheme.bodySmall,
