@@ -285,6 +285,8 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
                   ? UtteranceSubject.diet
                   : UtteranceSubject.day,
           actionCard: (a) => MealActionCard(action: a),
+          // Typed in the conversation field: the thread sends it.
+          initialText: state.extra is String ? state.extra! as String : null,
         );
       },
     ),
