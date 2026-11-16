@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// `AgendaScreen`, which reads the day again.
 final routinesEditedProvider = StateProvider<int>((ref) => 0);
 
-/// Bumped by `AgendaScreen` after a tick, an undo or a pull to refresh.
+/// Bumped by `AgendaScreen` after a tick, an undo, a pull to refresh or a
+/// saved edit from a row.
 /// Consumer: `RoutinesSection`, which reads the routines again.
 final agendaTickedProvider = StateProvider<int>((ref) => 0);
