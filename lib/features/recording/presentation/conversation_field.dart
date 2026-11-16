@@ -23,12 +23,15 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 /// (the subject is read from the screen on top when an utterance ends,
 /// ADR-NET-008), and Napisz opens a new thread on the matter.
 ///
-/// Typing opens the conversation, where typed turns already go into a voice
-/// session (ADR-CORE-119 of personal-agent).
+/// The line next to the mic is a text field: it takes the cursor and the
+/// keyboard in place, its hint is the mic's state. Sending (the send key or
+/// the arrow) opens the conversation with the text, and the thread sends it
+/// there, where typed turns already go into a voice session (ADR-CORE-119 of
+/// personal-agent): one way to send, the thread's.
 ///
 /// Under the reply stand the cards of what it did ([actionCard], ADR-NET-009),
 /// on a screen that knows them.
-class ConversationField extends ConsumerWidget {
+class ConversationField extends ConsumerStatefulWidget {
   const ConversationField({super.key, this.matterId, this.diet = false, this.actionCard});
 
   /// The matter whose screen the field sits on; null on Dziś and the diet.
@@ -43,7 +46,49 @@ class ConversationField extends ConsumerWidget {
   final Widget Function(AgentAction action)? actionCard;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ConversationField> createState() => _ConversationFieldState();
+}
+
+class _ConversationFieldState extends ConsumerState<ConversationField> {
+  final _text = TextEditingController();
+
+  String? get matterId => widget.matterId;
+  bool get diet => widget.diet;
+  Widget Function(AgentAction action)? get actionCard => widget.actionCard;
+
+  @override
+  void initState() {
+    super.initState();
+    // The arrow shows only while there is something to send.
+    _text.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  /// Where a typed text goes, and Napisz with nothing typed: on a matter or
+  /// the diet a new thread there; on Dziś the conversation of the voice
+  /// session, or a new one when there is none.
+  String _threadRoute() {
+    if (matterId != null) return '/conversation/new?matter=$matterId';
+    if (diet) return '/conversation/new?subject=diet';
+    final id = ref.read(sessionIdCoordinatorProvider).currentConversationId;
+    return id != null && id.isNotEmpty ? '/conversation/$id' : '/conversation/new';
+  }
+
+  void _send() {
+    final text = _text.text.trim();
+    if (text.isEmpty) return;
+    _text.clear();
+    FocusScope.of(context).unfocus();
+    unawaited(context.push(_threadRoute(), extra: text));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final reply = ref.watch(latestAgentReplyProvider);
     // A card stands under a reply for a meal; a queued utterance waits for the evening's story.
     final actions = actionCard == null
@@ -153,15 +198,34 @@ class ConversationField extends ConsumerWidget {
                                   : '',
                               color: onBar,
                             )
-                          : Text(
-                              line,
-                              key: const Key('field-state'),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    fontSize: 15,
-                                    color: scheme.onSurfaceVariant,
-                                  ),
+                          : TextField(
+                              key: const Key('field-text'),
+                              controller: _text,
+                              minLines: 1,
+                              maxLines: 4,
+                              textCapitalization: TextCapitalization.sentences,
+                              textInputAction: TextInputAction.send,
+                              onSubmitted: (_) => _send(),
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 15),
+                              decoration: InputDecoration(
+                                // The mic's state stands where the text goes.
+                                hint: Text(
+                                  line,
+                                  key: const Key('field-state'),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                        fontSize: 15,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                ),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                filled: false,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
                             ),
                     ),
                     if (micModes && mode != MicMode.off)
@@ -173,17 +237,26 @@ class ConversationField extends ConsumerWidget {
                         style: TextButton.styleFrom(foregroundColor: onBar),
                         child: const Text('Zakończ'),
                       ),
-                    IconButton(
-                      key: const Key('field-write'),
-                      color: onBar ?? scheme.onSurfaceVariant,
-                      icon: const Icon(Icons.keyboard_outlined),
-                      tooltip: 'Napisz',
-                      onPressed: matterId != null
-                          ? () => unawaited(context.push('/conversation/new?matter=$matterId'))
-                          : diet
-                              ? () => unawaited(context.push('/conversation/new?subject=diet'))
-                              : openConversation,
-                    ),
+                    if (_text.text.trim().isNotEmpty)
+                      IconButton(
+                        key: const Key('field-send'),
+                        color: scheme.primary,
+                        icon: const Icon(Icons.send),
+                        tooltip: 'Wyślij',
+                        onPressed: _send,
+                      )
+                    else
+                      IconButton(
+                        key: const Key('field-write'),
+                        color: onBar ?? scheme.onSurfaceVariant,
+                        // Not the Rozmowy tab's icon: this opens the
+                        // conversation of the field, not the list.
+                        icon: const Icon(Icons.chat_bubble_outline),
+                        tooltip: 'Rozmowa',
+                        onPressed: matterId != null || diet
+                            ? () => unawaited(context.push(_threadRoute()))
+                            : openConversation,
+                      ),
                     const SizedBox(width: 4),
                     const MicButton(key: Key('field-mic'), compact: true),
                   ],

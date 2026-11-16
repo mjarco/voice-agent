@@ -20,6 +20,7 @@ import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/subject/utterance_subject.dart';
 import 'package:voice_agent/core/network/pin_writer.dart';
 import 'package:voice_agent/features/chat/domain/chat_repository.dart';
+import 'package:voice_agent/core/network/sse_client.dart';
 import 'package:voice_agent/features/chat/presentation/chat_providers.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/notifications/agenda_notification_scheduler.dart';
@@ -263,6 +264,24 @@ class _EmptyChat implements ChatRepository {
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
+/// Records what a thread sent; the stream ends with no event.
+class _SendingChat extends _EmptyChat {
+  final sent = <({String content, Map<String, dynamic>? subject})>[];
+
+  @override
+  Stream<SseEvent> streamChat({
+    required String sessionId,
+    required String content,
+    required String idempotencyKey,
+    String? model,
+    String? backend,
+    Map<String, dynamic>? subject,
+  }) {
+    sent.add((content: content, subject: subject));
+    return const Stream.empty();
+  }
+}
+
 class _NoPins implements PinWriter {
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
@@ -501,7 +520,8 @@ void main() {
   });
 
   group('the subject of an utterance (ADR-NET-008)', () {
-    Future<ProviderContainer> pump(WidgetTester tester) async {
+    Future<ProviderContainer> pump(WidgetTester tester,
+        {ChatRepository? chat}) async {
       final matters = FakeMattersRepository(details: {
         'm1': const MatterDetail(matter: MatterSummary(id: 'm1', title: 'Remont łazienki', status: MatterStatus.active)),
       });
@@ -510,7 +530,7 @@ void main() {
           ..._baseOverrides,
           todayRepositoryProvider.overrideWithValue(_CountingTodayRepo()),
           mattersRepositoryProvider.overrideWithValue(matters),
-          chatRepositoryProvider.overrideWithValue(_EmptyChat()),
+          chatRepositoryProvider.overrideWithValue(chat ?? _EmptyChat()),
           pinWriterProvider.overrideWithValue(_NoPins()),
           shoppingProposalsPortProvider.overrideWithValue(FakeShoppingProposals()),
         ],
@@ -519,6 +539,42 @@ void main() {
       await tester.pumpAndSettle();
       return ProviderScope.containerOf(tester.element(find.byType(App)));
     }
+
+    testWidgets('on a matter the field takes text; sending opens a thread on '
+        'the matter and sends it there', (tester) async {
+      final chat = _SendingChat();
+      await pump(tester, chat: chat);
+      final router = GoRouter.of(tester.element(find.byType(NavigationBar)));
+      unawaited(router.push('/matter/m1'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('field-send')), findsNothing);
+      await tester.tap(find.byKey(const Key('field-text')));
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+      await tester.enterText(find.byKey(const Key('field-text')), 'Kupić płytki ');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('field-send')));
+      await tester.pumpAndSettle();
+
+      expect(router.state.uri.toString(), '/conversation/new?matter=m1');
+      expect(chat.sent.map((e) => e.content), ['Kupić płytki']);
+      expect(chat.sent.single.subject.toString(), contains('m1'));
+    });
+
+    testWidgets('on Dziś with no conversation a typed text opens a new one and '
+        'is sent with the send key', (tester) async {
+      final chat = _SendingChat();
+      await pump(tester, chat: chat);
+      final router = GoRouter.of(tester.element(find.byType(NavigationBar)));
+
+      await tester.enterText(find.byKey(const Key('field-text')), 'Co mam dziś?');
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await tester.pumpAndSettle();
+
+      expect(router.state.uri.toString(), '/conversation/new');
+      expect(chat.sent.map((e) => e.content), ['Co mam dziś?']);
+    });
 
     UtteranceSubject subjectNow(ProviderContainer c) => c.read(utteranceSubjectReaderProvider)();
 

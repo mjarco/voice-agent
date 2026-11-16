@@ -117,6 +117,35 @@ Future<void> _pumpScreen(
         path: '/settings',
         builder: (context, state) => const Scaffold(body: Text('Settings')),
       ),
+      // The routine's form stands in: Save pops a routine, Cancel nothing.
+      GoRoute(
+        path: '/agenda/routines/:id/edit',
+        builder: (context, state) => Scaffold(
+          body: Column(
+            children: [
+              Text('Form ${state.pathParameters['id']}'),
+              TextButton(
+                onPressed: () => context.pop(Routine(
+                  id: state.pathParameters['id']!,
+                  name: 'Call the plumber today',
+                  kind: RoutineKind.oneOff,
+                  rrule: '',
+                  status: RoutineStatus.active,
+                  missed: RoutineMissed.waits,
+                  steps: const [],
+                  createdAt: DateTime(2026, 10, 24),
+                  updatedAt: DateTime(2026, 10, 24),
+                )),
+                child: const Text('Save'),
+              ),
+              TextButton(
+                onPressed: () => context.pop(),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ),
+      ),
     ],
   );
 
@@ -372,6 +401,48 @@ void main() {
         expect(repo.resolved, ['rtn-inv 2026-09-10 done']);
       },
     );
+
+    testWidgets('an expanded row opens the routine\'s form; a saved edit '
+        'reads the day again and tells the routines\' section',
+        (tester) async {
+      final repo = _StubRepository(response: routineAgenda([task]));
+      await _pumpScreen(tester, repository: repo);
+      final before = repo.fetches;
+
+      await tester.tap(find.text('Call the plumber'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-edit-rtn-task')));
+      await tester.pumpAndSettle();
+      expect(find.text('Form rtn-task'), findsOneWidget);
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Form rtn-task'), findsNothing);
+      expect(repo.fetches, greaterThan(before));
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(AgendaScreen)));
+      expect(container.read(agendaTickedProvider), 1);
+    });
+
+    testWidgets('a form closed without saving changes nothing',
+        (tester) async {
+      final repo = _StubRepository(response: routineAgenda([task]));
+      await _pumpScreen(tester, repository: repo);
+      final before = repo.fetches;
+
+      await tester.tap(find.text('Call the plumber'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('routine-edit-rtn-task')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(repo.fetches, before);
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(AgendaScreen)));
+      expect(container.read(agendaTickedProvider), 0);
+    });
 
     testWidgets('a refused tick-off shows its reason', (tester) async {
       final repo = _StubRepository(response: routineAgenda([waiting]))

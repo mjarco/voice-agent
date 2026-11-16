@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:voice_agent/core/widgets/glass.dart';
 import 'package:voice_agent/core/theme/app_colors.dart';
@@ -21,9 +23,14 @@ class ThreadScreen extends ConsumerStatefulWidget {
     required this.conversationId,
     this.subject = UtteranceSubject.day,
     this.actionCard,
+    this.initialText,
   });
 
   final String conversationId;
+
+  /// A text typed in the conversation field: sent once, as soon as the
+  /// thread is loaded, through the thread's own send.
+  final String? initialText;
 
   /// The subject a new thread is opened in (Napisz on a matter's screen,
   /// `/conversation/new?matter=<id>`, or the diet's, `?subject=diet`); its
@@ -53,8 +60,12 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
-    // Napisz opens a new thread each time, not the last one written there.
-    if (_key != widget.conversationId) ref.invalidate(threadNotifierProvider(_key));
+    // Napisz opens a new thread each time, not the last one written there;
+    // so does a text typed with no conversation to go to.
+    if (_key != widget.conversationId ||
+        (widget.conversationId == 'new' && widget.initialText != null)) {
+      ref.invalidate(threadNotifierProvider(_key));
+    }
     ref.read(threadNotifierProvider(_key).notifier).refreshProposals();
   }
 
@@ -128,11 +139,31 @@ class _ThreadScreenState extends ConsumerState<ThreadScreen> {
     }
   }
 
+  /// Whether [ThreadScreen.initialText] went out.
+  bool _initialSent = false;
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(threadNotifierProvider(_key));
     final notifier =
         ref.read(threadNotifierProvider(_key).notifier);
+    final initial = widget.initialText;
+    if (!_initialSent &&
+        initial != null &&
+        (state is ThreadLoaded || state is ThreadEmpty)) {
+      _initialSent = true;
+      final closed = state is ThreadLoaded &&
+          state.conversation.status == ConversationStatus.closed;
+      if (closed) {
+        // A closed thread takes no turn: the text waits in its composer
+        // rather than vanish.
+        _textController.text = initial;
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(notifier.send(initial));
+        });
+      }
+    }
 
     final String title;
     final Conversation? conversation;

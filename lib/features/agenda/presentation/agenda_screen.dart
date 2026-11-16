@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/agenda.dart';
 import 'package:voice_agent/core/models/routine.dart';
 import 'package:voice_agent/core/providers/routine_changes_provider.dart';
@@ -192,6 +193,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                                 ),
                                 onComplete: () =>
                                     _handleResolve(item, OccurrenceStatus.done),
+                                onEdit: () => _handleEdit(item),
                               ),
                           ],
                         ),
@@ -290,6 +292,17 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         ),
       ),
     );
+  }
+
+  /// Opens the routine's form, the same one as its page in the Agenda; a
+  /// saved edit changes the row, so the day is read again and the routines'
+  /// section is told.
+  Future<void> _handleEdit(AgendaRoutineItem item) async {
+    final saved = await context
+        .push<Routine>('/agenda/routines/${item.routineId}/edit');
+    if (!mounted || saved == null) return;
+    ref.read(agendaNotifierProvider.notifier).refresh();
+    ref.read(agendaTickedProvider.notifier).state++;
   }
 
   Future<void> _handleUndoTicked(AgendaTickedItem item) async {
@@ -534,16 +547,19 @@ class _MeetingTile extends StatelessWidget {
 }
 
 /// A routine due: a recurring one's day or a one-off task in its window.
-/// Swiping skips it; the expanded row lists its steps and ticks it off.
+/// Swiping skips it; the expanded row lists its steps, ticks it off and
+/// opens its form.
 class _RoutineItemTile extends StatelessWidget {
   const _RoutineItemTile({
     required this.item,
     required this.onSkip,
     required this.onComplete,
+    required this.onEdit,
   });
   final AgendaRoutineItem item;
   final VoidCallback onSkip;
   final VoidCallback onComplete;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -615,6 +631,12 @@ class _RoutineItemTile extends StatelessWidget {
                   onPressed: onSkip,
                   icon: const Icon(Icons.skip_next),
                   label: const Text('Skip'),
+                ),
+                OutlinedButton.icon(
+                  key: Key('routine-edit-${item.routineId}'),
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit'),
                 ),
               ],
             ),
