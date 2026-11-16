@@ -22,6 +22,9 @@ class TodayScreen extends ConsumerWidget {
 
   final Widget? field;
 
+  /// How long the snackbar of a done or skipped task offers Cofnij.
+  static const undoWindow = Duration(seconds: 10);
+
   /// Now, for the story's block (in tests, a fixed hour).
   final DateTime Function() clock;
 
@@ -363,6 +366,10 @@ class _TaskRow extends ConsumerWidget {
         messenger.hideCurrentSnackBar();
         messenger.showSnackBar(SnackBar(
           content: Text('$said: ${item.title}'),
+          // With an action a snackbar stays until tapped unless told
+          // otherwise, and the app's messenger carries it to every screen.
+          persist: false,
+          duration: TodayScreen.undoWindow,
           action: item.undo == null
               ? null
               : SnackBarAction(
