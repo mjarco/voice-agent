@@ -612,7 +612,7 @@ screens within this structure — it does not add routes.
 | `/matters` | ADR-ARCH-012 (shell branch 2 since ADR-ARCH-013) | MattersScreen, the "Sprawy" tab |
 | `/matters/new` | R3 matters (child of /matters) | MatterFormScreen — pops with the saved MatterDetail |
 | `/matters/:id` | R3 matters (child of /matters) | MatterDetailScreen |
-| `/routine/:id`, `/matter/:id` | ADR-ARCH-013 (outside shell) | RoutineDetailScreen, MatterDetailScreen, opened over Dziś |
+| `/routine/:id`, `/matter/:id` | ADR-ARCH-013 (outside shell) | RoutineDetailScreen, MatterDetailScreen, opened over Dziś; `/routine/:id/edit`: RoutineFormScreen (a detail page pushes the form under its own route, never across the shell) |
 | `/diet`, `/diet/menu`, `/diet/own-meals`, `/diet/target` | ADR-ARCH-013 (outside shell) | the diet's screens (DietDayScreen with the field, MenuScreen, OwnMealsScreen, TargetScreen) |
 | `/pins` | 045 (outside shell) | 045 (PinsScreen) — an icon in the bar of every tab (`AppBarActions`) |
 | `/pins/new` | voice-agent#386 (child of /pins) | voice-agent#386 (PinFormScreen) — `extra`: starting text |

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:voice_agent/app/app.dart';
 import 'package:voice_agent/core/models/sync_queue_item.dart';
@@ -174,6 +177,83 @@ void main() {
       );
       expect(tester.widget<NavigationBar>(find.byType(NavigationBar))
           .selectedIndex, 1);
+    });
+  });
+
+  group('a task opened over Dziś (ADR-ARCH-013)', () {
+    Future<FakeRoutinesRepository> openOverToday(WidgetTester tester) async {
+      final repo = FakeRoutinesRepository()
+        ..detail = sampleRoutine(
+            name: 'Naprawić światło', dueOn: '2026-11-14')
+        ..saveAnswers.add(sampleRoutine(
+            name: 'Naprawić światło w łazience', dueOn: '2026-11-14'));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...overrides,
+            routinesRepositoryProvider.overrideWithValue(repo),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final router = GoRouter.of(tester.element(find.byType(NavigationBar)));
+      unawaited(router.push('/routine/rtn-1'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RoutineDetailScreen), findsOneWidget);
+      return repo;
+    }
+
+    testWidgets('Edit opens the form over the task, not an empty Agenda',
+        (tester) async {
+      await openOverToday(tester);
+
+      await tester.tap(find.byKey(const Key('detail-edit-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RoutineFormScreen), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+    });
+
+    testWidgets('Save sends the edit and returns to the task', (tester) async {
+      final repo = await openOverToday(tester);
+      await tester.tap(find.byKey(const Key('detail-edit-button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('routine-form-name')),
+          'Naprawić światło w łazience');
+      await tester.tap(find.byKey(const Key('routine-form-save')));
+      await tester.pumpAndSettle();
+
+      expect(repo.calls, contains('edit rtn-1'));
+      expect(repo.lastPatch?.toMap()['name'], 'Naprawić światło w łazience');
+      expect(find.byType(RoutineFormScreen), findsNothing);
+      expect(find.byType(RoutineDetailScreen), findsOneWidget);
+    });
+
+    testWidgets('in the Agenda, Edit still opens the Agenda\'s form',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...overrides,
+            routinesRepositoryProvider
+                .overrideWithValue(FakeRoutinesRepository()),
+            pendingDeepLinkProvider
+                .overrideWith((ref) => '/agenda/routines/rtn-1'),
+          ],
+          child: const App(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('detail-edit-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RoutineFormScreen), findsOneWidget);
+      // The Agenda's own form, inside its branch: the tab bar stays.
+      expect(find.byType(NavigationBar), findsOneWidget);
     });
   });
 

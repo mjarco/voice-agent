@@ -162,11 +162,12 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
     }
   }
 
-  /// Opens the form; an edit changes the routine in place, so the page
-  /// reloads it.
+  /// Opens the form as a child of this page's own route: in the Agenda
+  /// (`/agenda/routines/:id`) or over Dziś (`/routine/:id`). An edit changes
+  /// the routine in place, so the page reloads it.
   Future<void> _handleEdit(Routine routine) async {
-    final saved =
-        await context.push<Routine>('/agenda/routines/${routine.id}/edit');
+    final here = GoRouterState.of(context).uri.path;
+    final saved = await context.push<Routine>('$here/edit');
     if (!mounted || saved == null) return;
     ref
         .read(routineDetailNotifierProvider(widget.routineId).notifier)
