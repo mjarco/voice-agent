@@ -249,7 +249,9 @@ class _ConversationFieldState extends ConsumerState<ConversationField> {
                       IconButton(
                         key: const Key('field-write'),
                         color: onBar ?? scheme.onSurfaceVariant,
-                        icon: const Icon(Icons.forum_outlined),
+                        // Not the Rozmowy tab's icon: this opens the
+                        // conversation of the field, not the list.
+                        icon: const Icon(Icons.chat_bubble_outline),
                         tooltip: 'Rozmowa',
                         onPressed: matterId != null || diet
                             ? () => unawaited(context.push(_threadRoute()))
