@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/providers/routine_changes_provider.dart';
 import 'package:voice_agent/features/routines/domain/routines_repository.dart';
 import 'package:voice_agent/features/routines/presentation/routine_detail_screen.dart';
 import 'package:voice_agent/features/routines/presentation/routines_providers.dart';
@@ -203,6 +204,10 @@ void main() {
 
       // The list reloads when the page closes.
       expect(repo.calls, ['detail rtn-1', 'detail rtn-1']);
+      // And the Agenda is told, whichever way the page was opened.
+      final container = ProviderScope.containerOf(
+          tester.element(find.byType(RoutineDetailScreen)));
+      expect(container.read(routinesEditedProvider), 1);
     });
 
     testWidgets('error state shows retry button', (tester) async {

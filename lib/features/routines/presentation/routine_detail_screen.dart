@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voice_agent/core/models/routine.dart';
+import 'package:voice_agent/core/providers/routine_changes_provider.dart';
 import 'package:voice_agent/core/theme/app_colors.dart';
 import 'package:voice_agent/features/routines/domain/routine_detail_state.dart';
 import 'package:voice_agent/features/routines/domain/routine_schedule.dart';
@@ -162,15 +163,19 @@ class _RoutineDetailScreenState extends ConsumerState<RoutineDetailScreen> {
     }
   }
 
-  /// Opens the form; an edit changes the routine in place, so the page
-  /// reloads it.
+  /// Opens the form as a child of this page's own route: in the Agenda
+  /// (`/agenda/routines/:id`) or over Dziś (`/routine/:id`). An edit changes
+  /// the routine in place, so the page reloads it.
   Future<void> _handleEdit(Routine routine) async {
-    final saved =
-        await context.push<Routine>('/agenda/routines/${routine.id}/edit');
+    final here = GoRouterState.of(context).uri.path;
+    final saved = await context.push<Routine>('$here/edit');
     if (!mounted || saved == null) return;
     ref
         .read(routineDetailNotifierProvider(widget.routineId).notifier)
         .refresh();
+    // Over Dziś no RoutinesSection is there to tell the Agenda on the way
+    // back, so the page tells it: the Agenda shows the new name at once.
+    ref.read(routinesEditedProvider.notifier).state++;
   }
 
   /// End after…: the last day the routine still occurs, from yesterday

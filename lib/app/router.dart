@@ -174,6 +174,15 @@ GoRouter createRouter({String initialLocation = '/today'}) => GoRouter(
       path: '/routine/:id',
       builder: (context, state) =>
           RoutineDetailScreen(routineId: state.pathParameters['id']!),
+      routes: [
+        // The form opens over the task, outside the shell like it: a push
+        // of the Agenda's own form from here left an empty Agenda.
+        GoRoute(
+          path: 'edit',
+          builder: (context, state) =>
+              RoutineFormScreen(editId: state.pathParameters['id']!),
+        ),
+      ],
     ),
     GoRoute(
       path: '/matter/:id',

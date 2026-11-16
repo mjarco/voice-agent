@@ -6,8 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// signal.
 
 /// Bumped by `RoutinesSection` after it created, paused or resumed a routine,
-/// or came back from a routine's pages. Consumer: `AgendaScreen`, which reads
-/// the day again.
+/// or came back from a routine's pages, and by `RoutineDetailScreen` after a
+/// saved edit (opened over Dziś, no section sees it). Consumer:
+/// `AgendaScreen`, which reads the day again.
 final routinesEditedProvider = StateProvider<int>((ref) => 0);
 
 /// Bumped by `AgendaScreen` after a tick, an undo or a pull to refresh.
