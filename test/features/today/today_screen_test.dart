@@ -93,6 +93,22 @@ void main() {
     expect(repo.runs.last, 'POST /routines/a/resolve skipped');
   });
 
+  testWidgets('the snackbar with Cofnij goes away by itself after 10 s', (tester) async {
+    final repo = await _pump(tester, _view());
+    await tester.drag(find.text('Podlać kwiaty'), const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Zrobione: Podlać kwiaty'), findsOneWidget);
+
+    await tester.pump(TodayScreen.undoWindow - const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Cofnij'), findsOneWidget, reason: 'still within the window');
+
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Zrobione: Podlać kwiaty'), findsNothing);
+    expect(repo.runs, ['POST /routines/a/resolve done'], reason: 'running out is no undo');
+  });
+
   testWidgets('a tap opens the task and the matter over Dziś', (tester) async {
     await _pump(tester, _view());
     await tester.tap(find.text('Podlać kwiaty'));
