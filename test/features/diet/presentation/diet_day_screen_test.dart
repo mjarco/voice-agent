@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -78,6 +80,29 @@ void main() {
       await tester.tap(find.text('Cofnij'));
       await tester.pumpAndSettle();
       expect(diet.removed, ['meal-1']);
+    });
+
+    testWidgets('Cofnij after the day is closed still removes the meal', (tester) async {
+      final diet = _Diet([_owsianka]);
+      final nav = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(ProviderScope(
+        overrides: [dietRepositoryProvider.overrideWithValue(diet)],
+        child: MaterialApp(navigatorKey: nav, home: const Scaffold(body: Text('Dziś'))),
+      ));
+      unawaited(nav.currentState!.push(MaterialPageRoute<void>(builder: (_) => const DietDayScreen())));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('diet-eat-own')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('own-meal-pick-own-1')));
+      await tester.pumpAndSettle();
+      nav.currentState!.pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Cofnij'));
+      await tester.pumpAndSettle();
+      expect(diet.removed, ['meal-1']);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('closing the list logs nothing', (tester) async {

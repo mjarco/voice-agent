@@ -89,14 +89,15 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
             } on Object catch (e) {
               messenger.showSnackBar(SnackBar(content: Text('$e')));
             }
-            unawaited(_load());
+            // The snackbar outlives the screen: read the day only while it is open.
+            if (mounted) unawaited(_load());
           },
         ),
       ));
     } on Object catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('$e')));
     }
-    await _load();
+    if (mounted) await _load();
   }
 
   @override
