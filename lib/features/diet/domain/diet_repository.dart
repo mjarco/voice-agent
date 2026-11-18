@@ -12,6 +12,9 @@ abstract class DietRepository {
   /// A planned meal logged as eaten, from the menu, now.
   Future<void> eatPlanned(String menuEntryId);
 
+  /// An own meal logged as eaten now, with its estimate; the meal logged.
+  Future<DietMeal> eatOwnMeal(String ownMealId);
+
   Future<List<DietMenuEntry>> menu(String from, String to);
 
   Future<void> planOwnMeal({required String day, required String slot, required String ownMealId});

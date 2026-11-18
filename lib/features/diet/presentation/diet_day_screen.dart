@@ -10,6 +10,7 @@ import 'package:voice_agent/features/diet/domain/diet_models.dart';
 import 'package:voice_agent/features/diet/presentation/diet_days.dart';
 import 'package:voice_agent/features/diet/presentation/diet_providers.dart';
 import 'package:voice_agent/features/diet/presentation/meal_correction_sheet.dart';
+import 'package:voice_agent/features/diet/presentation/own_meal_picker.dart';
 
 /// A day of the diet (workspace discussion 2026-11-va-meals-dashboard, 05 §1):
 /// what is left with the warning, the meals eaten (a tap corrects one), the
@@ -66,6 +67,37 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
       messenger.showSnackBar(SnackBar(content: Text('$e')));
     }
     await _load();
+  }
+
+  /// An own meal eaten now: picked from the list, logged, undone from the
+  /// snackbar (workspace assignment 2026-11-18-own-meal-eaten).
+  Future<void> _eatOwn() async {
+    final picked = await pickOwnMeal(context);
+    if (picked == null || !mounted) return;
+    final repo = ref.read(dietRepositoryProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final meal = await repo.eatOwnMeal(picked.id);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Zapisane: ${meal.name} · ${meal.estimate.label} kcal'),
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(
+          label: 'Cofnij',
+          onPressed: () async {
+            try {
+              await repo.removeMeal(meal.id);
+            } on Object catch (e) {
+              messenger.showSnackBar(SnackBar(content: Text('$e')));
+            }
+            // The snackbar outlives the screen: read the day only while it is open.
+            if (mounted) unawaited(_load());
+          },
+        ),
+      ));
+    } on Object catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    }
+    if (mounted) await _load();
   }
 
   @override
@@ -143,7 +175,17 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
                                 }
                               : null,
                         ),
-                        const _Heading('ZJEDZONE'),
+                        _Heading(
+                          'ZJEDZONE',
+                          action: isToday
+                              ? TextButton.icon(
+                                  key: const Key('diet-eat-own'),
+                                  onPressed: _eatOwn,
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text('Z własnych'),
+                                )
+                              : null,
+                        ),
                         if (view.meals.isEmpty)
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -211,21 +253,27 @@ class _DietDayScreenState extends ConsumerState<DietDayScreen> {
 }
 
 class _Heading extends StatelessWidget {
-  const _Heading(this.text);
+  const _Heading(this.text, {this.action});
 
   final String text;
 
+  /// A button at the heading's right edge, e.g. Z własnych over the eaten.
+  final Widget? action;
+
   @override
   Widget build(BuildContext context) {
+    final label = Text(
+      text,
+      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            letterSpacing: 1.2,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              letterSpacing: 1.2,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-      ),
+      padding: EdgeInsets.fromLTRB(24, action == null ? 20 : 8, 16, action == null ? 8 : 0),
+      child: action == null
+          ? label
+          : Row(children: [Expanded(child: label), action!]),
     );
   }
 }

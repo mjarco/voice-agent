@@ -71,6 +71,13 @@ class ApiDietRepository implements DietRepository {
       _data(await _api.postJson('/diet/meals', data: {'menu_entry_id': menuEntryId, 'source': _source}));
 
   @override
+  Future<DietMeal> eatOwnMeal(String ownMealId) async {
+    final data = _data(await _api.postJson('/diet/meals', data: {'own_meal': ownMealId, 'source': _source}));
+    if (data is! Map<String, dynamic>) throw DietException('Brak zapisanego posiłku');
+    return DietMeal.fromMap(data);
+  }
+
+  @override
   Future<List<DietMenuEntry>> menu(String from, String to) async =>
       [for (final e in _rows(_data(await _api.get('/diet/menu', queryParameters: {'from': from, 'to': to})))) DietMenuEntry.fromMap(e)];
 
