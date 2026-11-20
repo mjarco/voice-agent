@@ -300,6 +300,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     String? notice,
   }) async {
     _modeGeneration++;
+    _clearHold();
     _abandonFocus();
     unawaited(_ref.read(ttsServiceProvider).stop());
     _engagement.disengage();
@@ -434,12 +435,111 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     });
     switch (command) {
       case GlassesCommand.listening:
-        listen();
+        // During a hold: the hold becomes ordinary listening (B5).
+        if (_held) {
+          _keepHoldListening();
+        } else {
+          listen();
+        }
       case GlassesCommand.standby:
         if (micMode == MicMode.listening) unawaited(pauseSession());
       case GlassesCommand.off:
         if (micMode != MicMode.off) unawaited(stopSession());
+      case GlassesCommand.hold:
+        holdToTalk();
+      case GlassesCommand.release:
+        unawaited(releaseHold());
     }
+  }
+
+  // ── Held listening (ADR-AUDIO-017) ───────────────────────────────────────
+
+  /// Set from a `hold` to its `release`: the engine's segment is ended only
+  /// by the release, not by silence.
+  bool _held = false;
+
+  /// Whether the release goes back to Standby: the hold began outside
+  /// Listening (Standby or Off).
+  bool _holdFromStandby = false;
+
+  /// Bumped by every hold: a release finishing after a new hold has begun
+  /// leaves the mode to that hold.
+  int _holdGeneration = 0;
+
+  /// A release still closing its utterance that will go back to Standby: a
+  /// hold begun meanwhile inherits that return.
+  bool _releaseToStandby = false;
+
+  /// Ends a hold whose release never came (glass-native killed, the
+  /// button out of range).
+  Timer? _holdTimeout;
+
+  /// The longest hold; past it the hold is released as if the button came
+  /// up. Shortened by tests only.
+  @visibleForTesting
+  static Duration holdLimit = const Duration(minutes: 5);
+
+  /// A button held on glass-native: listening at once, and the utterance
+  /// lasts until [releaseHold], whatever the silence. From Standby it
+  /// resumes, from Off it starts a session (which Android refuses in the
+  /// background, as for `listening`). A reply being spoken stops.
+  void holdToTalk() {
+    if (!mounted || _held || _suspendedForManualRecording) return;
+    Telemetry.instance.event('hf.hold_to_talk', attrs: {'mode': micMode.name});
+    _held = true;
+    _holdGeneration++;
+    _holdFromStandby = micMode != MicMode.listening || _releaseToStandby;
+    _holdTimeout?.cancel();
+    _holdTimeout = Timer(holdLimit, () => unawaited(releaseHold()));
+    final tts = _ref.read(ttsServiceProvider);
+    if (tts.isSpeaking.value) unawaited(tts.stop());
+    if (micMode == MicMode.listening) {
+      _engine?.hold();
+    } else {
+      // The engine started by Listening takes the hold ([_startEngine]).
+      listen();
+    }
+  }
+
+  /// The button came up: the held utterance goes out as one, and a hold
+  /// that began in Standby or Off goes back to Standby.
+  Future<void> releaseHold() async {
+    if (!mounted || !_held) return;
+    final generation = _holdGeneration;
+    final fromStandby = _holdFromStandby;
+    _releaseToStandby = fromStandby;
+    _clearHold();
+    Telemetry.instance.event('hf.hold_release', attrs: {'mode': micMode.name});
+    final engine = _engine;
+    if (engine != null) {
+      await engine.releaseHold(close: true);
+      // Let the segment's events reach [_onEngineEvent] before a pause
+      // cancels the subscription.
+      await Future<void>.delayed(Duration.zero);
+    }
+    if (generation == _holdGeneration) _releaseToStandby = false;
+    if (!mounted) return;
+    // A new hold began meanwhile: the mode is its.
+    if (_held || generation != _holdGeneration) return;
+    if (fromStandby && micMode == MicMode.listening) {
+      await pauseSession();
+    }
+  }
+
+  /// `listening` during a hold: the utterance goes on under the silence
+  /// rules, and listening stays on after it.
+  void _keepHoldListening() {
+    _clearHold();
+    _holdFromStandby = false;
+    Telemetry.instance.event('hf.hold_kept', attrs: {'mode': micMode.name});
+    unawaited(_engine?.releaseHold(close: false));
+    if (micMode != MicMode.listening) listen();
+  }
+
+  void _clearHold() {
+    _held = false;
+    _holdTimeout?.cancel();
+    _holdTimeout = null;
   }
 
   /// Listening on, asked for from outside the mic button: the glasses'
@@ -638,6 +738,14 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       // The only gate left on Android: ignore the mic while a reply is
       // spoken in Listening, so the agent does not hear itself.
       if (micMode != MicMode.listening || _engine == null) return;
+      // A reply that starts while a button is held would cut the owner's
+      // utterance (the gate drops it): the owner is talking, the reply
+      // stops (ADR-AUDIO-017).
+      if (_held) {
+        Telemetry.instance.event('hf.tts_stopped_by_hold');
+        unawaited(_ref.read(ttsServiceProvider).stop());
+        return;
+      }
       await _engine!.setCaptureGate(open: false);
       Telemetry.instance.event('hf.gate_changed',
           attrs: const {'open': false, 'reason': 'tts_suspend'});
@@ -846,6 +954,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     final engine = _ref.read(handsFreeEngineProvider);
     _engine = engine;
     final stream = engine.start(config: config);
+    if (_held) engine.hold();
     _engineSub = stream.listen(
       _onEngineEvent,
       onError: (Object e) => _terminateWithError('Engine error: $e'),
@@ -878,6 +987,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
         return;
       }
       if (micMode != MicMode.off) _applyMicEvent(MicModeEvent.stop);
+      _clearHold();
       _abandonFocus();
       // In Off the headset button goes to the last app that played.
       unawaited(_ref.read(mediaButtonProvider).deactivate());
@@ -971,6 +1081,7 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     unawaited(_focusLossSub?.cancel());
     unawaited(_notificationActionSub?.cancel());
     unawaited(_glassesCommandSub?.cancel());
+    _holdTimeout?.cancel();
     unawaited(_engagementSub?.cancel());
     unawaited(_engagement.dispose());
     // Clean up WAV files for any remaining unprocessed jobs.

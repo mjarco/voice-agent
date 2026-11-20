@@ -323,6 +323,171 @@ void main() {
     });
   });
 
+  // ── Held listening (ADR-AUDIO-017) ────────────────────────────────────────
+
+  group('hold', () {
+    HandsFreeOrchestrator held(List<VadLabel> labels) {
+      recorder = FakeAudioRecorder();
+      return HandsFreeOrchestrator(
+        recorder,
+        FakeVadService(labels),
+        watchdogInterval: const Duration(hours: 1),
+        holdTail: Duration.zero,
+      );
+    }
+
+    test('silence inside a hold does not end the segment', () async {
+      // 13 speech frames, then three hangovers' worth of silence.
+      final labels = [
+        ...List.filled(_minSpeechFrameThreshold, VadLabel.speech),
+        ...List.filled(_hangoverFrameThreshold * 3, VadLabel.nonSpeech),
+      ];
+      orch = held(labels);
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      orch.hold();
+      recorder.push(pcm(labels.length));
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      expect(events, contains(isA<EngineCapturing>()));
+      expect(events, isNot(contains(isA<EngineStopping>())),
+          reason: 'only the release ends a held segment');
+
+      await orch.releaseHold(close: true);
+      expect(events, contains(isA<EngineStopping>()));
+      expect(
+        events.where((e) => e is EngineSegmentReady || e is EngineError),
+        isNotEmpty,
+        reason: 'the held segment went out (no path_provider here: '
+            'a write error stands for the WAV)',
+      );
+
+      await orch.stop();
+      await sub.cancel();
+    });
+
+    test('a hold opens a segment without speech, the pre-roll included',
+        () async {
+      orch = held([]); // all non-speech
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      orch.hold();
+      recorder.push(pcm(5));
+      await Future.delayed(const Duration(milliseconds: 100));
+      expect(events, contains(isA<EngineCapturing>()));
+
+      // No speech in it: closed, but dropped as too short.
+      await orch.releaseHold(close: true);
+      expect(events, contains(isA<EngineStopping>()));
+      expect(events.whereType<EngineSegmentReady>(), isEmpty);
+      expect(events.whereType<EngineError>(), isEmpty);
+
+      await orch.stop();
+      await sub.cancel();
+    });
+
+    test('a hold is not cut at the 30 s cap', () async {
+      final labels = List.filled(_maxSpeechFrameThreshold + 5, VadLabel.speech);
+      orch = held(labels);
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      orch.hold();
+      recorder.push(pcm(labels.length));
+      // 943 async VAD calls; under a full parallel run they take longer.
+      await Future.delayed(const Duration(milliseconds: 3000));
+      expect(events.whereType<EngineStopping>(), isEmpty);
+
+      await orch.releaseHold(close: true);
+      expect(events.whereType<EngineStopping>(), hasLength(1));
+
+      await orch.stop();
+      await sub.cancel();
+    }, timeout: const Timeout(Duration(seconds: 10)));
+
+    test('released without closing, silence ends the segment again',
+        () async {
+      final labels = [
+        ...List.filled(_minSpeechFrameThreshold, VadLabel.speech),
+        ...List.filled(_hangoverFrameThreshold * 2, VadLabel.nonSpeech),
+        ...List.filled(_hangoverFrameThreshold, VadLabel.nonSpeech),
+      ];
+      orch = held(labels);
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      orch.hold();
+      final heldPart = _minSpeechFrameThreshold + _hangoverFrameThreshold * 2;
+      recorder.push(pcm(heldPart));
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(events, isNot(contains(isA<EngineStopping>())));
+
+      await orch.releaseHold(close: false);
+      recorder.push(pcm(_hangoverFrameThreshold));
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(events, contains(isA<EngineStopping>()),
+          reason: 'one hangover of silence after the release ends it');
+
+      await orch.stop();
+      await sub.cancel();
+    });
+
+    test('a hold during the release tail closes the first and stays held',
+        () async {
+      final labels = [
+        ...List.filled(_minSpeechFrameThreshold, VadLabel.speech),
+        ...List.filled(_hangoverFrameThreshold * 3, VadLabel.nonSpeech),
+      ];
+      recorder = FakeAudioRecorder();
+      orch = HandsFreeOrchestrator(
+        recorder,
+        FakeVadService(labels),
+        watchdogInterval: const Duration(hours: 1),
+        holdTail: const Duration(milliseconds: 100),
+      );
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      orch.hold();
+      recorder.push(pcm(_minSpeechFrameThreshold));
+      await Future.delayed(const Duration(milliseconds: 100));
+      final release = orch.releaseHold(close: true);
+      await Future.delayed(const Duration(milliseconds: 20));
+      orch.hold(); // during the tail
+      await release;
+      expect(events.whereType<EngineStopping>(), hasLength(1),
+          reason: 'the first utterance closed');
+
+      // Still held: silence opens the next segment and does not end it.
+      recorder.push(pcm(_hangoverFrameThreshold * 3));
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(events.whereType<EngineStopping>(), hasLength(1));
+
+      await orch.stop();
+      await sub.cancel();
+    });
+
+    test('releaseHold without a hold does nothing', () async {
+      orch = held([]);
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      await orch.releaseHold(close: true);
+      expect(events.whereType<EngineStopping>(), isEmpty);
+
+      await orch.stop();
+      await sub.cancel();
+    });
+  });
+
   // ── minSpeechMs gate ──────────────────────────────────────────────────────
 
   group('minSpeechMs gate', () {

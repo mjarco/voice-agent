@@ -75,6 +75,12 @@ class _NoOpConnectivity extends ConnectivityService {
 /// one returns a future of the root zone, which the fake-async zone of a
 /// widget test never completes, and the controller's pause would hang.
 class _IdleHfEngine implements HandsFreeEngine {
+
+  @override
+  void hold() {}
+
+  @override
+  Future<void> releaseHold({required bool close}) async {}
   StreamController<HandsFreeEngineEvent>? _ctrl;
 
   @override

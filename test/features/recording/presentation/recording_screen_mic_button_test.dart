@@ -72,6 +72,12 @@ class _NoOpConnectivity extends ConnectivityService {
 }
 
 class _IdleHfEngine implements HandsFreeEngine {
+
+  @override
+  void hold() {}
+
+  @override
+  Future<void> releaseHold({required bool close}) async {}
   final _ctrl = StreamController<HandsFreeEngineEvent>.broadcast();
 
   @override

@@ -83,6 +83,20 @@ abstract interface class HandsFreeEngine {
   /// disposed. Safe to call after [stop].
   void dispose();
 
+  /// Held listening (a button held on glass-native, ADR-AUDIO-017): from
+  /// now on the current segment is not ended by silence nor by the 30 s
+  /// cap, and with no segment open the next frame opens one, speech or
+  /// not (the pre-roll included). Idempotent.
+  void hold();
+
+  /// Ends [hold]. With [close] the held segment is closed (after a short
+  /// tail, for the last syllable) and goes out as [EngineSegmentReady],
+  /// or is dropped when it holds too little speech; the future completes
+  /// once that is done. Without [close] the segment goes on under the
+  /// usual silence rules (the hold became ordinary listening). A no-op
+  /// when not held.
+  Future<void> releaseHold({required bool close});
+
   /// Open or close the chunk-processing gate.
   ///
   /// When the gate is closed the underlying audio stream keeps draining

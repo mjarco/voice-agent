@@ -78,6 +78,12 @@ class _TrackingBackgroundService implements BackgroundService {
 // ── FakeHandsFreeEngine ──────────────────────────────────────────────────────
 
 class FakeHandsFreeEngine implements HandsFreeEngine {
+
+  @override
+  void hold() {}
+
+  @override
+  Future<void> releaseHold({required bool close}) async {}
   @override
   Future<void> setCaptureGate({required bool open}) async {}
 
@@ -299,6 +305,12 @@ class _NullSttService implements SttService {
 /// used to verify which path [HandsFreeController.suspendForManualRecording]
 /// takes based on the current session state.
 class _TrackingHfEngine implements HandsFreeEngine {
+
+  @override
+  void hold() {}
+
+  @override
+  Future<void> releaseHold({required bool close}) async {}
   @override
   Future<void> setCaptureGate({required bool open}) async {}
 

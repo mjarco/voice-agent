@@ -45,6 +45,20 @@ import 'package:voice_agent/features/recording/presentation/recording_providers.
 /// Records every call; like the real orchestrator, keeps its gate across
 /// a stop and a start.
 class _Engine implements HandsFreeEngine {
+  /// Holds started and releases asked for (`close` or `keep`), in order.
+  final List<String> holdCalls = [];
+
+  @override
+  void hold() => holdCalls.add('hold@$starts');
+
+  /// When set, a closing release waits for it (the engine's tail).
+  Completer<void>? releaseGate;
+
+  @override
+  Future<void> releaseHold({required bool close}) async {
+    holdCalls.add(close ? 'close' : 'keep');
+    if (close && releaseGate != null) await releaseGate!.future;
+  }
   int starts = 0;
   int stops = 0;
   bool gateOpen = true;
@@ -1253,6 +1267,150 @@ void main() {
 
       expect(h.mediaButton.calls, isEmpty);
       expect(h.service.notifications, ['Recording session active []']);
+    });
+  });
+
+  group('held listening (ADR-AUDIO-017)', () {
+    test('a hold from Standby listens, the release sends it and pauses',
+        () async {
+      final h = _Harness();
+      await h.standby();
+
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      await _settle();
+      expect(h.mode, MicMode.listening);
+      expect(h.engine.holdCalls, ['hold@2'],
+          reason: 'the engine started by the resume takes the hold');
+
+      h.glasses.send(GlassesCommand.release);
+      await _settle();
+      await _settle();
+      await _settle();
+      expect(h.engine.holdCalls, ['hold@2', 'close']);
+      expect(h.mode, MicMode.standby);
+    });
+
+    test('a hold in Listening stays listening after the release', () async {
+      final h = _Harness();
+      await h.listening();
+
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      expect(h.engine.holdCalls, ['hold@1']);
+
+      h.glasses.send(GlassesCommand.release);
+      await _settle();
+      await _settle();
+      await _settle();
+      expect(h.engine.holdCalls, ['hold@1', 'close']);
+      expect(h.mode, MicMode.listening);
+    });
+
+    test('listening during a hold keeps the utterance and the listening',
+        () async {
+      final h = _Harness();
+      await h.standby();
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      await _settle();
+
+      h.glasses.send(GlassesCommand.listening);
+      await _settle();
+      expect(h.engine.holdCalls, ['hold@2', 'keep']);
+
+      // The hold is over: a late release changes nothing.
+      h.glasses.send(GlassesCommand.release);
+      await _settle();
+      await _settle();
+      expect(h.engine.holdCalls, ['hold@2', 'keep']);
+      expect(h.mode, MicMode.listening);
+    });
+
+    test('a pause during a hold ends it', () async {
+      final h = _Harness();
+      await h.listening();
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+
+      h.glasses.send(GlassesCommand.standby);
+      await _settle();
+      expect(h.mode, MicMode.standby);
+
+      h.glasses.send(GlassesCommand.release);
+      await _settle();
+      expect(h.engine.holdCalls, ['hold@1'], reason: 'no release after it');
+      expect(h.mode, MicMode.standby);
+    });
+
+    test('a hold stops a reply being spoken', () async {
+      final h = _Harness();
+      await h.listening();
+      h.tts.speaking.value = true;
+      await _settle();
+      final stops = h.tts.stops;
+
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      expect(h.tts.stops, greaterThan(stops));
+    });
+
+    test('a hold during the previous release keeps its return to Standby',
+        () async {
+      final h = _Harness();
+      await h.standby();
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      await _settle();
+      h.engine.releaseGate = Completer<void>();
+      h.glasses.send(GlassesCommand.release);
+      await _settle();
+
+      // The second hold comes while the first release waits out its tail.
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      h.engine.releaseGate!.complete();
+      await _settle();
+      await _settle();
+      expect(h.mode, MicMode.listening, reason: 'the second hold is on');
+
+      h.engine.releaseGate = null;
+      h.glasses.send(GlassesCommand.release);
+      await _settle();
+      await _settle();
+      await _settle();
+      expect(h.mode, MicMode.standby,
+          reason: 'it began in the first one\'s Standby');
+    });
+
+    test('a reply starting during a hold stops, the gate stays open',
+        () async {
+      final h = _Harness();
+      await h.listening();
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      final gates = h.engine.gateCalls.length;
+      final stops = h.tts.stops;
+
+      h.tts.speaking.value = true;
+      await _settle();
+      expect(h.tts.stops, greaterThan(stops));
+      expect(h.engine.gateCalls.skip(gates), isNot(contains(false)));
+    });
+
+    test('a hold whose release never comes ends after the limit', () async {
+      final limit = HandsFreeController.holdLimit;
+      HandsFreeController.holdLimit = const Duration(milliseconds: 30);
+      addTearDown(() => HandsFreeController.holdLimit = limit);
+      final h = _Harness();
+      await h.listening();
+
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      expect(h.engine.holdCalls, ['hold@1']);
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(h.engine.holdCalls, ['hold@1', 'close']);
     });
   });
 }

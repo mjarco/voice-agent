@@ -1,8 +1,9 @@
 import 'package:voice_agent/core/session_control/mic_mode.dart';
 
-/// A command from the G2 glasses' control page in glass-native
-/// (ADR-AUDIO-016): the microphone mode the owner picked there.
-enum GlassesCommand { listening, standby, off }
+/// A command from glass-native: the microphone mode the owner picked on
+/// the glasses' control page (ADR-AUDIO-016), or a button held and
+/// released (`hold`, `release`; ADR-AUDIO-017).
+enum GlassesCommand { listening, standby, off, hold, release }
 
 /// The way in from glass-native and the way back to it: commands come in,
 /// every change of [MicMode] goes out so the glasses show the real mode.

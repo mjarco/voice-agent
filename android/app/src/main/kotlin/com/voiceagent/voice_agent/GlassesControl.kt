@@ -16,7 +16,7 @@ import com.voiceagent.voice_agent.location.GlassesWake
  * glass-native's docs/va-control-protocol.md).
  *
  * In: glass-native sends [ACTION_MIC] to this package with `command` = listening | standby | off |
- * status, under the permission `<applicationId>.permission.MIC`. A command goes to Dart through
+ * hold | release (a button held and released, ADR-AUDIO-017) | status, under the permission `<applicationId>.permission.MIC`. A command goes to Dart through
  * [GlassesControlBridge]; without a running engine it is blocked. An ordered broadcast gets the
  * answer: result data = accepted | blocked | refused | status, extras `mode` (the mode now) and
  * `reason`.
@@ -105,7 +105,7 @@ class GlassesControlReceiver : BroadcastReceiver() {
         val source = intent.getStringExtra("source") ?: "intent"
         val (status, reason) = when (command) {
             "status" -> "status" to null
-            "listening", "standby", "off" ->
+            "listening", "standby", "off", "hold", "release" ->
                 if (GlassesControl.deliver(command)) "accepted" to null
                 else "blocked" to "voice-agent is not running"
             else -> "refused" to "unknown command: $command"

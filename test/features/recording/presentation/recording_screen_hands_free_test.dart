@@ -102,6 +102,12 @@ class _NoOpSttService implements SttService {
 
 /// Fake [HandsFreeEngine] that tests control via [emit].
 class FakeHfEngine implements HandsFreeEngine {
+
+  @override
+  void hold() {}
+
+  @override
+  Future<void> releaseHold({required bool close}) async {}
   @override
   Future<void> setCaptureGate({required bool open}) async {}
 
