@@ -112,6 +112,12 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   // segment; a frame opens one without speech.
   bool _held = false;
 
+  // A release waiting out its tail, and the hold it belongs to: a new hold
+  // during the tail keeps the engine held (the next utterance), while the
+  // released one still closes.
+  bool _releasing = false;
+  int _holdGeneration = 0;
+
   // Cooldown suppression (VAD-triggered end only; not maxSegmentMs force-close).
   Timer? _cooldownTimer;
   bool _inCooldown = false;
@@ -151,6 +157,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     if (_phase == _Phase.idle) return;
     _phase = _Phase.idle; // _afterWavWrite checks this — no events emitted
     _held = false;
+    _releasing = false;
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
     _inCooldown = false;
@@ -194,6 +201,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   Future<void> _stop() async {
     _phase = _Phase.idle;
     _held = false;
+    _releasing = false;
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
     _inCooldown = false;
@@ -265,7 +273,9 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
   @override
   void hold() {
-    if (_held) return;
+    if (_held && !_releasing) return;
+    _holdGeneration++;
+    _releasing = false;
     _held = true;
     Telemetry.instance.event('hf.hold', attrs: {'phase': _phase.name});
     // In stopping (a segment is being written) the held frames gather as
@@ -275,7 +285,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
   @override
   Future<void> releaseHold({required bool close}) async {
-    if (!_held) return;
+    if (!_held || _releasing) return;
     if (!close) {
       // The hold becomes ordinary listening: silence counts from now.
       _held = false;
@@ -285,8 +295,15 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
       return;
     }
     // The tail: the last syllable still comes in while held.
+    _releasing = true;
+    final generation = _holdGeneration;
     if (_holdTail > Duration.zero) await Future<void>.delayed(_holdTail);
-    _held = false;
+    // A hold during the tail: the engine stays held for it; this utterance
+    // still closes, and the frames after it open the next one.
+    if (generation == _holdGeneration) {
+      _held = false;
+      _releasing = false;
+    }
     Telemetry.instance.event('hf.hold_released',
         attrs: {'close': true, 'phase': _phase.name});
     // A segment being written: wait for it; the held frames then went on

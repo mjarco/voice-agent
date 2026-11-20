@@ -31,7 +31,11 @@ na hold-release".
 5. **A release that never comes** (glass-native killed, the button out of range) is replaced by a
    timeout of 5 minutes. A pause or a stop during a hold ends it, dropping the utterance in flight
    as a pause did before.
-6. **No new mode.** A hold is Listening as far as the mode, the notification and glass-native's
+6. **A reply never cuts a hold.** A reply that starts speaking during a hold stops, instead of
+   closing the capture gate (which would drop the utterance in flight). A `hold` that comes while
+   the previous release still waits out its tail keeps the engine held: the first utterance closes,
+   the next one opens, and a return to Standby owed by the first carries over to the second.
+7. **No new mode.** A hold is Listening as far as the mode, the notification and glass-native's
    page are concerned; the mode report is unchanged.
 
 ## Consequences

@@ -399,7 +399,8 @@ void main() {
 
       orch.hold();
       recorder.push(pcm(labels.length));
-      await Future.delayed(const Duration(milliseconds: 1000));
+      // 943 async VAD calls; under a full parallel run they take longer.
+      await Future.delayed(const Duration(milliseconds: 3000));
       expect(events.whereType<EngineStopping>(), isEmpty);
 
       await orch.releaseHold(close: true);
@@ -432,6 +433,42 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 200));
       expect(events, contains(isA<EngineStopping>()),
           reason: 'one hangover of silence after the release ends it');
+
+      await orch.stop();
+      await sub.cancel();
+    });
+
+    test('a hold during the release tail closes the first and stays held',
+        () async {
+      final labels = [
+        ...List.filled(_minSpeechFrameThreshold, VadLabel.speech),
+        ...List.filled(_hangoverFrameThreshold * 3, VadLabel.nonSpeech),
+      ];
+      recorder = FakeAudioRecorder();
+      orch = HandsFreeOrchestrator(
+        recorder,
+        FakeVadService(labels),
+        watchdogInterval: const Duration(hours: 1),
+        holdTail: const Duration(milliseconds: 100),
+      );
+      final events = <HandsFreeEngineEvent>[];
+      final sub = orch.start(config: _testConfig).listen(events.add);
+      await waitFor<EngineListening>(events);
+
+      orch.hold();
+      recorder.push(pcm(_minSpeechFrameThreshold));
+      await Future.delayed(const Duration(milliseconds: 100));
+      final release = orch.releaseHold(close: true);
+      await Future.delayed(const Duration(milliseconds: 20));
+      orch.hold(); // during the tail
+      await release;
+      expect(events.whereType<EngineStopping>(), hasLength(1),
+          reason: 'the first utterance closed');
+
+      // Still held: silence opens the next segment and does not end it.
+      recorder.push(pcm(_hangoverFrameThreshold * 3));
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(events.whereType<EngineStopping>(), hasLength(1));
 
       await orch.stop();
       await sub.cancel();

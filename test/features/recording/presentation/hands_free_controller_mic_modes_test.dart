@@ -51,9 +51,14 @@ class _Engine implements HandsFreeEngine {
   @override
   void hold() => holdCalls.add('hold@$starts');
 
+  /// When set, a closing release waits for it (the engine's tail).
+  Completer<void>? releaseGate;
+
   @override
-  Future<void> releaseHold({required bool close}) async =>
-      holdCalls.add(close ? 'close' : 'keep');
+  Future<void> releaseHold({required bool close}) async {
+    holdCalls.add(close ? 'close' : 'keep');
+    if (close && releaseGate != null) await releaseGate!.future;
+  }
   int starts = 0;
   int stops = 0;
   bool gateOpen = true;
@@ -1348,6 +1353,49 @@ void main() {
       h.glasses.send(GlassesCommand.hold);
       await _settle();
       expect(h.tts.stops, greaterThan(stops));
+    });
+
+    test('a hold during the previous release keeps its return to Standby',
+        () async {
+      final h = _Harness();
+      await h.standby();
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      await _settle();
+      h.engine.releaseGate = Completer<void>();
+      h.glasses.send(GlassesCommand.release);
+      await _settle();
+
+      // The second hold comes while the first release waits out its tail.
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      h.engine.releaseGate!.complete();
+      await _settle();
+      await _settle();
+      expect(h.mode, MicMode.listening, reason: 'the second hold is on');
+
+      h.engine.releaseGate = null;
+      h.glasses.send(GlassesCommand.release);
+      await _settle();
+      await _settle();
+      await _settle();
+      expect(h.mode, MicMode.standby,
+          reason: 'it began in the first one\'s Standby');
+    });
+
+    test('a reply starting during a hold stops, the gate stays open',
+        () async {
+      final h = _Harness();
+      await h.listening();
+      h.glasses.send(GlassesCommand.hold);
+      await _settle();
+      final gates = h.engine.gateCalls.length;
+      final stops = h.tts.stops;
+
+      h.tts.speaking.value = true;
+      await _settle();
+      expect(h.tts.stops, greaterThan(stops));
+      expect(h.engine.gateCalls.skip(gates), isNot(contains(false)));
     });
 
     test('a hold whose release never comes ends after the limit', () async {

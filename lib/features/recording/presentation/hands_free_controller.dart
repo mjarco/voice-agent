@@ -462,6 +462,14 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   /// Listening (Standby or Off).
   bool _holdFromStandby = false;
 
+  /// Bumped by every hold: a release finishing after a new hold has begun
+  /// leaves the mode to that hold.
+  int _holdGeneration = 0;
+
+  /// A release still closing its utterance that will go back to Standby: a
+  /// hold begun meanwhile inherits that return.
+  bool _releaseToStandby = false;
+
   /// Ends a hold whose release never came (glass-native killed, the
   /// button out of range).
   Timer? _holdTimeout;
@@ -479,7 +487,8 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
     if (!mounted || _held || _suspendedForManualRecording) return;
     Telemetry.instance.event('hf.hold_to_talk', attrs: {'mode': micMode.name});
     _held = true;
-    _holdFromStandby = micMode != MicMode.listening;
+    _holdGeneration++;
+    _holdFromStandby = micMode != MicMode.listening || _releaseToStandby;
     _holdTimeout?.cancel();
     _holdTimeout = Timer(holdLimit, () => unawaited(releaseHold()));
     final tts = _ref.read(ttsServiceProvider);
@@ -496,6 +505,9 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
   /// that began in Standby or Off goes back to Standby.
   Future<void> releaseHold() async {
     if (!mounted || !_held) return;
+    final generation = _holdGeneration;
+    final fromStandby = _holdFromStandby;
+    _releaseToStandby = fromStandby;
     _clearHold();
     Telemetry.instance.event('hf.hold_release', attrs: {'mode': micMode.name});
     final engine = _engine;
@@ -505,8 +517,11 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       // cancels the subscription.
       await Future<void>.delayed(Duration.zero);
     }
+    if (generation == _holdGeneration) _releaseToStandby = false;
     if (!mounted) return;
-    if (_holdFromStandby && micMode == MicMode.listening) {
+    // A new hold began meanwhile: the mode is its.
+    if (_held || generation != _holdGeneration) return;
+    if (fromStandby && micMode == MicMode.listening) {
       await pauseSession();
     }
   }
@@ -723,6 +738,14 @@ class HandsFreeController extends StateNotifier<HandsFreeSessionState>
       // The only gate left on Android: ignore the mic while a reply is
       // spoken in Listening, so the agent does not hear itself.
       if (micMode != MicMode.listening || _engine == null) return;
+      // A reply that starts while a button is held would cut the owner's
+      // utterance (the gate drops it): the owner is talking, the reply
+      // stops (ADR-AUDIO-017).
+      if (_held) {
+        Telemetry.instance.event('hf.tts_stopped_by_hold');
+        unawaited(_ref.read(ttsServiceProvider).stop());
+        return;
+      }
       await _engine!.setCaptureGate(open: false);
       Telemetry.instance.event('hf.gate_changed',
           attrs: const {'open': false, 'reason': 'tts_suspend'});
