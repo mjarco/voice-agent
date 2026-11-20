@@ -24,7 +24,9 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     Duration watchdogInterval = const Duration(seconds: 3),
     Duration routeRestartDebounce = const Duration(milliseconds: 300),
     AudioInterruptionMode audioInterruption = AudioInterruptionMode.pause,
+    Duration holdTail = const Duration(milliseconds: 250),
   })  : _audioRouteService = audioRouteService,
+        _holdTail = holdTail,
         _audioInterruption = audioInterruption,
         _watchdogInterval = watchdogInterval,
         _routeRestartDebounce = routeRestartDebounce;
@@ -48,6 +50,10 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   /// in Listening (ADR-AUDIO-014), and a loss no longer pauses the
   /// recorder behind the watchdog's back.
   final AudioInterruptionMode _audioInterruption;
+
+  /// How long a released hold keeps capturing before its segment closes:
+  /// a button comes up while the last syllable is still being said.
+  final Duration _holdTail;
 
   RecordConfig get _recordConfig => RecordConfig(
         encoder: AudioEncoder.pcm16bits,
@@ -102,6 +108,10 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   bool _pendingSpeechStarted = false;
   Completer<void>? _wavWriteCompleter;
 
+  // Held listening (ADR-AUDIO-017): silence and the 30 s cap do not end the
+  // segment; a frame opens one without speech.
+  bool _held = false;
+
   // Cooldown suppression (VAD-triggered end only; not maxSegmentMs force-close).
   Timer? _cooldownTimer;
   bool _inCooldown = false;
@@ -140,6 +150,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
   Future<void> interruptCapture() async {
     if (_phase == _Phase.idle) return;
     _phase = _Phase.idle; // _afterWavWrite checks this — no events emitted
+    _held = false;
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
     _inCooldown = false;
@@ -182,6 +193,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
   Future<void> _stop() async {
     _phase = _Phase.idle;
+    _held = false;
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
     _inCooldown = false;
@@ -249,6 +261,47 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     _cooldownTimer = null;
     _inCooldown = false;
     _phase = _Phase.listening; // engine itself is still alive in "listening" sub-state
+  }
+
+  @override
+  void hold() {
+    if (_held) return;
+    _held = true;
+    Telemetry.instance.event('hf.hold', attrs: {'phase': _phase.name});
+    // In stopping (a segment is being written) the held frames gather as
+    // pending and become the next segment in [_afterWavWrite].
+    if (_phase == _Phase.stopping) _pendingSpeechStarted = true;
+  }
+
+  @override
+  Future<void> releaseHold({required bool close}) async {
+    if (!_held) return;
+    if (!close) {
+      // The hold becomes ordinary listening: silence counts from now.
+      _held = false;
+      _hangoverCount = 0;
+      Telemetry.instance.event('hf.hold_released',
+          attrs: {'close': false, 'phase': _phase.name});
+      return;
+    }
+    // The tail: the last syllable still comes in while held.
+    if (_holdTail > Duration.zero) await Future<void>.delayed(_holdTail);
+    _held = false;
+    Telemetry.instance.event('hf.hold_released',
+        attrs: {'close': true, 'phase': _phase.name});
+    // A segment being written: wait for it; the held frames then went on
+    // as the next segment, which is the one to close.
+    final writing = _wavWriteCompleter;
+    if (_phase == _Phase.stopping && writing != null) {
+      await writing.future;
+    }
+    if (_phase != _Phase.capturing) return;
+    _initiateWavWrite(
+      validSpeech: _speechFrameCount >= _minSpeechFrameThreshold,
+      startCooldown: false,
+    );
+    final write = _wavWriteCompleter;
+    if (write != null) await write.future;
   }
 
   Future<void> _stopAndRelease() async {
@@ -444,14 +497,17 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
       case _Phase.listening:
         _addToPreRoll(frame);
-        if (label == VadLabel.speech && !_inCooldown) {
-          _startCapturing(frame);
+        if (_held || (label == VadLabel.speech && !_inCooldown)) {
+          _startCapturing(frame, speech: label == VadLabel.speech);
         }
 
       case _Phase.capturing:
         _speechBuffer.add(frame);
         _captureFrameCount++;
-        if (label == VadLabel.speech) {
+        if (_held) {
+          // Held: only the release ends the segment.
+          if (label == VadLabel.speech) _speechFrameCount++;
+        } else if (label == VadLabel.speech) {
           _speechFrameCount++;
           _hangoverCount = 0;
           if (_captureFrameCount >= _maxSpeechFrameThreshold) {
@@ -468,7 +524,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
         // VAD classification continues; accumulate for possible next segment.
         _pendingFrames.add(frame);
         _pendingLabels.add(label);
-        if (label == VadLabel.speech && !_inCooldown) {
+        if (_held || (label == VadLabel.speech && !_inCooldown)) {
           _pendingSpeechStarted = true;
         }
     }
@@ -476,7 +532,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
 
   // ── State transitions ────────────────────────────────────────────────────────
 
-  void _startCapturing(Uint8List firstSpeechFrame) {
+  void _startCapturing(Uint8List firstFrame, {required bool speech}) {
     _speechBuffer = BytesBuilder(copy: false);
     _speechFrameCount = 0;
     _captureFrameCount = 0;
@@ -486,8 +542,8 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
       _speechBuffer.add(f);
     }
     _preRoll.clear();
-    _speechBuffer.add(firstSpeechFrame);
-    _speechFrameCount = 1;
+    _speechBuffer.add(firstFrame);
+    _speechFrameCount = speech ? 1 : 0;
     _captureFrameCount = 1;
 
     _phase = _Phase.capturing;
@@ -594,7 +650,7 @@ class HandsFreeOrchestrator implements HandsFreeEngine {
     _pendingLabels.clear();
     _pendingSpeechStarted = false;
 
-    if (hadPendingSpeech && !_inCooldown) {
+    if (hadPendingSpeech && (!_inCooldown || _held)) {
       // Resume capturing with pending frames as new speech buffer.
       _speechBuffer = BytesBuilder(copy: false);
       _speechFrameCount = 0;

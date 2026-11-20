@@ -35,6 +35,12 @@ import '../../../helpers/stub_background_service.dart';
 // ── FakeHandsFreeEngine ──────────────────────────────────────────────────────
 
 class _FakeHandsFreeEngine implements HandsFreeEngine {
+
+  @override
+  void hold() {}
+
+  @override
+  Future<void> releaseHold({required bool close}) async {}
   @override
   Future<void> setCaptureGate({required bool open}) async {}
 
